@@ -5,7 +5,7 @@
 - Magic is allowed. Hidden behavior is not. Every expansion must be explainable via `lattice explain`.
 - VEL is a DSL, not a general-purpose language. No `for` / `while` / functions / generics. If you want computation, it belongs in a Wasm component (MoonBit recommended, not required).
 - The VEL parser must not know the meaning of `freeze`, `title`, `callout`, or any other stdlib word. It parses generic invocations only.
-- `lattice-core` owns semantic primitives (time, space, media locators, placement, TimeMap, provenance, diagnostics). It depends on none of the other Lattice crates.
+- `lattice-core` owns semantic primitives (time, space, media locators, placement, TimeMap, provenance, locus, diagnostics). It depends on none of the other Lattice crates.
 - `lattice-core` must not depend on GPUI, Wasmtime, FFmpeg, MoonBit, Git, or the VEL parser.
 - Wasm (today: in-process builtins behind the same registry) produces Core IR fragments. It is not on the render hot path.
 - Compile, Resolve, and Render are separate phases. Do not resolve TTS or network data during parse or compile.
@@ -15,6 +15,8 @@
 - External coding agents interact primarily through the CLI (`check`, `compile`, `explain`, later `render`). All of these must keep `--json`.
 - Do not add an in-process LLM SDK, OpenAI/Anthropic/xAI client, or "agent runtime" to this repo. Agents stay external.
 - Do not leak GPUI types into Core. Studio is a client of the engine.
+- A locus is the shared "here" across VEL, canvas, timeline, and agent context. Do not invent a per-view selection model. Agent context is `locus + instruction`, not a prompt alone.
+- Provenance is always present and must not obstruct. Navigate (`Go to definition` and other projections) is optional, not a gate.
 
 ## Crate boundaries
 

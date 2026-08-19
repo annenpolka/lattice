@@ -14,7 +14,10 @@ Use these names. Do not invent aliases for the same concept.
 | **Placement** | A concrete A/V object on a scene's local timeline. |
 | **Composition** | Spatial arrangement of visuals (later: canvas). |
 | **TimeMap** | Mapping from local time to content time via rate segments. Freeze is rate 0. |
-| **Locus** | A stable pointer at "this place" in code / timeline / canvas / agent context. |
+| **Locus** | The semantic "here": the editing target shared across VEL, canvas, timeline, and agent context. Not a rendered instance. One source definition may project to many instances; the locus is what is being pointed at. |
+| **Manipulate** | Directly change what is visible (select, drag). Everyday editing may stop here. |
+| **Navigate** | Follow the same locus in another representation (Canvas ↔ VEL, timeline ↔ source, proposal ↔ affected target). `Go to definition` is one Navigate, not the whole capability. |
+| **Review** | Inspect a proposed change as meaning, picture, and source, then Apply or Reject. |
 | **Convention** | Named defaults that fill placement, not editorial intent. Must not invent cuts. |
 | **Compile** | VEL → Core IR. Deterministic. |
 | **Resolve** | Materialize TTS, analysis, and other non-deterministic inputs. |

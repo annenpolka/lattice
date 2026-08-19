@@ -59,6 +59,18 @@ lattice-vel  lattice-wasm  lattice-media
 
 v0 implements Compile and a minimal Render (timeline flatten + FFmpeg preview). Resolve stays a named hole so it is not folded into parse.
 
+## Locus
+
+Studio, CLI, and external agents point at the same Core graph. The shared "here" is a **locus**, not a GPUI selection and not a chat utterance.
+
+A locus is a semantic target. Canvas, VEL cursor, timeline range, and agent context are projections of it. Navigate follows those projections; Manipulate edits what is visible; Review inspects a proposed change as meaning, picture, and source. Those three are unordered capabilities, not a pipeline. `Go to definition` is one Navigate, not a required step.
+
+Agent input is `locus + instruction`. Natural language without a locus is not the product contract.
+
+The Core type is not in Milestone 0. When it lands, it belongs in `lattice-core`. Studio must not own a parallel selection model.
+
+See [interaction.md](interaction.md). Boards: [mockups/studio/](mockups/studio/).
+
 ## Walking skeleton builtins
 
 These stdlib words are registered in `lattice-wasm` and will move to WIT components:
