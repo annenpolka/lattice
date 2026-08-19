@@ -5,6 +5,10 @@ on:
     branches: [main]
   pull_request:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   test:
     strategy:
@@ -13,16 +17,17 @@ jobs:
         os: [ubuntu-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@1.97.1
         with:
           components: rustfmt, clippy
-      - name: Install FFmpeg (Linux)
-        if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y ffmpeg
-      - name: Install FFmpeg (Windows)
-        if: runner.os == 'Windows'
-        run: choco install ffmpeg -y --no-progress
+      # apt-get ffmpeg hangs behind unattended-upgrades on ubuntu-latest.
+      # This action drops a static ffmpeg/ffprobe on PATH for both OSes.
+      - name: Install FFmpeg
+        uses: FedericoCarboni/setup-ffmpeg@v3
+        with:
+          ffmpeg-version: release
+          github-token: ${{ github.token }}
       - name: fmt
         run: cargo fmt --all -- --check
       - name: clippy
