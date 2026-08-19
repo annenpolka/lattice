@@ -27,6 +27,7 @@ thiserror = "2.0"
 
 lattice-core = { path = "crates/lattice-core" }
 lattice-engine = { path = "crates/lattice-engine" }
+lattice-media = { path = "crates/lattice-media" }
 lattice-vel = { path = "crates/lattice-vel" }
 lattice-wasm = { path = "crates/lattice-wasm" }
 

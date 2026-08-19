@@ -23,7 +23,7 @@
 | `lattice-core` | std, serde, thiserror | other Lattice crates, GPUI, FFmpeg, Wasmtime |
 | `lattice-vel` | `lattice-core` | Wasm, FFmpeg, GPUI, command meaning |
 | `lattice-wasm` | `lattice-core` | VEL parser internals, FFmpeg, GPUI |
-| `lattice-engine` | core, vel, wasm | GPUI, FFmpeg CLI flags |
+| `lattice-engine` | core, vel, wasm, media | GPUI, FFmpeg argv |
 | `lattice-cli` / `lattice-studio` | engine | business logic of their own |
 | `lattice-media` | core | VEL surface syntax |
 | `lattice-studio` | engine | Core internals beyond the engine API |
@@ -35,7 +35,8 @@ Keep Milestone 0 small:
 1. Parse `examples/gameplay-commentary/main.vel`
 2. Lower `freeze` / `title` / commentary convention through the registry
 3. Emit IR and explain text
-4. Do not start GPUI Timeline, OTIO, TTS providers, or a GPU renderer
+4. Preview/export consumes a flattened timeline (never VEL) and may call FFmpeg
+5. Do not start GPUI Timeline UI, OTIO, TTS providers, or a GPU renderer
 
 The in-process builtins in `lattice-wasm` are a stand-in for WIT components. When you add Wasmtime, replace the builtin bodies, not the Core types.
 

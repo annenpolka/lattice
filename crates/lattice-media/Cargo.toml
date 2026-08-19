@@ -4,10 +4,13 @@ version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
-description = "Media / render backends. FFmpeg is not wired in Milestone 0."
+description = "Media / render backends. FFmpeg is the first encode adapter."
 
 [dependencies]
 lattice-core.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
 
 [lints]
 workspace = true

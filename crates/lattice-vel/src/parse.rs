@@ -644,6 +644,35 @@ scene demo {
     }
 
     #[test]
+    fn freeze_and_title_are_generic_invocations_not_ast_nodes() {
+        let doc = parse(DEMO).unwrap();
+        let mut freeze = None;
+        let mut title = None;
+        for item in &doc.items {
+            let Item::Scene { body, .. } = item else {
+                continue;
+            };
+            for inner in &body.items {
+                if let Item::Invocation(inv) = inner {
+                    if inv.name == "freeze" {
+                        freeze = Some(inv);
+                    }
+                    if inv.name == "title" {
+                        title = Some(inv);
+                    }
+                }
+            }
+        }
+        let freeze = freeze.expect("freeze is a generic invocation");
+        assert!(
+            freeze.modifiers.iter().any(|m| m.name == "at"),
+            "parser keeps `at` as a modifier, not freeze semantics"
+        );
+        let title = title.expect("title is a generic invocation");
+        assert!(matches!(title.args.first(), Some(Expr::String { value, .. }) if value == "Hello"));
+    }
+
+    #[test]
     fn parses_japanese_string() {
         let doc = parse(r#"scene x { title "この数字" }"#).unwrap();
         let Item::Scene { body, .. } = &doc.items[0] else {

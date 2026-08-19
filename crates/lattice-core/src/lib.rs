@@ -10,6 +10,7 @@ mod provenance;
 mod span;
 mod time;
 mod time_map;
+mod timeline;
 
 pub use diagnostic::{Diagnostic, Severity};
 pub use ir::{
@@ -20,3 +21,4 @@ pub use provenance::{Origin, Provenance};
 pub use span::Span;
 pub use time::{Time, TimeError};
 pub use time_map::{TimeMap, TimeMapError, TimeMapSegment};
+pub use timeline::{Timeline, TimelineClip, TimelineError, TimelineSource, flatten_project};

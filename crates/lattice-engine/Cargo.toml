@@ -8,6 +8,7 @@ description = "Compile / validate / explain orchestration. Owns no GPUI or FFmpe
 
 [dependencies]
 lattice-core.workspace = true
+lattice-media.workspace = true
 lattice-vel.workspace = true
 lattice-wasm.workspace = true
 serde.workspace = true

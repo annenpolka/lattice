@@ -63,7 +63,7 @@ pub struct Source {
     pub provenance: Provenance,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TimeSpan {
     pub start: Time,
     pub duration: Time,

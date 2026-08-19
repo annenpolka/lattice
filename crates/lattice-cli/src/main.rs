@@ -29,11 +29,17 @@ enum Command {
     },
     /// Show magic expansions (convention, freeze, title, flow).
     Explain { file: PathBuf },
-    /// Render is not implemented in Milestone 0.
+    /// Flatten the compiled timeline and encode a preview with `FFmpeg`.
     Render {
         file: PathBuf,
         #[arg(short, long)]
-        output: Option<PathBuf>,
+        output: PathBuf,
+    },
+    /// Alias of `render`.
+    Preview {
+        file: PathBuf,
+        #[arg(short, long)]
+        output: PathBuf,
     },
 }
 
@@ -87,21 +93,50 @@ fn run(cli: Cli) -> Result<ExitCode, Box<dyn std::error::Error>> {
             report(cli.json, &file, &compilation, ReportMode::Explain, None)?;
             Ok(exit_for(&compilation))
         }
-        Command::Render { file, output } => {
-            let _ = compile_file(&file)?;
-            let message = "render is not implemented in Milestone 0 (FFmpeg backend is stubbed)";
-            if cli.json {
-                let payload = serde_json::json!({
-                    "ok": false,
-                    "error": message,
-                    "output": output,
-                });
-                println!("{}", serde_json::to_string_pretty(&payload)?);
-            } else {
-                eprintln!("{message}");
-            }
-            Ok(ExitCode::from(1))
+        Command::Render { file, output } | Command::Preview { file, output } => {
+            render_file(&file, &output, cli.json)
         }
+    }
+}
+
+fn render_file(
+    file: &Path,
+    output: &Path,
+    json: bool,
+) -> Result<ExitCode, Box<dyn std::error::Error>> {
+    let compilation = compile_file(file)?;
+    if compilation.has_errors() {
+        report(json, file, &compilation, ReportMode::Check, None)?;
+        return Ok(ExitCode::from(1));
+    }
+    let output = resolve_output(output);
+    let media_root = file.parent().unwrap_or_else(|| Path::new("."));
+    let report = Engine::default().render(&compilation.project, &output, media_root)?;
+    if json {
+        let payload = serde_json::json!({
+            "ok": true,
+            "file": file.display().to_string(),
+            "output": report.output,
+            "duration": report.duration,
+            "hold_segments": report.plan.hold_segments,
+            "overlays": report.plan.overlays,
+        });
+        println!("{}", serde_json::to_string_pretty(&payload)?);
+    } else {
+        println!(
+            "ok: wrote {} (duration {})",
+            report.output.display(),
+            report.duration
+        );
+    }
+    Ok(ExitCode::SUCCESS)
+}
+
+fn resolve_output(output: &Path) -> PathBuf {
+    if output.extension().is_none() || output.is_dir() {
+        output.join("preview.mp4")
+    } else {
+        output.to_path_buf()
     }
 }
 

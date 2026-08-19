@@ -1,7 +1,10 @@
+use std::path::Path;
+
 use lattice_core::{
     Diagnostic, Media, MediaLocator, Origin, Project, Provenance, Sequence, Source, TimeMap,
-    TimeSpan,
+    TimeSpan, Timeline, TimelineError, flatten_project,
 };
+use lattice_media::{ExportError, ExportReport, PreviewOptions, export_preview};
 use lattice_vel::{Document, Expr, Item, ParseError};
 use lattice_wasm::{ExplainLine, LoweringRegistry, SceneDraft};
 use serde::Serialize;
@@ -16,6 +19,10 @@ pub enum EngineError {
     Parse(#[from] ParseError),
     #[error(transparent)]
     Time(#[from] TimeEvalError),
+    #[error(transparent)]
+    Timeline(#[from] TimelineError),
+    #[error(transparent)]
+    Export(#[from] ExportError),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
@@ -55,6 +62,26 @@ impl Engine {
     pub fn compile(&self, source: &str) -> Result<Compilation, EngineError> {
         let document = lattice_vel::parse(source)?;
         self.compile_document(&document)
+    }
+
+    pub fn timeline(project: &Project) -> Result<Timeline, EngineError> {
+        Ok(flatten_project(project)?)
+    }
+
+    pub fn render(
+        &self,
+        project: &Project,
+        output: &Path,
+        media_root: &Path,
+    ) -> Result<ExportReport, EngineError> {
+        let timeline = flatten_project(project)?;
+        Ok(export_preview(
+            &timeline,
+            &PreviewOptions {
+                output: output.to_path_buf(),
+                media_root: media_root.to_path_buf(),
+            },
+        )?)
     }
 
     fn compile_document(&self, document: &Document) -> Result<Compilation, EngineError> {

@@ -9,9 +9,11 @@ Core IR                         lattice-core
    ↓
 Validator
    ↓
-Explain / Render Plan
+Explain / Timeline flatten
    ↓
-FFmpeg                          lattice-media (not wired yet)
+Render Plan
+   ↓
+FFmpeg                          lattice-media
 ```
 
 CLI (`lattice-cli`) and Studio (`lattice-studio`) are clients of `lattice-engine`. They must not fork business logic.
@@ -55,7 +57,7 @@ lattice-vel  lattice-wasm  lattice-media
 | Resolve | Core IR + media/TTS/analysis | lockable artifacts | yes, then lock |
 | Render | resolved IR | frames / file | no, given locks |
 
-v0 implements Compile only. Resolve and Render are named so they are not folded into parse.
+v0 implements Compile and a minimal Render (timeline flatten + FFmpeg preview). Resolve stays a named hole so it is not folded into parse.
 
 ## Walking skeleton builtins
 

@@ -18,6 +18,8 @@ pub enum TimeError {
     ZeroDenominator,
     #[error("time arithmetic overflowed")]
     Overflow,
+    #[error("time is not an integer number of units")]
+    NotInteger,
 }
 
 impl Time {
@@ -93,6 +95,26 @@ impl Time {
             .checked_mul(i128::from(rhs.den))
             .ok_or(TimeError::Overflow)?;
         from_i128(num, den)
+    }
+
+    /// `self * fps_num / fps_den` as an exact integer frame count.
+    pub fn exact_frame_count(self, fps_num: i64, fps_den: i64) -> Result<u64, TimeError> {
+        if fps_den == 0 || self.den == 0 {
+            return Err(TimeError::ZeroDenominator);
+        }
+        let n = i128::from(self.num)
+            .checked_mul(i128::from(fps_num))
+            .ok_or(TimeError::Overflow)?;
+        let d = i128::from(self.den)
+            .checked_mul(i128::from(fps_den))
+            .ok_or(TimeError::Overflow)?;
+        if d == 0 {
+            return Err(TimeError::ZeroDenominator);
+        }
+        if n % d != 0 {
+            return Err(TimeError::NotInteger);
+        }
+        u64::try_from(n / d).map_err(|_| TimeError::Overflow)
     }
 
     pub fn saturating_cmp(self, other: Self) -> Ordering {

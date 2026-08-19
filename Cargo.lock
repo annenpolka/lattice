@@ -220,6 +220,7 @@ name = "lattice-engine"
 version = "0.1.0"
 dependencies = [
  "lattice-core",
+ "lattice-media",
  "lattice-vel",
  "lattice-wasm",
  "serde",
@@ -232,6 +233,9 @@ name = "lattice-media"
 version = "0.1.0"
 dependencies = [
  "lattice-core",
+ "serde",
+ "serde_json",
+ "thiserror",
 ]
 
 [[package]]

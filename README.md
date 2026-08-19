@@ -5,10 +5,10 @@ Lattice is a text-first video editing system. You describe a cut in **VEL** (a s
 This repository is a walking skeleton, not a NLE. Milestone 0 is:
 
 ```text
-.vel → parse → invocation AST → lowering → Core IR → validate → explain
+.vel → parse → invocation AST → lowering → Core IR → timeline → FFmpeg preview
 ```
 
-FFmpeg render, Wasm stdlib execution, and the GPUI Studio shell come next. They are stubbed, not wired.
+Wasmtime-hosted stdlib and the GPUI Studio shell are still stubbed.
 
 ## Status
 
@@ -18,21 +18,22 @@ FFmpeg render, Wasm stdlib execution, and the GPUI Studio shell come next. They 
 | VEL parser (generic invocation DSL) | yes |
 | Host builtins: `freeze`, `title`, commentary convention | yes |
 | `lattice check` / `compile --emit-ir` / `explain` | yes |
+| Timeline flatten + `lattice render` / `preview` | yes (FFmpeg) |
 | Wasmtime / WIT components | contract only |
-| FFmpeg render | not yet |
 | GPUI Studio | not yet |
 
 Platform: developed and dogfooded on **Windows 11 x64**. Core, VEL, and the compiler stay platform-neutral and run on Linux CI. Other Studio platforms are deferred. WSL is not a supported runtime path.
 
 ## Quick start
 
-Requires Rust `1.97.1` (see `rust-toolchain.toml`).
+Requires Rust `1.97.1` (see `rust-toolchain.toml`) and `ffmpeg` / `ffprobe` on PATH for render.
 
 ```powershell
 cargo test --workspace
 cargo run -p lattice-cli -- check examples/gameplay-commentary/main.vel
 cargo run -p lattice-cli -- compile examples/gameplay-commentary/main.vel --emit-ir
 cargo run -p lattice-cli -- explain examples/gameplay-commentary/main.vel
+cargo run -p lattice-cli -- render examples/gameplay-commentary/main.vel -o preview.mp4
 ```
 
 Add `--json` for agent-friendly output.
@@ -45,7 +46,7 @@ crates/lattice-vel       lexer + generic invocation parser
 crates/lattice-wasm      lowering registry (in-process builtins until Wasm)
 crates/lattice-engine    compile / validate / explain orchestration
 crates/lattice-cli       check / compile / explain / render
-crates/lattice-media     FFmpeg backend (stub)
+crates/lattice-media     FFmpeg preview/export adapter
 crates/lattice-studio    GPUI Studio (stub)
 docs/                    principles, architecture, glossary
 docs/notes/              design conversation logs
