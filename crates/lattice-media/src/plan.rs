@@ -11,6 +11,8 @@ pub struct RenderPlan {
     pub fps_den: i64,
     pub segments: Vec<PlanSegment>,
     pub overlays: Vec<OverlayWindow>,
+    pub fade_in: Option<Time>,
+    pub audio: Vec<AudioWindow>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -24,6 +26,16 @@ pub struct PlanSegment {
 pub struct OverlayWindow {
     pub span: TimeSpan,
     pub text: Option<String>,
+    pub opacity: Option<u8>,
+    pub callout: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AudioWindow {
+    pub span: TimeSpan,
+    pub gain_db: Option<i32>,
+    pub generated: bool,
+    pub media_name: Option<String>,
 }
 
 pub fn plan_from_timeline(timeline: &Timeline) -> Result<RenderPlan, TimelineError> {
@@ -47,11 +59,31 @@ pub fn plan_from_timeline(timeline: &Timeline) -> Result<RenderPlan, TimelineErr
             hold: segment.rate == Time::ZERO,
         })
         .collect();
-    let overlays = timeline
+    let mut overlays: Vec<OverlayWindow> = timeline
         .title_clips()
         .map(|clip| OverlayWindow {
             span: clip.span,
             text: clip.text.clone(),
+            opacity: clip.opacity,
+            callout: false,
+        })
+        .collect();
+    overlays.extend(timeline.callout_clips().map(|clip| OverlayWindow {
+        span: clip.span,
+        text: clip.text.clone(),
+        opacity: clip.opacity,
+        callout: true,
+    }));
+    let fade_in = timeline.video_clips().next().and_then(|clip| clip.fade_in);
+    let audio = timeline
+        .audio_clips()
+        .map(|clip| AudioWindow {
+            span: clip.span,
+            gain_db: clip.gain_db,
+            generated: clip.source.as_ref().is_some_and(|source| {
+                matches!(source.locator, lattice_core::MediaLocator::Generated { .. })
+            }),
+            media_name: clip.source.as_ref().map(|source| source.media_name.clone()),
         })
         .collect();
     Ok(RenderPlan {
@@ -60,5 +92,7 @@ pub fn plan_from_timeline(timeline: &Timeline) -> Result<RenderPlan, TimelineErr
         fps_den: PREVIEW_FPS_DEN,
         segments,
         overlays,
+        fade_in,
+        audio,
     })
 }

@@ -1,6 +1,9 @@
-use lattice_core::{Audio, Origin, Placement, PlacementKind, Provenance, Time, TimeSpan, Visual};
+use lattice_core::{
+    Audio, Media, MediaLocator, Origin, Placement, PlacementKind, Provenance, Source, Time,
+    TimeMap, TimeSpan, Visual,
+};
 
-use crate::view::{InvocationView, LoweringError, SceneDraft};
+use crate::view::{BodyItem, InvocationView, LoweringError, SceneDraft, ValueView};
 
 pub fn lower_freeze(inv: &InvocationView, draft: &mut SceneDraft) -> Result<(), LoweringError> {
     let target = inv
@@ -46,26 +49,189 @@ pub fn lower_title(inv: &InvocationView, draft: &mut SceneDraft) -> Result<(), L
         .modifier("for")
         .and_then(super::view::ValueView::as_time)
         .unwrap_or(Time::seconds(3));
+    let opacity = body_opacity(inv);
     let id = draft.next_placement_id("title");
+    let mut visual = Visual::text_overlay(text.clone());
+    visual.opacity = opacity;
     draft.placements.push(Placement {
         id,
         kind: PlacementKind::Title,
         source_id: None,
         span: TimeSpan::new(at, hold),
-        visual: Some(Visual {
-            fit: None,
-            text: Some(text.clone()),
-        }),
+        visual: Some(visual),
         audio: None,
         provenance: Provenance::invocation("title", Some(inv.span)),
     });
+    let opacity_note = opacity.map_or(String::new(), |value| format!(" opacity {value}"));
     draft.explain(
         Origin::Invocation {
             command: "title".into(),
         },
-        format!("title {text:?} at {at} for {hold}"),
+        format!("title {text:?} at {at} for {hold}{opacity_note}"),
     );
     Ok(())
+}
+
+pub fn lower_callout(inv: &InvocationView, draft: &mut SceneDraft) -> Result<(), LoweringError> {
+    let text = inv
+        .args
+        .first()
+        .and_then(ValueView::as_string)
+        .ok_or_else(|| LoweringError::Message("`callout` needs a string".into()))?
+        .to_string();
+    let at = inv
+        .modifier("at")
+        .and_then(ValueView::as_time)
+        .unwrap_or(Time::ZERO);
+    let hold = inv
+        .modifier("for")
+        .and_then(ValueView::as_time)
+        .unwrap_or(Time::seconds(2));
+    let id = draft.next_placement_id("callout");
+    draft.placements.push(Placement {
+        id,
+        kind: PlacementKind::Callout,
+        source_id: None,
+        span: TimeSpan::new(at, hold),
+        visual: Some(Visual::text_overlay(text.clone())),
+        audio: None,
+        provenance: Provenance::invocation("callout", Some(inv.span)),
+    });
+    draft.explain(
+        Origin::Invocation {
+            command: "callout".into(),
+        },
+        format!("callout {text:?} at {at} for {hold}"),
+    );
+    Ok(())
+}
+
+pub fn lower_fade(inv: &InvocationView, draft: &mut SceneDraft) -> Result<(), LoweringError> {
+    let target = inv
+        .args
+        .first()
+        .and_then(ValueView::as_name)
+        .ok_or_else(|| LoweringError::Message("`fade` needs a source name".into()))?;
+    let hold = inv
+        .modifier("for")
+        .and_then(ValueView::as_time)
+        .ok_or_else(|| LoweringError::Message("`fade` needs `for`".into()))?;
+    draft.source_mut(target)?;
+    draft.source_fade_in.push((target.to_string(), hold));
+    draft.explain(
+        Origin::Invocation {
+            command: "fade".into(),
+        },
+        format!("fade `{target}` in over {hold} (opacity envelope on video placement)"),
+    );
+    Ok(())
+}
+
+pub fn lower_gain(inv: &InvocationView, draft: &mut SceneDraft) -> Result<(), LoweringError> {
+    let target = inv
+        .args
+        .first()
+        .and_then(ValueView::as_name)
+        .ok_or_else(|| LoweringError::Message("`gain` needs a source name".into()))?;
+    let db = inv
+        .modifier("by")
+        .and_then(ValueView::as_int)
+        .or_else(|| inv.args.get(1).and_then(ValueView::as_int))
+        .ok_or_else(|| LoweringError::Message("`gain` needs `by` (dB)".into()))?;
+    let db =
+        i32::try_from(db).map_err(|_| LoweringError::Message("gain dB out of range".into()))?;
+    draft.source_mut(target)?;
+    draft.source_gain_db.push((target.to_string(), db));
+    draft.explain(
+        Origin::Invocation {
+            command: "gain".into(),
+        },
+        format!("gain `{target}` {db} dB"),
+    );
+    Ok(())
+}
+
+pub fn lower_speech(inv: &InvocationView, draft: &mut SceneDraft) -> Result<(), LoweringError> {
+    let text = inv
+        .args
+        .first()
+        .and_then(ValueView::as_string)
+        .ok_or_else(|| LoweringError::Message("`speech` needs a string".into()))?
+        .to_string();
+    let at = inv
+        .modifier("at")
+        .and_then(ValueView::as_time)
+        .unwrap_or(Time::ZERO);
+    let hold = inv
+        .modifier("for")
+        .and_then(ValueView::as_time)
+        .unwrap_or(Time::seconds(2));
+    let slug = speech_slug(&text);
+    let media_name = format!("speech-{slug}");
+    draft.media.push(Media {
+        id: format!("media:{media_name}"),
+        name: media_name.clone(),
+        locator: MediaLocator::Generated {
+            generator: "speech".into(),
+            key: text.clone(),
+        },
+    });
+    let source_id = format!("source:{media_name}");
+    draft.sources.push(Source {
+        id: source_id.clone(),
+        name: media_name.clone(),
+        media_name: media_name.clone(),
+        source_range: TimeSpan::new(Time::ZERO, hold),
+        time_map: TimeMap::identity(Time::ZERO, hold),
+        provenance: Provenance::invocation("speech", Some(inv.span)),
+        generated: true,
+    });
+    let id = draft.next_placement_id("speech");
+    draft.placements.push(Placement {
+        id,
+        kind: PlacementKind::Audio,
+        source_id: Some(source_id),
+        span: TimeSpan::new(at, hold),
+        visual: None,
+        audio: Some(Audio { gain_db: None }),
+        provenance: Provenance::invocation("speech", Some(inv.span)),
+    });
+    draft.explain(
+        Origin::Invocation {
+            command: "speech".into(),
+        },
+        format!(
+            "speech {text:?} at {at} for {hold} -> generated media `{media_name}` (Resolve materializes; Compile does not)"
+        ),
+    );
+    Ok(())
+}
+
+fn body_opacity(inv: &InvocationView) -> Option<u8> {
+    inv.body.iter().find_map(|item| match item {
+        BodyItem::Invocation(inner) if inner.command == "opacity" => inner
+            .args
+            .first()
+            .and_then(ValueView::as_int)
+            .and_then(|value| u8::try_from(value).ok()),
+        _ => None,
+    })
+}
+
+fn speech_slug(text: &str) -> String {
+    let mut slug = String::new();
+    for ch in text.chars() {
+        if ch.is_ascii_alphanumeric() {
+            slug.push(ch.to_ascii_lowercase());
+        } else if !slug.ends_with('-') && !slug.is_empty() {
+            slug.push('-');
+        }
+        if slug.len() >= 32 {
+            break;
+        }
+    }
+    let slug = slug.trim_matches('-').to_string();
+    if slug.is_empty() { "line".into() } else { slug }
 }
 
 pub fn apply_commentary(draft: &mut SceneDraft) {
@@ -78,15 +244,30 @@ pub fn apply_commentary(draft: &mut SceneDraft) {
     let sources = draft.sources.clone();
     for source in sources {
         let video_id = draft.next_placement_id("video");
+        if source.generated {
+            continue;
+        }
+        let fade_in = draft
+            .source_fade_in
+            .iter()
+            .rev()
+            .find(|(name, _)| name == &source.name)
+            .map(|(_, time)| *time);
+        let gain_db = draft
+            .source_gain_db
+            .iter()
+            .rev()
+            .find(|(name, _)| name == &source.name)
+            .map(|(_, db)| *db)
+            .or(gain);
+        let mut visual = Visual::fit("canvas-fill");
+        visual.fade_in = fade_in;
         draft.placements.push(Placement {
             id: video_id,
             kind: PlacementKind::Video,
             source_id: Some(source.id.clone()),
             span: TimeSpan::new(Time::ZERO, scene_len.max(source.time_map.duration)),
-            visual: Some(Visual {
-                fit: Some("canvas-fill".into()),
-                text: None,
-            }),
+            visual: Some(visual),
             audio: None,
             provenance: Provenance::convention("commentary"),
         });
@@ -96,7 +277,7 @@ pub fn apply_commentary(draft: &mut SceneDraft) {
             source_id: Some(source.id),
             span: TimeSpan::new(Time::ZERO, scene_len.max(source.time_map.duration)),
             visual: None,
-            audio: Some(Audio { gain_db: gain }),
+            audio: Some(Audio { gain_db }),
             provenance: Provenance::convention("commentary"),
         });
         let duck_text = if duck {

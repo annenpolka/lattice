@@ -1,11 +1,20 @@
-//! GPUI Studio shell.
+//! Lattice Studio: a GPUI client of `lattice-engine`.
 //!
-//! Intentionally free of `gpui` types in Milestone 0 so the crate graph stays
-//! honest: Studio is an engine client. When the shell lands, GPUI stays here.
+//! Compile semantics live in the engine. This crate holds a session and, when
+//! built with `--features window`, a GPUI shell over that session.
+
+mod layout;
+mod session;
+
+pub use layout::{
+    CanvasOverlay, CanvasView, InspectorView, ReviewView, SourceView, StudioLayout,
+    TimelineClipView, TimelineTrackView, TimelineView, TreeNode,
+};
+pub use session::StudioSession;
 
 use lattice_engine::Engine;
 
-/// Marker that the Studio process would hold an [`Engine`].
+/// Marker that the Studio process holds an [`Engine`].
 pub fn engine() -> Engine {
     Engine::default()
 }

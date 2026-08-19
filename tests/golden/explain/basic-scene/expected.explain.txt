@@ -1,4 +1,8 @@
 sequence `main` is a flow of scenes
 freeze `fight` at 5.2s for 1.5s -> TimeMap hold (rate 0)
-title "Hello" at 2s for 3s
+fade `fight` in over 0.5s (opacity envelope on video placement)
+title "Hello" at 2s for 3s opacity 90
+callout "Hold" at 5.2s for 1.5s
+gain `fight` -3 dB
+speech "Nice freeze" at 5.2s for 1.5s -> generated media `speech-nice-freeze` (Resolve materializes; Compile does not)
 source `fight` video -> canvas-fill; game audio -> passthrough

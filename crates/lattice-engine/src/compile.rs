@@ -1,8 +1,9 @@
 use std::path::Path;
 
 use lattice_core::{
-    Diagnostic, Media, MediaLocator, Origin, Project, Provenance, Sequence, Source, TimeMap,
-    TimeSpan, Timeline, TimelineError, flatten_project,
+    Diagnostic, EditProposal, Locus, LocusId, LocusProjection, Media, MediaLocator, Origin,
+    Project, Provenance, SemanticEdit, Sequence, Source, Time, TimeMap, TimeSpan, Timeline,
+    TimelineError, flatten_project,
 };
 use lattice_media::{ExportError, ExportReport, PreviewOptions, export_preview};
 use lattice_vel::{Document, Expr, Item, ParseError};
@@ -11,6 +12,7 @@ use serde::Serialize;
 use thiserror::Error;
 
 use crate::lower::{invocation_view, over_path};
+use crate::resolve::{GeneratedMediaProvider, Resolution, ResolveError, ResolveOptions};
 use crate::time_eval::{TimeEvalError, expr_name, range_times};
 
 #[derive(Debug, Error)]
@@ -23,6 +25,12 @@ pub enum EngineError {
     Timeline(#[from] TimelineError),
     #[error(transparent)]
     Export(#[from] ExportError),
+    #[error(transparent)]
+    Io(#[from] std::io::Error),
+    #[error("edit: {0}")]
+    Edit(String),
+    #[error(transparent)]
+    Resolve(#[from] ResolveError),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
@@ -36,6 +44,10 @@ pub struct Compilation {
     pub project: Project,
     pub diagnostics: Vec<Diagnostic>,
     pub explain: Vec<ExplainEvent>,
+    #[serde(skip)]
+    pub source: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub origin: Option<String>,
 }
 
 impl Compilation {
@@ -60,12 +72,105 @@ impl Default for Engine {
 
 impl Engine {
     pub fn compile(&self, source: &str) -> Result<Compilation, EngineError> {
+        self.compile_origin(source, None)
+    }
+
+    pub fn compile_origin(
+        &self,
+        source: &str,
+        origin: Option<String>,
+    ) -> Result<Compilation, EngineError> {
         let document = lattice_vel::parse(source)?;
-        self.compile_document(&document)
+        let mut compilation = self.compile_document(&document)?;
+        compilation.source = source.to_string();
+        compilation.origin = origin;
+        Ok(compilation)
+    }
+
+    pub fn compile_path(&self, path: &Path) -> Result<Compilation, EngineError> {
+        let source = std::fs::read_to_string(path)?;
+        self.compile_origin(&source, Some(path.display().to_string()))
+    }
+
+    pub fn uses_wasm_stdlib(&self) -> bool {
+        self.registry.uses_wasm()
     }
 
     pub fn timeline(project: &Project) -> Result<Timeline, EngineError> {
         Ok(flatten_project(project)?)
+    }
+
+    pub fn loci(&self, compilation: &Compilation) -> Result<Vec<Locus>, EngineError> {
+        let timeline = flatten_project(&compilation.project)?;
+        Ok(crate::locus::loci_from_project(
+            &compilation.project,
+            &timeline,
+            compilation.origin.as_deref(),
+        ))
+    }
+
+    pub fn inspect(
+        &self,
+        compilation: &Compilation,
+        id: &LocusId,
+    ) -> Result<LocusProjection, EngineError> {
+        let loci = self.loci(compilation)?;
+        let locus = crate::locus::locus_by_id(&loci, id)
+            .ok_or_else(|| EngineError::Edit(format!("unknown locus {}", id.as_str())))?;
+        Ok(crate::locus::project_locus(locus))
+    }
+
+    pub fn locus_at_source(
+        &self,
+        compilation: &Compilation,
+        offset: u32,
+    ) -> Result<Option<Locus>, EngineError> {
+        let loci = self.loci(compilation)?;
+        Ok(crate::locus::locus_at_source(&loci, offset).cloned())
+    }
+
+    pub fn locus_for_node(
+        &self,
+        compilation: &Compilation,
+        node_id: &str,
+    ) -> Result<Option<Locus>, EngineError> {
+        let loci = self.loci(compilation)?;
+        Ok(crate::locus::locus_for_node(&loci, node_id).cloned())
+    }
+
+    pub fn locus_at_timeline(
+        &self,
+        compilation: &Compilation,
+        time: Time,
+    ) -> Result<Option<Locus>, EngineError> {
+        let loci = self.loci(compilation)?;
+        Ok(crate::locus::locus_at_timeline(&loci, time).cloned())
+    }
+
+    pub fn propose(
+        &self,
+        compilation: &Compilation,
+        locus: &Locus,
+        edit: SemanticEdit,
+    ) -> Result<EditProposal, EngineError> {
+        crate::edit::propose_edit(&compilation.source, locus, edit)
+    }
+
+    pub fn apply_proposal(&self, source: &str, proposal: &EditProposal) -> String {
+        crate::edit::apply_proposal(source, proposal)
+    }
+
+    pub fn reject_proposal(&self, source: &str, _proposal: &EditProposal) -> String {
+        source.to_string()
+    }
+
+    pub fn resolve(
+        &self,
+        project: &Project,
+        options: &ResolveOptions<'_>,
+        provider: &mut dyn GeneratedMediaProvider,
+    ) -> Result<Resolution, EngineError> {
+        Ok(crate::resolve::resolve_project(project, options, provider)?)
     }
 
     pub fn render(
@@ -74,12 +179,23 @@ impl Engine {
         output: &Path,
         media_root: &Path,
     ) -> Result<ExportReport, EngineError> {
+        self.render_with_lock(project, output, media_root, None)
+    }
+
+    pub fn render_with_lock(
+        &self,
+        project: &Project,
+        output: &Path,
+        media_root: &Path,
+        lock: Option<&lattice_core::ResolveLock>,
+    ) -> Result<ExportReport, EngineError> {
         let timeline = flatten_project(project)?;
         Ok(export_preview(
             &timeline,
             &PreviewOptions {
                 output: output.to_path_buf(),
                 media_root: media_root.to_path_buf(),
+                lock: lock.cloned(),
             },
         )?)
     }
@@ -132,6 +248,9 @@ impl Engine {
                 over: over.as_ref().map(over_path),
                 sources: Vec::new(),
                 placements: Vec::new(),
+                media: Vec::new(),
+                source_fade_in: Vec::new(),
+                source_gain_db: Vec::new(),
                 explain: Vec::new(),
                 diagnostics: Vec::new(),
             };
@@ -154,6 +273,7 @@ impl Engine {
             explain.extend(draft.explain.iter().cloned().map(to_event));
             diagnostics.append(&mut draft.diagnostics);
             validate_scene(&draft, *span, &mut diagnostics);
+            project.media.append(&mut draft.media);
             project.scenes.push(draft.finish(format!("scene:{name}")));
         }
 
@@ -176,6 +296,8 @@ impl Engine {
             project,
             diagnostics,
             explain,
+            source: String::new(),
+            origin: None,
         })
     }
 }
@@ -239,6 +361,7 @@ fn binding_source(
         source_range: TimeSpan::new(start, duration),
         time_map: TimeMap::identity(start, duration),
         provenance: Provenance::source(span),
+        generated: false,
     })
 }
 

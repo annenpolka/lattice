@@ -2,7 +2,7 @@ use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use lattice_core::{MediaLocator, Time, TimeError, Timeline, TimelineError};
+use lattice_core::{MediaLocator, ResolveLock, Time, TimeError, Timeline, TimelineError};
 use serde::Serialize;
 use thiserror::Error;
 
@@ -33,6 +33,7 @@ pub enum ExportError {
 pub struct PreviewOptions {
     pub output: PathBuf,
     pub media_root: PathBuf,
+    pub lock: Option<ResolveLock>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -105,29 +106,34 @@ pub fn export_preview(
         .ok_or(TimelineError::NoVideo)?;
     let source = video.source.as_ref().ok_or(ExportError::MissingSource)?;
     let input = resolve_or_generate_source(&source.locator, &options.media_root, &options.output)?;
-    let filter = filter_complex(&plan)?;
+    let speech = locked_speech_path(options.lock.as_ref(), &plan);
+    let filter = filter_complex(&plan, speech.is_some())?;
     if let Some(parent) = options.output.parent() {
         std::fs::create_dir_all(parent)?;
     }
     let fps = format!("{}/{}", plan.fps_num, plan.fps_den);
-    let output = Command::new(ffmpeg_bin())
-        .args(["-y", "-i"])
-        .arg(&input)
+    let mut command = Command::new(ffmpeg_bin());
+    command.args(["-y", "-i"]).arg(&input);
+    if let Some(speech) = &speech {
+        command.args(["-i"]).arg(speech);
+    }
+    command.args(["-filter_complex", &filter, "-map", "[outv]"]);
+    if speech.is_some() {
+        command.args(["-map", "[outa]"]);
+    } else {
+        command.arg("-an");
+    }
+    command
         .args([
-            "-filter_complex",
-            &filter,
-            "-map",
-            "[outv]",
             "-r",
             &fps,
             "-t",
             &ffmpeg_seconds(plan.duration),
-            "-an",
             "-pix_fmt",
             "yuv420p",
         ])
-        .arg(&options.output)
-        .output()?;
+        .arg(&options.output);
+    let output = command.output()?;
     if !output.status.success() {
         return Err(ExportError::Ffmpeg {
             status: output.status.to_string(),
@@ -173,7 +179,26 @@ fn generate_beside_output(output: &Path) -> Result<PathBuf, FixtureError> {
     )
 }
 
-fn filter_complex(plan: &RenderPlan) -> Result<String, ExportError> {
+fn locked_speech_path(lock: Option<&ResolveLock>, plan: &RenderPlan) -> Option<PathBuf> {
+    let lock = lock?;
+    let window = plan.audio.iter().find(|audio| audio.generated)?;
+    let media_name = window.media_name.as_deref()?;
+    lock.assets
+        .iter()
+        .find(|asset| {
+            asset.generator.as_deref() == Some("speech")
+                && (asset.id.contains(media_name) || asset.path.contains(media_name))
+        })
+        .or_else(|| {
+            lock.assets
+                .iter()
+                .find(|asset| asset.generator.as_deref() == Some("speech"))
+        })
+        .map(|asset| PathBuf::from(&asset.path))
+        .filter(|path| path.is_file())
+}
+
+fn filter_complex(plan: &RenderPlan, with_speech: bool) -> Result<String, ExportError> {
     let n = plan.segments.len();
     if n == 0 {
         return Err(TimelineError::NoVideo.into());
@@ -202,13 +227,27 @@ fn filter_complex(plan: &RenderPlan) -> Result<String, ExportError> {
         }
         write!(&mut concat_in, "[v{i}]").expect("label");
     }
-    let after_concat = if plan.overlays.is_empty() {
+    let after_concat = if plan.fade_in.is_some() {
+        "fadedin"
+    } else if plan.overlays.is_empty() {
         "rated"
     } else {
         "base"
     };
     parts.push(format!("{concat_in}concat=n={n}:v=1:a=0[{after_concat}]"));
     let mut last = after_concat.to_string();
+    if let Some(fade) = plan.fade_in {
+        let next = if plan.overlays.is_empty() {
+            "rated".to_string()
+        } else {
+            "base".to_string()
+        };
+        parts.push(format!(
+            "[{last}]fade=t=in:st=0:d={}[{next}]",
+            ffmpeg_seconds(fade)
+        ));
+        last = next;
+    }
     for (i, overlay) in plan.overlays.iter().enumerate() {
         let start = ffmpeg_seconds(overlay.span.start);
         let end = ffmpeg_seconds(overlay.span.end());
@@ -218,15 +257,46 @@ fn filter_complex(plan: &RenderPlan) -> Result<String, ExportError> {
         } else {
             format!("ov{i}")
         };
-        let bar_y = PREVIEW_HEIGHT.saturating_sub(8);
+        let alpha = overlay
+            .opacity
+            .map_or(1.0, |value| f64::from(value) / 100.0);
+        let (y, color) = if overlay.callout {
+            (0, format!("cyan@{alpha}"))
+        } else {
+            (PREVIEW_HEIGHT.saturating_sub(8), format!("yellow@{alpha}"))
+        };
         parts.push(format!(
-            "[{last}]drawbox=x=0:y={bar_y}:w={PREVIEW_WIDTH}:h=8:color=yellow:t=fill:enable='{enable}'[{next}]"
+            "[{last}]drawbox=x=0:y={y}:w={PREVIEW_WIDTH}:h=8:color={color}:t=fill:enable='{enable}'[{next}]"
         ));
         last = next;
     }
     // Pin fps in-graph. Some ffmpeg builds (johnvansickle) otherwise encode at 25fps
     // and probe reports 11.48s for an 11.5s / 10fps timeline.
     parts.push(format!("[{last}]fps={fps}[outv]"));
+    if with_speech {
+        let speech = plan
+            .audio
+            .iter()
+            .find(|audio| audio.generated)
+            .ok_or_else(|| ExportError::Ffmpeg {
+                status: "plan".into(),
+                stderr: "speech requested without an audio window".into(),
+            })?;
+        let delay_ms = {
+            let t = speech.span.start;
+            if t.den() == 0 {
+                0
+            } else {
+                i64::try_from(i128::from(t.num()) * 1000 / i128::from(t.den()))
+                    .unwrap_or(0)
+                    .max(0)
+            }
+        };
+        parts.push(format!(
+            "[1:a]adelay={delay_ms}|{delay_ms},apad,atrim=0:{}[outa]",
+            ffmpeg_seconds(plan.duration)
+        ));
+    }
     Ok(parts.join(";"))
 }
 
@@ -284,8 +354,10 @@ mod tests {
                 hold: false,
             }],
             overlays: vec![],
+            fade_in: None,
+            audio: vec![],
         };
-        let filter = super::filter_complex(&plan).unwrap();
+        let filter = super::filter_complex(&plan, false).unwrap();
         assert!(
             filter.contains("fps=10/1"),
             "expected pinned fps in {filter}"

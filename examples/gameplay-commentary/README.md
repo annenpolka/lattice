@@ -1,11 +1,14 @@
 # gameplay-commentary
 
-Walking-skeleton sample. Milestone 0 compiles this file; it does not render `capture.mp4`.
+Intentionally edited short used as the Alpha product fixture.
 
-The clip is the smallest VEL that still hits:
+The clip is a media slice plus a small coherent vocabulary:
 
-- a media slice
-- `freeze` (TimeMap)
-- `title` (generated visual)
+- `freeze` (TimeMap hold)
+- `fade` (opacity envelope on the video placement)
+- `title` with `opacity`
+- `callout`
+- `gain`
+- `speech` (generated media; Compile records intent, Resolve materializes)
 - commentary convention (default A/V placement)
 - sequence flow

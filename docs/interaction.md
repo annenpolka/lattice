@@ -15,14 +15,14 @@ A locus is Lattice's **here**: the editing target held across representations.
 
 It is not an "object" in the GUI sense. A `title` written once in VEL may appear as a scene instance, a timeline span, and a canvas rectangle. Those are projections. The locus is the shared pointing.
 
-When the type lands in `lattice-core` (it is not in Milestone 0), it may carry:
+`lattice-core::Locus` carries:
 
 ```text
 Locus
 - semantic identity
 - source span
 - timeline range
-- visual target / bounds
+- visual projection (text / fit / opacity when present)
 - scene / sequence context
 - derived-from / provenance
 ```

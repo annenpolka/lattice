@@ -5,10 +5,27 @@
 module build_protocol {
   type Phase = | Dirty | Compiled | NeedsResolve | Resolved | Planned | Rendered
 
-  type State = { phase: Phase }
+  var phase: Phase
 
   action compile = all {
-    state.phase == Dirty,
-    state' = { phase: Compiled }
+    phase == Dirty,
+    phase' = Compiled,
   }
+
+  action resolve = all {
+    phase == Compiled or phase == NeedsResolve,
+    phase' = Resolved,
+  }
+
+  action plan = all {
+    phase == Resolved or phase == Compiled,
+    phase' = Planned,
+  }
+
+  action render = all {
+    phase == Planned or phase == Resolved,
+    phase' = Rendered,
+  }
+
+  val compileBeforeResolve = true
 }

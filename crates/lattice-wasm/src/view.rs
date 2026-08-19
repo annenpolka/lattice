@@ -1,4 +1,4 @@
-use lattice_core::{Diagnostic, Origin, Placement, Scene, Source, Span, Time};
+use lattice_core::{Diagnostic, Media, Origin, Placement, Scene, Source, Span, Time};
 use thiserror::Error;
 
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
@@ -57,6 +57,18 @@ impl ValueView {
             _ => None,
         }
     }
+
+    pub fn as_int(&self) -> Option<i64> {
+        match self {
+            Self::Quantity {
+                negative,
+                digits,
+                scale,
+                ..
+            } if *scale == 0 => Some(if *negative { -*digits } else { *digits }),
+            _ => None,
+        }
+    }
 }
 
 impl InvocationView {
@@ -89,6 +101,9 @@ pub struct SceneDraft {
     pub over: Option<String>,
     pub sources: Vec<Source>,
     pub placements: Vec<Placement>,
+    pub media: Vec<Media>,
+    pub source_fade_in: Vec<(String, Time)>,
+    pub source_gain_db: Vec<(String, i32)>,
     pub explain: Vec<ExplainLine>,
     pub diagnostics: Vec<Diagnostic>,
 }

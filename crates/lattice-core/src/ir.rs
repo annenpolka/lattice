@@ -53,6 +53,11 @@ pub struct Scene {
     pub placements: Vec<Placement>,
 }
 
+#[allow(clippy::trivially_copy_pass_by_ref)]
+fn is_false(value: &bool) -> bool {
+    !*value
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Source {
     pub id: String,
@@ -61,6 +66,9 @@ pub struct Source {
     pub source_range: TimeSpan,
     pub time_map: TimeMap,
     pub provenance: Provenance,
+    /// Generated sources (speech, etc.) are not commentary A/V fill targets.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub generated: bool,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -85,6 +93,7 @@ pub enum PlacementKind {
     Video,
     Audio,
     Title,
+    Callout,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -102,6 +111,34 @@ pub struct Placement {
 pub struct Visual {
     pub fit: Option<String>,
     pub text: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub opacity: Option<u8>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fade_in: Option<Time>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fade_out: Option<Time>,
+}
+
+impl Visual {
+    pub fn text_overlay(text: impl Into<String>) -> Self {
+        Self {
+            fit: None,
+            text: Some(text.into()),
+            opacity: None,
+            fade_in: None,
+            fade_out: None,
+        }
+    }
+
+    pub fn fit(fit: impl Into<String>) -> Self {
+        Self {
+            fit: Some(fit.into()),
+            text: None,
+            opacity: None,
+            fade_in: None,
+            fade_out: None,
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

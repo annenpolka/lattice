@@ -1,6 +1,6 @@
 # lattice/std/temporal
 
-Planned Wasm component. Host builtin today.
+`freeze` is hosted as a Wasmtime WIT component (`lattice:stdlib/lowering.freeze`). `flow` remains a host builtin.
 
 | Word | Effect |
 |---|---|

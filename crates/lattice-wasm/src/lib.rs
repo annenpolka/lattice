@@ -5,6 +5,7 @@
 //! later without changing Core IR.
 
 mod builtins;
+mod host;
 mod registry;
 mod view;
 

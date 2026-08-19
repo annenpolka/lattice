@@ -1,0 +1,17 @@
+[package]
+name = "lattice-stdlib-guest"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.97"
+license = "MIT"
+publish = false
+description = "WIT stdlib guest: freeze and title. Built for wasm32-wasip2."
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+lattice-core = { path = "../lattice-core" }
+wit-bindgen = { version = "0.46", default-features = false, features = ["macros"] }
+
+[workspace]

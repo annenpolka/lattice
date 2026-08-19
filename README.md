@@ -2,25 +2,26 @@
 
 Lattice is a text-first video editing system. You describe a cut in **VEL** (a small declarative DSL), compile it to a typed project graph, and render through a backend. Studio is a GPUI IDE over the same graph. Coding agents talk to Lattice through the CLI.
 
-This repository is a walking skeleton, not a NLE. Milestone 0 is:
+Lattice Alpha is a dogfoodable slice, not a NLE:
 
 ```text
-.vel → parse → invocation AST → lowering → Core IR → timeline → FFmpeg preview
+.vel → parse → WIT stdlib lowering → Core IR → locus → review → resolve → render plan → FFmpeg
 ```
-
-Wasmtime-hosted stdlib and the GPUI Studio shell are still stubbed.
 
 ## Status
 
-| Layer | v0 |
+| Layer | Alpha |
 |---|---|
-| Core IR (time, TimeMap, scene, provenance) | yes |
+| Core IR (time, TimeMap, scene, provenance, locus) | yes |
 | VEL parser (generic invocation DSL) | yes |
-| Host builtins: `freeze`, `title`, commentary convention | yes |
-| `lattice check` / `compile --emit-ir` / `explain` | yes |
-| Timeline flatten + `lattice render` / `preview` | yes (FFmpeg) |
-| Wasmtime / WIT components | contract only |
-| GPUI Studio | not yet |
+| Wasmtime WIT stdlib: `freeze`, `title` | yes |
+| Host builtins: `callout`, `fade`, `gain`, `speech`, commentary | yes |
+| Shared locus (VEL ↔ Core ↔ timeline) | yes |
+| Review: propose / inspect / Apply / Reject | yes |
+| Resolve + lockable generated media | yes (local tone; TTS when a provider exists) |
+| `lattice check` / `compile --emit-ir` / `explain` / `render` | yes |
+| Agent JSON: `locus` / `inspect` / `propose` / `apply` / `reject` / `resolve` | yes |
+| GPUI Studio (Windows) | vertical slice over the Engine |
 
 Platform: developed and dogfooded on **Windows 11 x64**. Core, VEL, and the compiler stay platform-neutral and run on Linux CI. Other Studio platforms are deferred. WSL is not a supported runtime path.
 
@@ -38,6 +39,12 @@ cargo run -p lattice-cli -- render examples/gameplay-commentary/main.vel -o prev
 
 Add `--json` for agent-friendly output.
 
+```powershell
+cargo run -p lattice-cli -- --json inspect examples/gameplay-commentary/main.vel --locus demo:title:1
+cargo run -p lattice-cli -- --json propose examples/gameplay-commentary/main.vel --title-text World
+cargo run -p lattice-studio -- examples/gameplay-commentary/main.vel
+```
+
 ## Layout
 
 ```text
@@ -45,9 +52,11 @@ crates/lattice-core      semantic IR (no GPUI / FFmpeg / Wasmtime / VEL)
 crates/lattice-vel       lexer + generic invocation parser
 crates/lattice-wasm      lowering registry (in-process builtins until Wasm)
 crates/lattice-engine    compile / validate / explain orchestration
-crates/lattice-cli       check / compile / explain / render
+crates/lattice-cli       check / compile / explain / render / locus / inspect / propose / apply / reject / resolve
 crates/lattice-media     FFmpeg preview/export adapter
-crates/lattice-studio    GPUI Studio (stub)
+crates/lattice-studio    GPUI Studio (Engine client; `--features window`)
+crates/lattice-stdlib-guest  WIT guest for freeze/title (wasm32-wasip2)
+stdlib/lattice-stdlib.wasm   vendored stdlib component
 docs/                    principles, architecture, glossary, interaction
 docs/mockups/studio/     interaction boards (locus, three capabilities)
 docs/notes/              design conversation logs

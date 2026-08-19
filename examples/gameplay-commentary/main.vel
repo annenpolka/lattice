@@ -13,7 +13,22 @@ scene demo {
 
   freeze fight at 5.2s for 1.5s
 
+  fade fight {
+    at 0s for 0.5s
+  }
+
   title "Hello" {
     at 2s for 3s
+    opacity 90
+  }
+
+  callout "Hold" {
+    at 5.2s for 1.5s
+  }
+
+  gain fight by -3
+
+  speech "Nice freeze" {
+    at 5.2s for 1.5s
   }
 }

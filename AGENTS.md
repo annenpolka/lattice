@@ -32,15 +32,15 @@
 
 ## Walking skeleton scope
 
-Keep Milestone 0 small:
+Keep the Alpha slice small:
 
 1. Parse `examples/gameplay-commentary/main.vel`
-2. Lower `freeze` / `title` / commentary convention through the registry
-3. Emit IR and explain text
+2. Lower `freeze` / `title` through WIT, other words through the same registry
+3. Emit IR, explain text, and a shared locus
 4. Preview/export consumes a flattened timeline (never VEL) and may call FFmpeg
-5. Do not start GPUI Timeline UI, OTIO, TTS providers, or a GPU renderer
+5. Studio is an Engine client. Do not add OTIO, a GPU renderer, or in-process LLM SDKs.
 
-The in-process builtins in `lattice-wasm` are a stand-in for WIT components. When you add Wasmtime, replace the builtin bodies, not the Core types.
+`freeze` and `title` lower through Wasmtime-hosted WIT (`stdlib/lattice-stdlib.wasm`). Other stdlib words remain in-process builtins behind the same registry. Replace remaining builtin bodies with components without changing Core types.
 
 ## Verification
 

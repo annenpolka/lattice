@@ -20,6 +20,14 @@ pub struct TimelineClip {
     pub span: TimeSpan,
     pub source: Option<TimelineSource>,
     pub text: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub opacity: Option<u8>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fade_in: Option<crate::time::Time>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fade_out: Option<crate::time::Time>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gain_db: Option<i32>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -74,6 +82,10 @@ pub fn flatten_project(project: &Project) -> Result<Timeline, TimelineError> {
                     .visual
                     .as_ref()
                     .and_then(|visual| visual.text.clone()),
+                opacity: placement.visual.as_ref().and_then(|visual| visual.opacity),
+                fade_in: placement.visual.as_ref().and_then(|visual| visual.fade_in),
+                fade_out: placement.visual.as_ref().and_then(|visual| visual.fade_out),
+                gain_db: placement.audio.as_ref().and_then(|audio| audio.gain_db),
             });
         }
         offset = offset.checked_add(scene.duration)?;
@@ -111,6 +123,18 @@ impl Timeline {
         self.clips
             .iter()
             .filter(|clip| clip.kind == PlacementKind::Title)
+    }
+
+    pub fn callout_clips(&self) -> impl Iterator<Item = &TimelineClip> {
+        self.clips
+            .iter()
+            .filter(|clip| clip.kind == PlacementKind::Callout)
+    }
+
+    pub fn audio_clips(&self) -> impl Iterator<Item = &TimelineClip> {
+        self.clips
+            .iter()
+            .filter(|clip| clip.kind == PlacementKind::Audio)
     }
 
     pub fn freeze_segments(&self) -> Vec<&crate::time_map::TimeMapSegment> {

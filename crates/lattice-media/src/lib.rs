@@ -10,7 +10,7 @@ mod probe;
 
 pub use export::{ExportError, ExportReport, PreviewOptions, export_preview, extract_frame};
 pub use fixture::{DEFAULT_SOURCE_DURATION_SECS, generate_test_source};
-pub use plan::{OverlayWindow, PlanSegment, RenderPlan, plan_from_timeline};
+pub use plan::{AudioWindow, OverlayWindow, PlanSegment, RenderPlan, plan_from_timeline};
 pub use probe::{ProbeError, content_pixels, mean_abs_diff, probe_duration, title_bar_present};
 
 pub const PREVIEW_FPS_NUM: i64 = 10;

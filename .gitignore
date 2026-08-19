@@ -1,4 +1,8 @@
 /target
+/crates/lattice-stdlib-guest/target
+.lattice/
+lattice.lock.json
+studio-preview.mp4
 **/*.rs.bk
 .idea/
 .vscode/
