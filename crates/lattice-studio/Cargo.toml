@@ -1,0 +1,13 @@
+[package]
+name = "lattice-studio"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "GPUI Studio shell. Not wired in Milestone 0. Must not leak GPUI into Core."
+
+[dependencies]
+lattice-engine.workspace = true
+
+[lints]
+workspace = true

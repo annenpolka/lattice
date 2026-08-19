@@ -1,0 +1,4 @@
+sequence `main` is a flow of scenes
+freeze `fight` at 5.2s for 1.5s -> TimeMap hold (rate 0)
+title "Hello" at 2s for 3s
+source `fight` video -> canvas-fill; game audio -> passthrough

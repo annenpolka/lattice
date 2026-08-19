@@ -1,0 +1,14 @@
+[package]
+name = "lattice-vel"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "VEL lexer and generic invocation parser. Does not know stdlib command meaning."
+
+[dependencies]
+lattice-core.workspace = true
+thiserror.workspace = true
+
+[lints]
+workspace = true

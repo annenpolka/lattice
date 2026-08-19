@@ -1,0 +1,212 @@
+{
+  "schema_version": 1,
+  "name": "demo",
+  "convention": "commentary",
+  "media": [
+    {
+      "id": "media:game",
+      "name": "game",
+      "locator": {
+        "kind": "file",
+        "path": "capture.mp4"
+      }
+    }
+  ],
+  "sequences": [
+    {
+      "id": "sequence:main",
+      "name": "main",
+      "scene_ids": [
+        "scene:demo"
+      ]
+    }
+  ],
+  "scenes": [
+    {
+      "id": "scene:demo",
+      "name": "demo",
+      "over": null,
+      "duration": {
+        "num": 23,
+        "den": 2
+      },
+      "sources": [
+        {
+          "id": "source:fight",
+          "name": "fight",
+          "media_name": "game",
+          "source_range": {
+            "start": {
+              "num": 10,
+              "den": 1
+            },
+            "duration": {
+              "num": 10,
+              "den": 1
+            }
+          },
+          "time_map": {
+            "duration": {
+              "num": 23,
+              "den": 2
+            },
+            "segments": [
+              {
+                "local_start": {
+                  "num": 0,
+                  "den": 1
+                },
+                "local_duration": {
+                  "num": 26,
+                  "den": 5
+                },
+                "content_start": {
+                  "num": 10,
+                  "den": 1
+                },
+                "rate": {
+                  "num": 1,
+                  "den": 1
+                }
+              },
+              {
+                "local_start": {
+                  "num": 26,
+                  "den": 5
+                },
+                "local_duration": {
+                  "num": 3,
+                  "den": 2
+                },
+                "content_start": {
+                  "num": 76,
+                  "den": 5
+                },
+                "rate": {
+                  "num": 0,
+                  "den": 1
+                }
+              },
+              {
+                "local_start": {
+                  "num": 67,
+                  "den": 10
+                },
+                "local_duration": {
+                  "num": 24,
+                  "den": 5
+                },
+                "content_start": {
+                  "num": 76,
+                  "den": 5
+                },
+                "rate": {
+                  "num": 1,
+                  "den": 1
+                }
+              }
+            ]
+          },
+          "provenance": {
+            "span": {
+              "start": 110,
+              "end": 129,
+              "line": 12,
+              "column": 7
+            },
+            "origin": {
+              "kind": "source"
+            }
+          }
+        }
+      ],
+      "placements": [
+        {
+          "id": "demo:title:1",
+          "kind": "title",
+          "source_id": null,
+          "span": {
+            "start": {
+              "num": 2,
+              "den": 1
+            },
+            "duration": {
+              "num": 3,
+              "den": 1
+            }
+          },
+          "visual": {
+            "fit": null,
+            "text": "Hello"
+          },
+          "audio": null,
+          "provenance": {
+            "span": {
+              "start": 166,
+              "end": 202,
+              "line": 16,
+              "column": 3
+            },
+            "origin": {
+              "kind": "invocation",
+              "command": "title"
+            }
+          }
+        },
+        {
+          "id": "demo:video:2",
+          "kind": "video",
+          "source_id": "source:fight",
+          "span": {
+            "start": {
+              "num": 0,
+              "den": 1
+            },
+            "duration": {
+              "num": 23,
+              "den": 2
+            }
+          },
+          "visual": {
+            "fit": "canvas-fill",
+            "text": null
+          },
+          "audio": null,
+          "provenance": {
+            "span": null,
+            "origin": {
+              "kind": "convention",
+              "name": "commentary"
+            }
+          }
+        },
+        {
+          "id": "demo:audio:3",
+          "kind": "audio",
+          "source_id": "source:fight",
+          "span": {
+            "start": {
+              "num": 0,
+              "den": 1
+            },
+            "duration": {
+              "num": 23,
+              "den": 2
+            }
+          },
+          "visual": null,
+          "audio": {
+            "gain_db": null
+          },
+          "provenance": {
+            "span": null,
+            "origin": {
+              "kind": "convention",
+              "name": "commentary"
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

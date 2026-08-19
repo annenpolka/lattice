@@ -1,0 +1,13 @@
+[package]
+name = "lattice-media"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Media / render backends. FFmpeg is not wired in Milestone 0."
+
+[dependencies]
+lattice-core.workspace = true
+
+[lints]
+workspace = true

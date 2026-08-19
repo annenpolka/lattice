@@ -1,0 +1,188 @@
+use std::path::{Path, PathBuf};
+use std::process::ExitCode;
+
+use clap::{Parser, Subcommand};
+use lattice_engine::{Compilation, Engine};
+use serde::Serialize;
+
+#[derive(Debug, Parser)]
+#[command(name = "lattice", version, about = "Lattice video editing CLI")]
+struct Cli {
+    /// Machine-readable output. Always available for coding agents.
+    #[arg(long, global = true)]
+    json: bool,
+    #[command(subcommand)]
+    command: Command,
+}
+
+#[derive(Debug, Subcommand)]
+enum Command {
+    /// Parse, compile, and report diagnostics.
+    Check { file: PathBuf },
+    /// Compile VEL to Core IR.
+    Compile {
+        file: PathBuf,
+        #[arg(long)]
+        emit_ir: bool,
+        #[arg(short, long)]
+        output: Option<PathBuf>,
+    },
+    /// Show magic expansions (convention, freeze, title, flow).
+    Explain { file: PathBuf },
+    /// Render is not implemented in Milestone 0.
+    Render {
+        file: PathBuf,
+        #[arg(short, long)]
+        output: Option<PathBuf>,
+    },
+}
+
+fn main() -> ExitCode {
+    let cli = Cli::parse();
+    match run(cli) {
+        Ok(code) => code,
+        Err(err) => {
+            eprintln!("{err}");
+            ExitCode::from(2)
+        }
+    }
+}
+
+fn run(cli: Cli) -> Result<ExitCode, Box<dyn std::error::Error>> {
+    match cli.command {
+        Command::Check { file } => {
+            let compilation = compile_file(&file)?;
+            report(cli.json, &file, &compilation, ReportMode::Check, None)?;
+            Ok(exit_for(&compilation))
+        }
+        Command::Compile {
+            file,
+            emit_ir,
+            output,
+        } => {
+            let compilation = compile_file(&file)?;
+            if emit_ir {
+                let ir = serde_json::to_string_pretty(&compilation.project)?;
+                if let Some(path) = &output {
+                    std::fs::write(path, ir)?;
+                } else if !cli.json {
+                    println!("{ir}");
+                }
+            }
+            report(
+                cli.json,
+                &file,
+                &compilation,
+                if emit_ir {
+                    ReportMode::CompileIr
+                } else {
+                    ReportMode::Compile
+                },
+                output.as_deref(),
+            )?;
+            Ok(exit_for(&compilation))
+        }
+        Command::Explain { file } => {
+            let compilation = compile_file(&file)?;
+            report(cli.json, &file, &compilation, ReportMode::Explain, None)?;
+            Ok(exit_for(&compilation))
+        }
+        Command::Render { file, output } => {
+            let _ = compile_file(&file)?;
+            let message = "render is not implemented in Milestone 0 (FFmpeg backend is stubbed)";
+            if cli.json {
+                let payload = serde_json::json!({
+                    "ok": false,
+                    "error": message,
+                    "output": output,
+                });
+                println!("{}", serde_json::to_string_pretty(&payload)?);
+            } else {
+                eprintln!("{message}");
+            }
+            Ok(ExitCode::from(1))
+        }
+    }
+}
+
+fn compile_file(path: &Path) -> Result<Compilation, Box<dyn std::error::Error>> {
+    let source = std::fs::read_to_string(path)?;
+    Ok(Engine::default().compile(&source)?)
+}
+
+#[derive(Clone, Copy)]
+enum ReportMode {
+    Check,
+    Compile,
+    CompileIr,
+    Explain,
+}
+
+#[derive(Serialize)]
+struct JsonReport<'a> {
+    ok: bool,
+    file: String,
+    diagnostics: &'a [lattice_core::Diagnostic],
+    explain: &'a [lattice_engine::ExplainEvent],
+    #[serde(skip_serializing_if = "Option::is_none")]
+    ir: Option<&'a lattice_core::Project>,
+}
+
+fn report(
+    json: bool,
+    file: &Path,
+    compilation: &Compilation,
+    mode: ReportMode,
+    _output: Option<&Path>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    if json {
+        let payload = JsonReport {
+            ok: !compilation.has_errors(),
+            file: file.display().to_string(),
+            diagnostics: &compilation.diagnostics,
+            explain: &compilation.explain,
+            ir: matches!(mode, ReportMode::CompileIr).then_some(&compilation.project),
+        };
+        println!("{}", serde_json::to_string_pretty(&payload)?);
+        return Ok(());
+    }
+    for diagnostic in &compilation.diagnostics {
+        let where_ = diagnostic
+            .span
+            .map(|span| format!("{}:{}: ", span.line, span.column))
+            .unwrap_or_default();
+        println!(
+            "{where_}{:?} {}: {}",
+            diagnostic.severity, diagnostic.code, diagnostic.message
+        );
+    }
+    match mode {
+        ReportMode::Explain => {
+            for event in &compilation.explain {
+                println!("- {}", event.message);
+            }
+        }
+        ReportMode::Check | ReportMode::Compile if !compilation.has_errors() => {
+            println!(
+                "ok: project `{}` ({} scene{})",
+                compilation.project.name,
+                compilation.project.scenes.len(),
+                if compilation.project.scenes.len() == 1 {
+                    ""
+                } else {
+                    "s"
+                }
+            );
+        }
+        _ => {}
+    }
+    Ok(())
+}
+
+fn exit_for(compilation: &Compilation) -> ExitCode {
+    if compilation.has_errors() {
+        ExitCode::from(1)
+    } else {
+        ExitCode::SUCCESS
+    }
+}

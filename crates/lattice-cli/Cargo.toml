@@ -1,0 +1,21 @@
+[package]
+name = "lattice-cli"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Lattice CLI: check, compile, explain, render."
+
+[[bin]]
+name = "lattice"
+path = "src/main.rs"
+
+[dependencies]
+clap.workspace = true
+lattice-core.workspace = true
+lattice-engine.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+
+[lints]
+workspace = true

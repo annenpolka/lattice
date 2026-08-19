@@ -1,0 +1,20 @@
+[package]
+name = "lattice-engine"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Compile / validate / explain orchestration. Owns no GPUI or FFmpeg."
+
+[dependencies]
+lattice-core.workspace = true
+lattice-vel.workspace = true
+lattice-wasm.workspace = true
+serde.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true
+
+[lints]
+workspace = true

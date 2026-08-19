@@ -1,0 +1,9 @@
+* text=auto eol=lf
+*.md text eol=lf
+*.vel text eol=lf
+*.rs text eol=lf
+*.toml text eol=lf
+*.yml text eol=lf
+*.json text eol=lf
+*.wit text eol=lf
+*.qnt text eol=lf

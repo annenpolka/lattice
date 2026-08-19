@@ -1,0 +1,19 @@
+project "demo"
+
+convention commentary
+
+media game "capture.mp4"
+
+sequence main {
+  demo
+}
+
+scene demo {
+  game[10s..20s] as fight
+
+  freeze fight at 5.2s for 1.5s
+
+  title "Hello" {
+    at 2s for 3s
+  }
+}

@@ -1,0 +1,14 @@
+package lattice:dsl@0.1.0;
+
+interface lowering {
+    use lattice:core/types.{rational-time, span};
+
+    record invocation {
+        command: string,
+        span: span,
+    }
+
+    /// Host-side contract: an invocation lowers to Core fragments.
+    /// v0 implements this in-process; Wasmtime will host the same world later.
+    lower: func(command: string) -> result<string, string>;
+}
