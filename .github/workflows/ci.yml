@@ -33,9 +33,8 @@ jobs:
           gh release download latest --repo BtbN/FFmpeg-Builds \
             --pattern 'ffmpeg-n9.0-latest-linux64-gpl-9.0.tar.xz' --dir /tmp
           sudo tar -xJf "$archive" -C /opt
-          root=/opt/$(tar -tJf "$archive" | head -n 1 | cut -d/ -f1)
-          sudo install -m 0755 "$root/bin/ffmpeg" /usr/local/bin/ffmpeg
-          sudo install -m 0755 "$root/bin/ffprobe" /usr/local/bin/ffprobe
+          sudo install -m 0755 /opt/ffmpeg-n9.0-latest-linux64-gpl-9.0/bin/ffmpeg /usr/local/bin/ffmpeg
+          sudo install -m 0755 /opt/ffmpeg-n9.0-latest-linux64-gpl-9.0/bin/ffprobe /usr/local/bin/ffprobe
           ffmpeg -hide_banner -version | head -n 1
       - name: Install FFmpeg (Windows)
         if: runner.os == 'Windows'
