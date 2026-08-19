@@ -109,6 +109,7 @@ pub fn export_preview(
     if let Some(parent) = options.output.parent() {
         std::fs::create_dir_all(parent)?;
     }
+    let fps = format!("{}/{}", plan.fps_num, plan.fps_den);
     let output = Command::new(ffmpeg_bin())
         .args(["-y", "-i"])
         .arg(&input)
@@ -117,6 +118,10 @@ pub fn export_preview(
             &filter,
             "-map",
             "[outv]",
+            "-r",
+            &fps,
+            "-t",
+            &ffmpeg_seconds(plan.duration),
             "-an",
             "-pix_fmt",
             "yuv420p",
@@ -173,6 +178,8 @@ fn filter_complex(plan: &RenderPlan) -> Result<String, ExportError> {
     if n == 0 {
         return Err(TimelineError::NoVideo.into());
     }
+    let fps = format!("{}/{}", plan.fps_num, plan.fps_den);
+    let one_frame = ffmpeg_seconds(Time::from_frames(1, plan.fps_num, plan.fps_den)?);
     let mut parts = Vec::new();
     parts.push(format!("[0:v]split={n}{}", split_labels(n, "s")));
     let mut concat_in = String::new();
@@ -185,19 +192,18 @@ fn filter_complex(plan: &RenderPlan) -> Result<String, ExportError> {
                 .exact_frame_count(plan.fps_num, plan.fps_den)?;
             let loops = frames.saturating_sub(1);
             parts.push(format!(
-                "[s{i}]trim=start={start}:duration=0.1,setpts=PTS-STARTPTS,loop=loop={loops}:size=1:start=0,setpts=N/{fps}/TB[v{i}]",
-                fps = plan.fps_num
+                "[s{i}]trim=start={start}:duration={one_frame},setpts=PTS-STARTPTS,loop=loop={loops}:size=1:start=0,fps={fps}[v{i}]"
             ));
         } else {
             let end = ffmpeg_seconds(segment.content_start + segment.local.duration);
             parts.push(format!(
-                "[s{i}]trim=start={start}:end={end},setpts=PTS-STARTPTS[v{i}]"
+                "[s{i}]trim=start={start}:end={end},setpts=PTS-STARTPTS,fps={fps}[v{i}]"
             ));
         }
         write!(&mut concat_in, "[v{i}]").expect("label");
     }
     let after_concat = if plan.overlays.is_empty() {
-        "outv"
+        "rated"
     } else {
         "base"
     };
@@ -208,7 +214,7 @@ fn filter_complex(plan: &RenderPlan) -> Result<String, ExportError> {
         let end = ffmpeg_seconds(overlay.span.end());
         let enable = format!("between(t\\,{start}\\,{end})");
         let next = if i + 1 == plan.overlays.len() {
-            "outv".to_string()
+            "rated".to_string()
         } else {
             format!("ov{i}")
         };
@@ -218,6 +224,9 @@ fn filter_complex(plan: &RenderPlan) -> Result<String, ExportError> {
         ));
         last = next;
     }
+    // Pin fps in-graph. Some ffmpeg builds (johnvansickle) otherwise encode at 25fps
+    // and probe reports 11.48s for an 11.5s / 10fps timeline.
+    parts.push(format!("[{last}]fps={fps}[outv]"));
     Ok(parts.join(";"))
 }
 
@@ -248,9 +257,10 @@ fn ffmpeg_seconds(time: Time) -> String {
 
 #[cfg(test)]
 mod tests {
-    use lattice_core::Time;
+    use lattice_core::{Time, TimeSpan};
 
     use super::ffmpeg_seconds;
+    use crate::plan::{PlanSegment, RenderPlan};
 
     #[test]
     fn formats_hold_duration() {
@@ -260,5 +270,26 @@ mod tests {
             ffmpeg_seconds(Time::from_decimal_seconds(5, 2, 1).unwrap()),
             "5.2"
         );
+    }
+
+    #[test]
+    fn filter_complex_pins_preview_fps() {
+        let plan = RenderPlan {
+            duration: Time::from_decimal_seconds(11, 5, 1).unwrap(),
+            fps_num: 10,
+            fps_den: 1,
+            segments: vec![PlanSegment {
+                local: TimeSpan::new(Time::ZERO, Time::seconds(1)),
+                content_start: Time::ZERO,
+                hold: false,
+            }],
+            overlays: vec![],
+        };
+        let filter = super::filter_complex(&plan).unwrap();
+        assert!(
+            filter.contains("fps=10/1"),
+            "expected pinned fps in {filter}"
+        );
+        assert!(filter.contains("[outv]"), "{filter}");
     }
 }
