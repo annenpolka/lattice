@@ -3,7 +3,10 @@
 
 use lattice_core::Time;
 use lattice_engine::Engine;
-use lattice_media::{extract_frame, plan_from_timeline, probe_duration, title_bar_present};
+use lattice_media::{
+    content_pixels, extract_frame, mean_abs_diff, plan_from_timeline, probe_duration,
+    title_bar_present,
+};
 
 const VEL: &str = include_str!("../../../examples/gameplay-commentary/main.vel");
 
@@ -83,6 +86,33 @@ fn export_preview_matches_timeline_duration_and_title_window() {
     assert!(
         !title_bar_present(&before).expect("scan before"),
         "title overlay should be off at 1s"
+    );
+
+    let hold_a = extract_frame(
+        &out,
+        Time::from_decimal_seconds(5, 3, 1).unwrap(),
+        &dir.join("hold-a.ppm"),
+    )
+    .expect("frame in hold");
+    let hold_b = extract_frame(
+        &out,
+        Time::from_decimal_seconds(6, 5, 1).unwrap(),
+        &dir.join("hold-b.ppm"),
+    )
+    .expect("later frame in hold");
+    let moving = extract_frame(&out, Time::seconds(1), &dir.join("moving.ppm")).expect("pre-hold");
+    let a = content_pixels(&hold_a).unwrap();
+    let b = content_pixels(&hold_b).unwrap();
+    let pre = content_pixels(&moving).unwrap();
+    let hold_delta = mean_abs_diff(&a, &b);
+    let motion_delta = mean_abs_diff(&a, &pre);
+    assert!(
+        hold_delta < 8,
+        "freeze hold frames should stay still (mean abs diff {hold_delta})"
+    );
+    assert!(
+        motion_delta > hold_delta.saturating_add(8),
+        "pre-freeze motion should differ more than the hold (hold {hold_delta}, motion {motion_delta})"
     );
 }
 

@@ -81,6 +81,29 @@ pub fn title_bar_present(ppm: impl AsRef<Path>) -> Result<bool, ProbeError> {
     Ok(yellow * 2 > image.width)
 }
 
+/// Pixel rows excluding the title bar, for freeze-hold identity checks.
+pub fn content_pixels(ppm: impl AsRef<Path>) -> Result<Vec<u8>, ProbeError> {
+    let bytes = std::fs::read(ppm.as_ref())?;
+    let image = parse_ppm6(&bytes).ok_or_else(|| ProbeError::Parse("not a P6 PPM".into()))?;
+    let bar = 8.min(image.height);
+    let rows = image.height.saturating_sub(bar);
+    let n = (rows * image.width * 3) as usize;
+    Ok(image.data[..n].to_vec())
+}
+
+pub fn mean_abs_diff(left: &[u8], right: &[u8]) -> u64 {
+    let n = left.len().min(right.len());
+    if n == 0 {
+        return u64::MAX;
+    }
+    let sum: u64 = left
+        .iter()
+        .zip(right)
+        .map(|(a, b)| u64::from(a.abs_diff(*b)))
+        .sum();
+    sum / n as u64
+}
+
 struct Ppm {
     width: u32,
     height: u32,

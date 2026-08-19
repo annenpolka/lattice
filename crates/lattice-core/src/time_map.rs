@@ -71,6 +71,9 @@ impl TimeMap {
     }
 
     /// Insert a hold of `hold` local time at local time `at`. Content stays still.
+    ///
+    /// `at` may land on a segment start (including `0`). That still inserts a rate-0
+    /// segment; the previous implementation skipped it.
     pub fn with_freeze(&self, at: Time, hold: Time) -> Result<Self, TimeMapError> {
         if hold < Time::ZERO {
             return Err(TimeMapError::NegativeHold);
@@ -82,7 +85,14 @@ impl TimeMap {
             return Err(TimeMapError::OutOfRange(at));
         }
         let content = self.content_at(at)?;
+        let freeze = TimeMapSegment {
+            local_start: at,
+            local_duration: hold,
+            content_start: content,
+            rate: Time::ZERO,
+        };
         let mut segments = Vec::new();
+        let mut inserted = false;
         for segment in &self.segments {
             let start = segment.local_start;
             let end = start + segment.local_duration;
@@ -90,44 +100,39 @@ impl TimeMap {
                 segments.push(segment.clone());
                 continue;
             }
-            if start >= at {
-                let mut shifted = segment.clone();
-                shifted.local_start = start + hold;
-                segments.push(shifted);
+            if start < at {
+                let before = at.checked_sub(start)?;
+                if !before.is_zero() {
+                    segments.push(TimeMapSegment {
+                        local_start: start,
+                        local_duration: before,
+                        content_start: segment.content_start,
+                        rate: segment.rate,
+                    });
+                }
+                segments.push(freeze.clone());
+                inserted = true;
+                let after = end.checked_sub(at)?;
+                if !after.is_zero() {
+                    segments.push(TimeMapSegment {
+                        local_start: at + hold,
+                        local_duration: after,
+                        content_start: content,
+                        rate: segment.rate,
+                    });
+                }
                 continue;
             }
-            let before = at.checked_sub(start)?;
-            if !before.is_zero() {
-                segments.push(TimeMapSegment {
-                    local_start: start,
-                    local_duration: before,
-                    content_start: segment.content_start,
-                    rate: segment.rate,
-                });
+            if !inserted {
+                segments.push(freeze.clone());
+                inserted = true;
             }
-            segments.push(TimeMapSegment {
-                local_start: at,
-                local_duration: hold,
-                content_start: content,
-                rate: Time::ZERO,
-            });
-            let after = end.checked_sub(at)?;
-            if !after.is_zero() {
-                segments.push(TimeMapSegment {
-                    local_start: at + hold,
-                    local_duration: after,
-                    content_start: content,
-                    rate: segment.rate,
-                });
-            }
+            let mut shifted = segment.clone();
+            shifted.local_start = start + hold;
+            segments.push(shifted);
         }
-        if at == self.duration {
-            segments.push(TimeMapSegment {
-                local_start: at,
-                local_duration: hold,
-                content_start: content,
-                rate: Time::ZERO,
-            });
+        if !inserted {
+            segments.push(freeze);
         }
         Ok(Self {
             duration: self.duration.checked_add(hold)?,
@@ -159,6 +164,18 @@ mod tests {
         assert_eq!(frozen.content_at(d(11, 5, 1)).unwrap(), s(20));
         assert_eq!(frozen.segments.len(), 3);
         assert_eq!(frozen.segments[1].rate, Time::ZERO);
+    }
+
+    #[test]
+    fn freeze_at_segment_start() {
+        let map = TimeMap::identity(s(10), s(10));
+        let frozen = map.with_freeze(Time::ZERO, s(2)).unwrap();
+        assert_eq!(frozen.duration, s(12));
+        assert_eq!(frozen.segments[0].rate, Time::ZERO);
+        assert_eq!(frozen.segments[0].local_duration, s(2));
+        assert_eq!(frozen.content_at(Time::ZERO).unwrap(), s(10));
+        assert_eq!(frozen.content_at(s(2)).unwrap(), s(10));
+        assert_eq!(frozen.content_at(s(12)).unwrap(), s(20));
     }
 
     #[test]
