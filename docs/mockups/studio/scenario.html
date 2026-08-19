@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <title>Lattice scenario · title Hello</title>
+  <style>
+    :root {
+      --bg: #0c0e12;
+      --panel: #141821;
+      --line: #2a3140;
+      --text: #e8edf5;
+      --muted: #8b95a8;
+      --dim: #5c6678;
+      --teal: #3dd6c6;
+      --amber: #e8b86d;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      width: 1920px;
+      height: 100%;
+      overflow: hidden;
+      background: var(--bg);
+      color: var(--text);
+      font-family: "Segoe UI", "IBM Plex Sans", sans-serif;
+    }
+    body { padding: 24px 36px 18px; display: flex; flex-direction: column; gap: 14px; }
+    body > header { display: flex; align-items: baseline; justify-content: space-between; }
+    .brand { display: flex; align-items: center; gap: 12px; }
+    .mark {
+      width: 18px; height: 18px;
+      background: conic-gradient(from 45deg, var(--teal), #7aa2ff, var(--teal));
+      clip-path: polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%);
+    }
+    h1 { font-size: 20px; font-weight: 600; }
+    h1 span { color: var(--muted); font-weight: 500; }
+    .locus-chip {
+      font-size: 13px; color: var(--muted);
+      border: 1px solid #2a5a54; background: #15201f;
+      padding: 6px 10px; border-radius: 6px;
+    }
+    .locus-chip b { color: var(--teal); font-weight: 600; }
+
+    .rail {
+      display: grid;
+      grid-template-columns: 1fr 44px 1fr 44px 1.15fr;
+      align-items: center;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 10px 16px;
+    }
+    .rail .beat .n { font-size: 10px; letter-spacing: 0.08em; color: var(--teal); font-weight: 600; }
+    .rail .beat h2 { font-size: 15px; font-weight: 600; margin: 2px 0 0; }
+    .rail .beat p { font-size: 12px; color: var(--muted); }
+    .arrow { text-align: center; color: var(--teal); font-size: 22px; }
+
+    .main {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+    .col {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      overflow: hidden;
+    }
+    .col > h3 {
+      font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase;
+      color: var(--dim); padding: 10px 14px 0;
+    }
+    .col img.hero {
+      width: 100%;
+      aspect-ratio: 16 / 9;
+      object-fit: cover;
+      display: block;
+    }
+    .steps { padding: 10px 14px 12px; display: flex; flex-direction: column; gap: 8px; }
+    .node {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 8px 12px;
+      background: #12161e;
+    }
+    .node .n { font-size: 10px; letter-spacing: 0.08em; color: var(--teal); font-weight: 600; }
+    .node h4 { font-size: 14px; font-weight: 600; margin: 1px 0 2px; }
+    .node p { font-size: 12px; color: var(--muted); }
+
+    .branch {
+      margin: 0 14px 14px;
+      padding: 10px 12px;
+      border: 1px dashed #8a7040;
+      border-radius: 8px;
+      background: #16130e;
+      display: grid;
+      grid-template-columns: 148px 1fr;
+      gap: 12px;
+      align-items: center;
+    }
+    .branch img {
+      width: 148px;
+      aspect-ratio: 16 / 9;
+      object-fit: cover;
+      border-radius: 4px;
+      display: block;
+    }
+    .branch .k { font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--amber); }
+    .branch h4 { font-size: 14px; margin: 2px 0 4px; }
+    .branch p { font-size: 12px; color: var(--muted); line-height: 1.4; }
+
+    .alts {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 16px;
+    }
+    .alt {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 12px 14px 14px;
+      background: var(--panel);
+    }
+    .alt .k { font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--teal); }
+    .alt h3 { font-size: 14px; margin: 4px 0 6px; }
+    .alt p { font-size: 13px; color: var(--muted); line-height: 1.45; }
+
+    footer {
+      font-size: 13px;
+      color: var(--amber);
+      display: flex;
+      justify-content: space-between;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="brand">
+      <div class="mark"></div>
+      <h1>Scenario <span>本線は指す → 依頼 → Review。定義へ潜るのは枝。</span></h1>
+    </div>
+    <div class="locus-chip">locus · <b>title Hello</b> · main.vel:16</div>
+  </header>
+
+  <div class="rail">
+    <div class="beat">
+      <div class="n">本線 01–02</div>
+      <h2>Canvas で指す</h2>
+      <p>選択と provenance。遮らない。</p>
+    </div>
+    <div class="arrow">→</div>
+    <div class="beat">
+      <div class="n">本線 03</div>
+      <h2>「これ変えて」</h2>
+      <p>同じ locus を Agent へ渡す。</p>
+    </div>
+    <div class="arrow">→</div>
+    <div class="beat">
+      <div class="n">本線 04–05</div>
+      <h2>Review → Apply</h2>
+      <p>映像 · semantic · VEL。</p>
+    </div>
+  </div>
+
+  <section class="main">
+    <article class="col">
+      <h3>本線の起点</h3>
+      <img class="hero" src="screens/manipulate.jpg" alt="Select title on canvas" />
+      <div class="steps">
+        <div class="node">
+          <div class="n">01</div>
+          <h4>title を選択</h4>
+          <p>Canvas 上の Hello をクリックする。</p>
+        </div>
+        <div class="node">
+          <div class="n">02</div>
+          <h4>provenance が見える</h4>
+          <p>Defined in main.vel:16。常在する。関所ではない。</p>
+        </div>
+      </div>
+      <aside class="branch">
+        <img src="screens/navigate.jpg" alt="Optional go to definition" />
+        <div>
+          <div class="k">optional · 枝</div>
+          <h4>Go to definition</h4>
+          <p>VEL を書きたいときだけ潜る。本線の第二工程ではない。</p>
+        </div>
+      </aside>
+    </article>
+    <article class="col">
+      <h3>同じ locus への提案</h3>
+      <img class="hero" src="screens/review.jpg" alt="Review the same locus" />
+      <div class="steps">
+        <div class="node">
+          <div class="n">03</div>
+          <h4>「これ変えて」</h4>
+          <p>Agent は title Hello · main.vel:16 を受け取る。</p>
+        </div>
+        <div class="node">
+          <div class="n">04</div>
+          <h4>映像 + semantic + VEL</h4>
+          <p>同じ対象の三つの表現で審査する。</p>
+        </div>
+        <div class="node">
+          <div class="n">05</div>
+          <h4>Apply / Reject</h4>
+          <p>承認されるまで現行の VEL は変わらない。</p>
+        </div>
+      </div>
+    </article>
+  </section>
+
+  <section class="alts">
+    <article class="alt">
+      <div class="k">日常</div>
+      <h3>選ぶ → 動かす → 終わり</h3>
+      <p>Navigate も Review も使わない。provenance は出ているだけ。</p>
+    </article>
+    <article class="alt">
+      <div class="k">Agent · この scenario の本線</div>
+      <h3>指す → 「これ変えて」→ Review</h3>
+      <p>locus が GUI から Agent への指差しになる。</p>
+    </article>
+    <article class="alt">
+      <div class="k">VEL · 枝を使う場合</div>
+      <h3>定義へ飛ぶ → 書いて → Canvas で見る</h3>
+      <p>正本はソース。GUI はその投影。</p>
+    </article>
+  </section>
+
+  <footer>
+    <span>provenance は常在する。邪魔はしない。</span>
+    <span>locus は表現を跨いでも失われない。</span>
+  </footer>
+</body>
+</html>

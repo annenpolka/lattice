@@ -48,7 +48,8 @@ crates/lattice-engine    compile / validate / explain orchestration
 crates/lattice-cli       check / compile / explain / render
 crates/lattice-media     FFmpeg preview/export adapter
 crates/lattice-studio    GPUI Studio (stub)
-docs/                    principles, architecture, glossary
+docs/                    principles, architecture, glossary, interaction
+docs/mockups/studio/     interaction boards (locus, three capabilities)
 docs/notes/              design conversation logs
 examples/gameplay-commentary
 ```
@@ -60,4 +61,5 @@ The VEL / Lattice constitution was written in the design conversations under [`d
 - [docs/principles.md](docs/principles.md)
 - [docs/architecture.md](docs/architecture.md)
 - [docs/glossary.md](docs/glossary.md)
+- [docs/interaction.md](docs/interaction.md) — locus, Manipulate / Navigate / Review
 - [AGENTS.md](AGENTS.md) — rules for coding agents working in this repo

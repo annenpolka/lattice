@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <title>Lattice interaction model</title>
+  <style>
+    :root {
+      --bg: #0c0e12;
+      --panel: #141821;
+      --line: #2a3140;
+      --text: #e8edf5;
+      --muted: #8b95a8;
+      --dim: #5c6678;
+      --teal: #3dd6c6;
+      --amber: #e8b86d;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      width: 1920px;
+      height: 100%;
+      overflow: hidden;
+      background: var(--bg);
+      color: var(--text);
+      font-family: "Segoe UI", "IBM Plex Sans", sans-serif;
+    }
+    body { padding: 28px 36px 20px; display: flex; flex-direction: column; gap: 16px; }
+    body > header { display: flex; align-items: baseline; justify-content: space-between; }
+    .brand { display: flex; align-items: center; gap: 12px; }
+    .mark {
+      width: 18px; height: 18px;
+      background: conic-gradient(from 45deg, var(--teal), #7aa2ff, var(--teal));
+      clip-path: polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%);
+    }
+    h1 { font-size: 20px; font-weight: 600; }
+    h1 span { color: var(--muted); font-weight: 500; }
+    .note { font-size: 13px; color: var(--muted); }
+
+    .hub {
+      display: grid;
+      grid-template-columns: 1fr 300px 1fr;
+      align-items: center;
+      gap: 0 20px;
+    }
+    .hub-side { font-size: 13px; color: var(--dim); line-height: 1.45; }
+    .hub-side.left { text-align: right; }
+    .locus {
+      border: 1px solid #2a5a54;
+      background: #15201f;
+      border-radius: 12px;
+      padding: 14px 16px 16px;
+      text-align: center;
+    }
+    .locus .k {
+      font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--teal);
+    }
+    .locus h2 { font-size: 18px; margin: 6px 0 4px; }
+    .locus p { font-size: 12px; color: var(--muted); }
+
+    .spokes {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 16px;
+    }
+    .cap {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+    .cap .ch {
+      display: block;
+      padding: 12px 14px 10px;
+      border-bottom: 1px solid var(--line);
+    }
+    .cap .name {
+      font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--teal);
+    }
+    .cap h3 { display: block; font-size: 16px; font-weight: 600; margin: 4px 0; }
+    .cap .blurb { font-size: 13px; color: var(--muted); line-height: 1.4; }
+    .cap img {
+      width: 100%;
+      aspect-ratio: 16 / 9;
+      object-fit: cover;
+      display: block;
+    }
+    footer {
+      font-size: 13px;
+      color: var(--amber);
+      display: flex;
+      justify-content: space-between;
+      gap: 24px;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="brand">
+      <div class="mark"></div>
+      <h1>Lattice interaction model <span>順序のない三つの能力</span></h1>
+    </div>
+    <div class="note">矢印は「次に」ではない。どこからでも同じ locus に触れる。</div>
+  </header>
+
+  <section class="hub">
+    <p class="hub-side left">VEL から Canvas へ辿ることもある。<br>Canvas を動かして終わることもある。</p>
+    <div class="locus">
+      <div class="k">selection · locus</div>
+      <h2>title Hello</h2>
+      <p>main.vel:16 · 全ビューで保存される指差し</p>
+    </div>
+    <p class="hub-side">Agent 提案から Review して、<br>そこから定義へ飛ぶこともある。</p>
+  </section>
+
+  <section class="spokes">
+    <article class="cap">
+      <header class="ch">
+        <div class="name">Manipulate</div>
+        <h3>見えているものを直接触る</h3>
+        <p class="blurb">選ぶ。動かす。日常はこれで終わっていい。</p>
+      </header>
+      <img src="screens/manipulate.jpg" alt="Manipulate: canvas selection" />
+    </article>
+    <article class="cap">
+      <header class="ch">
+        <div class="name">Navigate</div>
+        <h3>同じ意味的対象を別の表現で辿る</h3>
+        <p class="blurb">Canvas ↔ VEL、timeline ↔ source、proposal ↔ affected locus。Go to definition はその一例。</p>
+      </header>
+      <img src="screens/navigate.jpg" alt="Navigate: other representations of the same locus" />
+    </article>
+    <article class="cap">
+      <header class="ch">
+        <div class="name">Review</div>
+        <h3>意味・映像・ソースで審査する</h3>
+        <p class="blurb">Agent も同じ locus を指す。Apply するまで現行は変わらない。</p>
+      </header>
+      <img src="screens/review.jpg" alt="Review: semantic proposal" />
+    </article>
+  </section>
+
+  <footer>
+    <span>provenance は常在する。邪魔はしない。</span>
+    <span>locus は表現を跨いでも失われない。</span>
+  </footer>
+</body>
+</html>

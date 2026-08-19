@@ -13,3 +13,5 @@
 - FFmpeg is a backend, not the semantic model.
 - External coding agents interact primarily through the CLI.
 - GPUI types never leak into Core.
+- Provenance is always present. It must not obstruct the edit.
+- A locus survives projections (VEL, canvas, timeline, agent). Do not invent a per-view selection model.
