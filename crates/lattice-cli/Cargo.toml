@@ -4,7 +4,7 @@ version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
-description = "Lattice CLI: check, compile, explain, render."
+description = "Lattice CLI: check, compile, explain, render, import."
 
 [[bin]]
 name = "lattice"
@@ -16,6 +16,9 @@ lattice-core.workspace = true
 lattice-engine.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+
+[dev-dependencies]
+lattice-media.workspace = true
 
 [lints]
 workspace = true

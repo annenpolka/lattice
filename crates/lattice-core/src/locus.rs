@@ -4,7 +4,17 @@ use crate::ir::TimeSpan;
 use crate::provenance::Provenance;
 use crate::span::Span;
 
-/// Stable identity of a semantic "here" shared across VEL, Core, timeline, and agents.
+/// Identity of a semantic "here" shared across VEL, Core, timeline, and agents.
+///
+/// Guarantees:
+/// - Stable within one compilation: the same Core node keeps the same id for
+///   the life of that compiled project.
+/// - Consistent across source / Core / timeline projections of that compilation.
+///
+/// After a supported one-property edit (for example changing title text) and a
+/// recompile, the edited target is found again by the same `LocusId` when the
+/// underlying placement identity is unchanged. Arbitrary source rewrites may
+/// mint new ids; that is not guaranteed and must not be assumed.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct LocusId(pub String);
 
@@ -125,10 +135,7 @@ impl Locus {
     }
 
     pub fn contains_timeline_time(&self, time: crate::time::Time) -> bool {
-        self.timeline_span.is_some_and(|span| {
-            time >= span.start
-                && (time < span.end() || (span.duration.is_zero() && time == span.start))
-        })
+        self.timeline_span.is_some_and(|span| span.contains(time))
     }
 
     pub fn specificity(&self) -> u8 {

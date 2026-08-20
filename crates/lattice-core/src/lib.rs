@@ -16,7 +16,7 @@ mod time_map;
 mod timeline;
 
 pub use diagnostic::{Diagnostic, Severity};
-pub use edit::{EditProposal, SemanticEdit};
+pub use edit::{EditProposal, SemanticEdit, source_revision};
 pub use ir::{
     Audio, Media, Placement, PlacementKind, Project, Scene, Sequence, Source, TimeSpan, Visual,
 };

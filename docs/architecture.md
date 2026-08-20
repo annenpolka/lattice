@@ -71,7 +71,7 @@ Agent input is `locus + instruction`. Natural language without a locus is not th
 
 ## Review
 
-A `SemanticEdit` is named before any rewrite. `EditProposal` carries a description, a VEL diff, and `new_source`. Apply writes that source and recompiles. Reject leaves current VEL bytes unchanged. CLI: `propose` / `inspect` / `apply` / `reject` (all `--json`).
+A `SemanticEdit` is named before any rewrite. `EditProposal` carries a description, a VEL diff, `new_source`, and a `base_revision` fingerprint of the source it was built from. Apply writes that source (atomically) and recompiles, and rejects the proposal if the current source no longer matches. Reject leaves current VEL bytes unchanged. CLI: `propose` / `inspect` / `apply` / `reject` / `import` (all `--json`).
 
 ## Resolve
 

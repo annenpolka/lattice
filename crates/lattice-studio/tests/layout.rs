@@ -63,10 +63,17 @@ fn layout_matches_engine_compile_plan_and_timeline() {
         .collect();
     for overlay in &plan.overlays {
         if let Some(text) = &overlay.text {
-            assert!(
-                overlay_texts.contains(&text.as_str()),
-                "canvas missing overlay {text:?} from plan"
-            );
+            if overlay.span.contains(layout.playhead) {
+                assert!(
+                    overlay_texts.contains(&text.as_str()),
+                    "canvas missing on-playhead overlay {text:?} from plan"
+                );
+            } else {
+                assert!(
+                    !overlay_texts.contains(&text.as_str()),
+                    "canvas must not show off-playhead overlay {text:?}"
+                );
+            }
         }
     }
 
@@ -128,13 +135,19 @@ fn canvas_source_and_timeline_point_at_the_same_title_locus() {
     assert_eq!(from_node.id, title.id);
 
     let mut session = StudioSession::open(&vel).unwrap();
+    session.point_at(title.id.clone());
     let layout = session.layout().unwrap();
+    assert_eq!(
+        layout.playhead,
+        title.timeline_span.expect("title span").start
+    );
+    assert_eq!(layout.canvas.playhead, layout.playhead);
     let overlay = layout
         .canvas
         .overlays
         .iter()
         .find(|overlay| overlay.text == title.label)
-        .expect("title overlay");
+        .expect("title overlay at title time");
     let from_canvas = session
         .point_from_canvas_overlay(&overlay.locus_id)
         .unwrap()
@@ -258,11 +271,13 @@ fn apply_title_text_rewrites_vel_and_render_preview_writes_mp4() {
     session.apply_title_text("World").expect("apply title");
     assert_ne!(session.source(), original);
     assert!(session.source().contains("World"));
+    session.save().expect("save working source");
     let engine = Engine::default();
     let compilation = engine.compile_path(&vel).unwrap();
     let timeline = Engine::timeline(&compilation.project).unwrap();
     let title = timeline.title_clips().next().expect("title");
     assert_eq!(title.text.as_deref(), Some("World"));
+    lattice_media::generate_av_fixture(vel.parent().unwrap().join("capture.mp4"), 21).unwrap();
     let preview = session.render_preview().expect("render");
     assert!(
         preview.is_file(),
@@ -287,6 +302,74 @@ fn window_source_composes_documented_panes() {
     assert!(
         main.contains("Apply") && main.contains("Reject"),
         "Review Apply/Reject must be in the window"
+    );
+    for action in [
+        "Open Video…",
+        "Set In",
+        "Set Out",
+        "Split at Playhead",
+        "Delete Selected Clip",
+        "Play",
+        "Pause",
+        "Seek",
+        "Scrub",
+        "Gain -3 dB",
+        "Fade",
+    ] {
+        assert!(main.contains(action), "window source must expose {action}");
+    }
+    assert!(
+        main.contains("StudioSession::open_video"),
+        "Open Video… must call StudioSession::open_video"
+    );
+    assert!(
+        main.contains("img("),
+        "Canvas must draw the preview frame image"
+    );
+    assert!(
+        main.contains("refresh_preview(\"timeline-clip\")"),
+        "timeline clip click must refresh the playhead preview"
+    );
+    assert!(
+        main.contains("object_fit(ObjectFit::Contain)"),
+        "canvas still must preserve aspect instead of stretching"
+    );
+    assert!(
+        main.contains("id(\"canvas-frame\")"),
+        "canvas still id must remain"
+    );
+    assert!(
+        !main.contains(".id(\"canvas-frame\").absolute().size_full()"),
+        "canvas still must not fill the pane without object-fit"
+    );
+    assert!(
+        main.contains("on_mouse_down")
+            && main.contains("on_mouse_move")
+            && main.contains("on_mouse_up")
+            && main.contains("scrub_timeline_ratio")
+            && main.contains("click_timeline_ratio")
+            && main.contains("TIMELINE_RATIO_DEN"),
+        "timeline pointer-down/move/up must map slice index to session rail ratio"
+    );
+    assert!(
+        main.contains("spawn_play_clock") && main.contains("step_clock"),
+        "Play must tick the session clock off the paint path"
+    );
+    assert!(
+        !main.contains("gap.min(4.0)"),
+        "timeline clips must sit at their start time, not pack with a 4px gap"
+    );
+    assert!(
+        main.contains("id(\"playhead\")"),
+        "timeline must draw a playhead aligned to Time"
+    );
+    assert!(
+        !main.contains("eprintln!") && !main.contains("println!"),
+        "eprintln!/println! panic when stderr is a closed Windows pipe (0x800700e8); use trace::log"
+    );
+    assert!(
+        main.contains("trace::install"),
+        "the window binary must install the durable log before GPUI starts"
     );
 }
 

@@ -28,6 +28,11 @@ pub struct LockedAsset {
     pub identity: AssetIdentity,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub duration: Option<Time>,
+    /// Provider implementation identity used when this asset was generated.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provider: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provider_version: Option<String>,
 }
 
 /// Git-friendly resolve lock. Render from this must not silently regenerate.

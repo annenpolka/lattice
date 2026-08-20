@@ -27,6 +27,10 @@ pub struct CanvasOverlay {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CanvasView {
     pub overlays: Vec<CanvasOverlay>,
+    pub preview_frame: Option<std::path::PathBuf>,
+    pub playhead: Time,
+    pub preview_width: u32,
+    pub preview_height: u32,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -84,6 +88,9 @@ pub struct StudioLayout {
     pub inspector: InspectorView,
     pub timeline: TimelineView,
     pub review: Option<ReviewView>,
+    pub playhead: Time,
+    pub dirty: bool,
+    pub playing: bool,
 }
 
 pub fn from_session(session: &StudioSession) -> Result<StudioLayout, lattice_engine::EngineError> {
@@ -98,7 +105,14 @@ pub fn from_session(session: &StudioSession) -> Result<StudioLayout, lattice_eng
         project_name: compilation.project.name.clone(),
         file_label: file_label(session.path()),
         tree: tree_from_compilation(compilation, &loci, current_id.as_ref()),
-        canvas: canvas_from_plan(&plan, &loci, current_id.as_ref()),
+        canvas: canvas_from_plan(
+            &plan,
+            &loci,
+            current_id.as_ref(),
+            session.playhead(),
+            session.peek_preview_frame(),
+            session.preview_pixel_size(),
+        ),
         source: SourceView {
             text: compilation.source.clone(),
             highlight: current.as_ref().and_then(|locus| locus.source_span),
@@ -106,6 +120,9 @@ pub fn from_session(session: &StudioSession) -> Result<StudioLayout, lattice_eng
         inspector: inspector_from_locus(current.as_ref(), session.path()),
         timeline: timeline_view(&timeline, current_id.as_ref()),
         review: session.review_proposal().map(review_from_proposal),
+        playhead: session.playhead(),
+        dirty: session.is_dirty(),
+        playing: session.is_playing(),
     })
 }
 
@@ -211,14 +228,20 @@ fn canvas_from_plan(
     plan: &lattice_engine::RenderPlan,
     loci: &[Locus],
     current: Option<&LocusId>,
+    playhead: Time,
+    preview_frame: Option<std::path::PathBuf>,
+    preview_size: (u32, u32),
 ) -> CanvasView {
     let overlays = plan
         .overlays
         .iter()
+        .filter(|overlay| overlay.span.contains(playhead))
         .filter_map(|overlay| {
             let text = overlay.text.clone()?;
             let locus = loci.iter().find(|locus| {
-                locus.label == text && matches!(locus.kind, LocusKind::Title | LocusKind::Callout)
+                locus.label == text
+                    && matches!(locus.kind, LocusKind::Title | LocusKind::Callout)
+                    && locus.timeline_span.is_none_or(|span| span == overlay.span)
             })?;
             Some(CanvasOverlay {
                 selected: current.is_some_and(|id| id == &locus.id),
@@ -228,7 +251,13 @@ fn canvas_from_plan(
             })
         })
         .collect();
-    CanvasView { overlays }
+    CanvasView {
+        overlays,
+        preview_frame,
+        playhead,
+        preview_width: preview_size.0,
+        preview_height: preview_size.1,
+    }
 }
 
 fn inspector_from_locus(locus: Option<&Locus>, path: &std::path::Path) -> InspectorView {

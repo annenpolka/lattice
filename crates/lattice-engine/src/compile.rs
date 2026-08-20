@@ -5,7 +5,10 @@ use lattice_core::{
     Project, Provenance, SemanticEdit, Sequence, Source, Time, TimeMap, TimeSpan, Timeline,
     TimelineError, flatten_project,
 };
-use lattice_media::{ExportError, ExportReport, PreviewOptions, export_preview};
+use lattice_media::{
+    ExportError, ExportReport, MediaInfo, PreviewFrameRequest, PreviewOptions, export_preview,
+    preview_frame, probe_media,
+};
 use lattice_vel::{Document, Expr, Item, ParseError};
 use lattice_wasm::{ExplainLine, LoweringRegistry, SceneDraft};
 use serde::Serialize;
@@ -29,8 +32,19 @@ pub enum EngineError {
     Io(#[from] std::io::Error),
     #[error("edit: {0}")]
     Edit(String),
+    #[error("stale proposal (base revision {expected}, current {found})")]
+    StaleProposal { expected: String, found: String },
     #[error(transparent)]
     Resolve(#[from] ResolveError),
+}
+
+impl EngineError {
+    pub fn stale_revisions(&self) -> Option<(&str, &str)> {
+        match self {
+            Self::StaleProposal { expected, found } => Some((expected, found)),
+            _ => None,
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
@@ -156,8 +170,51 @@ impl Engine {
         crate::edit::propose_edit(&compilation.source, locus, edit)
     }
 
-    pub fn apply_proposal(&self, source: &str, proposal: &EditProposal) -> String {
+    pub fn apply_proposal(
+        &self,
+        source: &str,
+        proposal: &EditProposal,
+    ) -> Result<String, EngineError> {
         crate::edit::apply_proposal(source, proposal)
+    }
+
+    pub fn write_source_atomic(&self, path: &Path, contents: &str) -> Result<(), EngineError> {
+        Ok(crate::atomic::write_source_atomic(path, contents)?)
+    }
+
+    pub fn import_media(
+        &self,
+        media: &Path,
+        out_dir: Option<&Path>,
+    ) -> Result<crate::import::ImportResult, EngineError> {
+        crate::import::import_media(media, out_dir)
+    }
+
+    /// Probe the first on-disk file media referenced by the project.
+    pub fn project_media_info(&self, project: &Project, media_root: &Path) -> Option<MediaInfo> {
+        for media in &project.media {
+            let MediaLocator::File { path } = &media.locator else {
+                continue;
+            };
+            let candidate = media_root.join(path);
+            if candidate.is_file() {
+                return probe_media(candidate).ok();
+            }
+        }
+        None
+    }
+
+    pub fn preview_frame(
+        &self,
+        project: &Project,
+        request: &PreviewFrameRequest,
+        media_root: &Path,
+        output: &Path,
+    ) -> Result<std::path::PathBuf, EngineError> {
+        let timeline = flatten_project(project)?;
+        Ok(preview_frame(
+            &timeline, request, media_root, output, false,
+        )?)
     }
 
     pub fn reject_proposal(&self, source: &str, _proposal: &EditProposal) -> String {
@@ -189,15 +246,25 @@ impl Engine {
         media_root: &Path,
         lock: Option<&lattice_core::ResolveLock>,
     ) -> Result<ExportReport, EngineError> {
-        let timeline = flatten_project(project)?;
-        Ok(export_preview(
-            &timeline,
+        self.render_with_options(
+            project,
             &PreviewOptions {
                 output: output.to_path_buf(),
                 media_root: media_root.to_path_buf(),
                 lock: lock.cloned(),
+                allow_fixtures: false,
+                font: None,
             },
-        )?)
+        )
+    }
+
+    pub fn render_with_options(
+        &self,
+        project: &Project,
+        options: &PreviewOptions,
+    ) -> Result<ExportReport, EngineError> {
+        let timeline = flatten_project(project)?;
+        Ok(export_preview(&timeline, options)?)
     }
 
     fn compile_document(&self, document: &Document) -> Result<Compilation, EngineError> {

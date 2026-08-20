@@ -76,3 +76,53 @@ fn json_inspect_propose_reject_then_apply() {
     assert!(after.contains("World"));
     assert_ne!(after, original);
 }
+
+#[test]
+fn json_apply_rejects_stale_proposal() {
+    let original = std::fs::read_to_string(sample_vel()).unwrap();
+    let dir = std::env::temp_dir().join("lattice-cli-stale");
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let vel = dir.join("main.vel");
+    std::fs::write(&vel, &original).unwrap();
+    let vel_s = vel.to_str().unwrap();
+    let propose = run_ok(&[
+        "--json",
+        "propose",
+        vel_s,
+        "--locus",
+        "demo:title:1",
+        "--title-text",
+        "World",
+    ]);
+    let proposal_path = dir.join("proposal.json");
+    std::fs::write(&proposal_path, &propose).unwrap();
+    std::fs::write(&vel, original.replace("title \"Hello\"", "title \"Later\"")).unwrap();
+    let output = Command::new(lattice_bin())
+        .args([
+            "--json",
+            "apply",
+            vel_s,
+            "--proposal",
+            proposal_path.to_str().unwrap(),
+        ])
+        .output()
+        .expect("spawn");
+    let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
+    let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
+    assert!(
+        !output.status.success(),
+        "stale apply must fail: {stdout}{stderr}"
+    );
+    assert!(
+        stdout.contains("LAT-EDIT-STALE") || stdout.contains("stale"),
+        "{stdout}"
+    );
+    assert!(
+        stdout.contains("\"applied\": false") || stdout.contains("\"applied\":false"),
+        "{stdout}"
+    );
+    let after = std::fs::read_to_string(&vel).unwrap();
+    assert!(after.contains("Later"));
+    assert!(!after.contains("World"));
+}

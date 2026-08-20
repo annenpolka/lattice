@@ -13,12 +13,14 @@ use std::process::ExitCode;
 
 use gpui::{
     AppContext, Application, Bounds, Context, FocusHandle, Focusable, InteractiveElement,
-    IntoElement, KeyDownEvent, ParentElement, Render, SharedString, StatefulInteractiveElement,
-    Styled, TitlebarOptions, Window, WindowBounds, WindowOptions, div, px, rgb, size,
+    IntoElement, KeyDownEvent, MouseButton, MouseMoveEvent, ObjectFit, ParentElement, Render,
+    SharedString, StatefulInteractiveElement, Styled, StyledImage, Timer, TitlebarOptions, Window,
+    WindowBounds, WindowOptions, div, img, px, rgb, size,
 };
-use lattice_studio::StudioSession;
+use lattice_studio::{StudioSession, trace};
 
 fn main() -> ExitCode {
+    let log_path = trace::install();
     let path = std::env::args_os().nth(1).map_or_else(
         || {
             PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -26,19 +28,49 @@ fn main() -> ExitCode {
         },
         PathBuf::from,
     );
+    trace::log(format!(
+        "start exe={} cwd={} vel={} log={} preview={} rustc={}",
+        std::env::current_exe()
+            .map(|p| p.display().to_string())
+            .unwrap_or_else(|_| "?".into()),
+        std::env::current_dir()
+            .map(|p| p.display().to_string())
+            .unwrap_or_else(|_| "?".into()),
+        path.display(),
+        log_path.display(),
+        if preview_extract_enabled() {
+            "on"
+        } else {
+            "off"
+        },
+        option_env!("CARGO_PKG_VERSION").unwrap_or("dev"),
+    ));
     if let Err(err) = window_main(path) {
-        eprintln!("lattice-studio: {err}");
+        trace::log(format!("fatal: {err}"));
         return ExitCode::from(2);
     }
+    trace::log("event loop returned (window closed)");
     ExitCode::SUCCESS
 }
 
 fn window_main(path: PathBuf) -> Result<(), Box<dyn std::error::Error>> {
-    let session = StudioSession::open(&path)?;
-    eprintln!("lattice-studio: opening GPUI window for {}", path.display());
+    trace::log(format!("compile/open {}", path.display()));
+    let session = StudioSession::open(&path).map_err(|err| {
+        trace::log(format!("StudioSession::open failed: {err}"));
+        err
+    })?;
+    trace::log(format!(
+        "open ok dirty={} playhead={:?} diagnostics={}",
+        session.is_dirty(),
+        session.playhead(),
+        session.diagnostics().len()
+    ));
+    spawn_preview_extract(path.clone());
+    trace::log("Application::run");
     Application::new().run(move |cx| {
         let bounds = Bounds::centered(None, size(px(1400.0), px(840.0)), cx);
-        cx.open_window(
+        trace::log("open_window");
+        match cx.open_window(
             WindowOptions {
                 window_bounds: Some(WindowBounds::Windowed(bounds)),
                 titlebar: Some(TitlebarOptions {
@@ -52,21 +84,58 @@ fn window_main(path: PathBuf) -> Result<(), Box<dyn std::error::Error>> {
             },
             |_, cx| {
                 cx.new(|cx| {
+                    trace::log("StudioView::new");
                     let mut view = StudioView {
                         session,
                         title_draft: String::new(),
                         last_render: None,
                         focus: cx.focus_handle(),
+                        first_paint_logged: false,
+                        timeline_dragging: false,
+                        preview_shown: false,
                     };
                     view.adopt_locus_label();
+                    view.spawn_play_clock(cx);
                     view
                 })
             },
-        )
-        .expect("open studio window");
+        ) {
+            Ok(_) => trace::log("open_window ok"),
+            Err(err) => trace::log(format!("open_window failed: {err:?}")),
+        }
         cx.activate(true);
+        trace::log("activate");
     });
     Ok(())
+}
+
+fn spawn_preview_extract(path: PathBuf) {
+    if !preview_extract_enabled() {
+        trace::log("preview extract skipped (LATTICE_STUDIO_PREVIEW=0)");
+        return;
+    }
+    match std::thread::Builder::new()
+        .name("lattice-preview".into())
+        .spawn(move || {
+            trace::log("preview extract thread start");
+            match StudioSession::open(&path).and_then(|session| session.cached_preview_frame()) {
+                Ok(frame) => trace::log(format!("preview extract ok {}", frame.display())),
+                Err(err) => trace::log(format!("preview extract err {err}")),
+            }
+        }) {
+        Ok(_) => trace::log("preview extract thread spawned"),
+        Err(err) => trace::log(format!("preview extract thread spawn failed: {err}")),
+    }
+}
+
+fn preview_extract_enabled() -> bool {
+    match std::env::var("LATTICE_STUDIO_PREVIEW") {
+        Ok(value) => {
+            let value = value.to_ascii_lowercase();
+            !matches!(value.as_str(), "0" | "off" | "false" | "no")
+        }
+        Err(_) => true,
+    }
 }
 
 struct StudioView {
@@ -74,6 +143,9 @@ struct StudioView {
     title_draft: String,
     last_render: Option<String>,
     focus: FocusHandle,
+    first_paint_logged: bool,
+    timeline_dragging: bool,
+    preview_shown: bool,
 }
 
 impl StudioView {
@@ -81,6 +153,43 @@ impl StudioView {
         if let Ok(Some(locus)) = self.session.current_locus() {
             self.title_draft = locus.label;
         }
+    }
+
+    fn spawn_play_clock(&self, cx: &mut Context<Self>) {
+        cx.spawn(async move |this, cx| {
+            loop {
+                Timer::after(std::time::Duration::from_millis(100)).await;
+                if this
+                    .update(cx, |this, cx| {
+                        if this.session.is_playing() {
+                            this.session
+                                .step_clock(lattice_engine::Time::milliseconds(100));
+                            this.refresh_preview("clock");
+                            cx.notify();
+                        } else if !this.preview_shown && this.session.peek_preview_frame().is_some()
+                        {
+                            this.preview_shown = true;
+                            cx.notify();
+                        }
+                    })
+                    .is_err()
+                {
+                    break;
+                }
+            }
+        })
+        .detach();
+    }
+
+    fn scrub_timeline_ratio(&mut self, num: u32, den: u32, why: &str) {
+        self.session.scrub_timeline_ratio(num, den);
+        self.refresh_preview(why);
+    }
+}
+
+impl Drop for StudioView {
+    fn drop(&mut self) {
+        trace::log("StudioView dropped");
     }
 }
 
@@ -106,7 +215,21 @@ const TEAL: u32 = 0x3dd6c6;
 #[cfg(feature = "window")]
 impl Render for StudioView {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let layout = self.session.layout().ok();
+        let layout = match self.session.layout() {
+            Ok(layout) => Some(layout),
+            Err(err) => {
+                trace::log(format!("layout failed: {err}"));
+                None
+            }
+        };
+        if !self.first_paint_logged {
+            self.first_paint_logged = true;
+            let preview = layout
+                .as_ref()
+                .and_then(|item| item.canvas.preview_frame.as_ref())
+                .map_or_else(|| "none".into(), |path| path.display().to_string());
+            trace::log(format!("first paint preview={preview}"));
+        }
         let file = layout
             .as_ref()
             .map(|item| item.file_label.clone())
@@ -119,6 +242,7 @@ impl Render for StudioView {
             .text_color(rgb(TEXT))
             .text_sm()
             .child(header_bar(&file))
+            .child(self.actions_bar(cx))
             .child(self.body(layout.as_ref(), cx))
             .child(self.timeline_bar(layout.as_ref(), cx))
     }
@@ -126,6 +250,122 @@ impl Render for StudioView {
 
 #[cfg(feature = "window")]
 impl StudioView {
+    fn actions_bar(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        div()
+            .flex()
+            .flex_wrap()
+            .items_center()
+            .gap_1()
+            .px_2()
+            .py_1()
+            .border_b_1()
+            .border_color(rgb(LINE))
+            .bg(rgb(PANEL))
+            .child(action_button("Open Video…", LINE, cx, move |this, cx| {
+                this.open_video_clicked();
+                cx.notify();
+            }))
+            .child(action_button("Set In", LINE, cx, move |this, cx| {
+                if let Err(err) = this.session.set_in_at_playhead() {
+                    trace::log(format!("set in: {err}"));
+                }
+                cx.notify();
+            }))
+            .child(action_button("Set Out", LINE, cx, move |this, cx| {
+                if let Err(err) = this.session.set_out_at_playhead() {
+                    trace::log(format!("set out: {err}"));
+                }
+                cx.notify();
+            }))
+            .child(action_button(
+                "Split at Playhead",
+                LINE,
+                cx,
+                move |this, cx| {
+                    if let Err(err) = this.session.split_at_playhead() {
+                        trace::log(format!("split: {err}"));
+                    }
+                    cx.notify();
+                },
+            ))
+            .child(action_button(
+                "Delete Selected Clip",
+                LINE,
+                cx,
+                move |this, cx| {
+                    if let Err(err) = this.session.delete_selected_clip() {
+                        trace::log(format!("delete clip: {err}"));
+                    }
+                    cx.notify();
+                },
+            ))
+            .child(action_button("Play", TEAL, cx, move |this, cx| {
+                this.session.play();
+                trace::log("play");
+                cx.notify();
+            }))
+            .child(action_button("Pause", LINE, cx, move |this, cx| {
+                this.session.pause();
+                trace::log("pause");
+                cx.notify();
+            }))
+            .child(action_button("Seek", LINE, cx, move |this, cx| {
+                this.session.seek(lattice_engine::Time::ZERO);
+                this.refresh_preview("seek");
+                cx.notify();
+            }))
+            .child(action_button("Scrub", LINE, cx, move |this, cx| {
+                this.session.scrub(this.session.playhead());
+                this.refresh_preview("scrub");
+                cx.notify();
+            }))
+            .child(action_button("Save", TEAL, cx, move |this, cx| {
+                let _ = this.session.save();
+                cx.notify();
+            }))
+            .child(action_button("Gain -3 dB", LINE, cx, move |this, cx| {
+                let _ = this.session.set_gain(-3);
+                cx.notify();
+            }))
+            .child(action_button("Fade", LINE, cx, move |this, cx| {
+                let _ = this
+                    .session
+                    .set_fade(lattice_engine::Time::milliseconds(500));
+                cx.notify();
+            }))
+    }
+
+    fn open_video_clicked(&mut self) {
+        let Some(path) = open_video_path() else {
+            self.last_render =
+                Some("Open Video…: set LATTICE_OPEN_VIDEO to an MP4 path, or pick a file".into());
+            return;
+        };
+        match StudioSession::open_video(&path) {
+            Ok(session) => {
+                trace::log(format!("open_video ok {}", path.display()));
+                self.session = session;
+                self.adopt_locus_label();
+                self.last_render = Some(format!("opened {}", path.display()));
+                spawn_preview_extract(self.session.path().to_path_buf());
+            }
+            Err(err) => {
+                trace::log(format!("open_video failed: {err}"));
+                self.last_render = Some(format!("open video: {err}"));
+            }
+        }
+    }
+
+    fn refresh_preview(&mut self, why: &str) {
+        if !preview_extract_enabled() {
+            return;
+        }
+        match self.session.cached_preview_frame() {
+            Ok(path) => trace::log(format!("preview {why} {}", path.display())),
+            Err(err) => trace::log(format!("preview {why} err {err}")),
+        }
+    }
+
     fn body(
         &self,
         layout: Option<&lattice_studio::StudioLayout>,
@@ -168,7 +408,24 @@ impl StudioView {
             .border_1()
             .border_color(rgb(LINE))
             .relative();
-        stage = stage.child(div().flex_1());
+        if let Some(path) = layout.canvas.preview_frame.clone() {
+            if path.is_file() {
+                let width = layout.canvas.preview_width as f32;
+                let height = layout.canvas.preview_height as f32;
+                stage = stage.child(
+                    img(path)
+                        .object_fit(ObjectFit::Contain)
+                        .id("canvas-frame")
+                        .w(px(width.max(1.0)))
+                        .h(px(height.max(1.0))),
+                );
+            } else {
+                trace::log(format!("preview path missing {}", path.display()));
+                stage = stage.child(div().flex_1());
+            }
+        } else {
+            stage = stage.child(div().flex_1());
+        }
         for overlay in overlays {
             let id = overlay.locus_id.clone();
             let selected = overlay.selected;
@@ -189,6 +446,7 @@ impl StudioView {
                     .on_click(cx.listener(move |this, _, _, cx| {
                         let _ = this.session.point_from_canvas_overlay(&id);
                         this.adopt_locus_label();
+                        this.refresh_preview("canvas");
                         cx.notify();
                     }))
                     .child(div().text_xl().text_color(rgb(0xffffff)).child(text)),
@@ -343,7 +601,13 @@ impl StudioView {
             .border_t_1()
             .border_color(rgb(LINE))
             .bg(rgb(PANEL))
-            .child(div().px_2().py_1().text_color(rgb(MUTED)).child("Timeline"))
+            .child(
+                div()
+                    .px_2()
+                    .py_1()
+                    .text_color(rgb(MUTED))
+                    .child(format!("Timeline · {}", format_time(layout.playhead))),
+            )
             .child(tracks)
     }
 
@@ -365,10 +629,16 @@ impl StudioView {
                     .text_color(rgb(MUTED))
                     .child(track.name.clone()),
             );
-        let mut rail = div().flex().flex_1().h(px(22.0)).bg(rgb(0x1a1f28));
+        let playhead_x = time_px(self.session.playhead(), total);
+        let mut rail = div()
+            .id("timeline-rail")
+            .relative()
+            .w(px(TIMELINE_WIDTH))
+            .h(px(22.0))
+            .bg(rgb(0x1a1f28));
         for clip in &track.clips {
-            let width = clip_px(clip.duration, total);
-            let gap = clip_px(clip.start, total);
+            let width = time_px(clip.duration, total).max(4.0);
+            let left = time_px(clip.start, total);
             let id = clip.id.clone();
             let selected = clip.selected;
             let label = clip.label.clone();
@@ -377,11 +647,14 @@ impl StudioView {
                 "audio" => 0x5a7a9a,
                 _ => 0x4a3a6a,
             };
-            rail = rail.child(div().w(px(gap.min(4.0)))).child(
+            rail = rail.child(
                 div()
                     .id(SharedString::from(format!("tl-{id}")))
+                    .absolute()
+                    .left(px(left))
+                    .top(px(0.0))
                     .h_full()
-                    .w(px(width.max(24.0)))
+                    .w(px(width))
                     .px_1()
                     .bg(rgb(color))
                     .border_1()
@@ -391,11 +664,60 @@ impl StudioView {
                         this.session
                             .point_at(lattice_engine::LocusId::new(id.clone()));
                         this.adopt_locus_label();
+                        this.refresh_preview("timeline-clip");
                         cx.notify();
                     }))
                     .child(label),
             );
         }
+        rail = rail.child(
+            div()
+                .id("playhead")
+                .absolute()
+                .left(px(playhead_x))
+                .top(px(0.0))
+                .w(px(2.0))
+                .h_full()
+                .bg(rgb(TEAL)),
+        );
+        let mut hits = div()
+            .id("timeline-hits")
+            .absolute()
+            .size_full()
+            .flex()
+            .flex_row();
+        for index in 0..TIMELINE_SLICES {
+            hits = hits.child(
+                div()
+                    .id(SharedString::from(format!("tl-hit-{index}")))
+                    .flex_1()
+                    .h_full()
+                    .on_mouse_down(
+                        MouseButton::Left,
+                        cx.listener(move |this, _, _, cx| {
+                            this.timeline_dragging = true;
+                            this.scrub_timeline_ratio(index, TIMELINE_RATIO_DEN, "timeline-drag");
+                            cx.notify();
+                        }),
+                    )
+                    .on_mouse_move(cx.listener(move |this, event: &MouseMoveEvent, _, cx| {
+                        if this.timeline_dragging || event.dragging() {
+                            this.scrub_timeline_ratio(index, TIMELINE_RATIO_DEN, "timeline-drag");
+                            cx.notify();
+                        }
+                    }))
+                    .on_mouse_up(
+                        MouseButton::Left,
+                        cx.listener(move |this, _, _, cx| {
+                            this.timeline_dragging = false;
+                            let _ = this.session.click_timeline_ratio(index, TIMELINE_RATIO_DEN);
+                            this.refresh_preview("timeline-drag");
+                            cx.notify();
+                        }),
+                    ),
+            );
+        }
+        rail = rail.child(hits);
         row.child(rail)
     }
 }
@@ -492,6 +814,7 @@ fn tree_node(
                 this.session
                     .point_at(lattice_engine::LocusId::new(id.clone()));
                 this.adopt_locus_label();
+                this.refresh_preview("tree");
                 cx.notify();
             }))
             .child(label),
@@ -562,11 +885,57 @@ fn action_button(
         .child(label)
 }
 
-fn clip_px(span: lattice_engine::Time, total: lattice_engine::Time) -> f32 {
+fn open_video_path() -> Option<PathBuf> {
+    if let Some(path) = std::env::var_os("LATTICE_OPEN_VIDEO") {
+        let path = PathBuf::from(path);
+        if path.is_file() {
+            return Some(path);
+        }
+    }
+    #[cfg(windows)]
+    {
+        windows_pick_mp4()
+    }
+    #[cfg(not(windows))]
+    {
+        None
+    }
+}
+
+#[cfg(windows)]
+fn windows_pick_mp4() -> Option<PathBuf> {
+    let output = std::process::Command::new("powershell")
+        .args([
+            "-NoProfile",
+            "-Command",
+            "Add-Type -AssemblyName System.Windows.Forms; $d = New-Object System.Windows.Forms.OpenFileDialog; $d.Filter = 'Video (*.mp4)|*.mp4|All files (*.*)|*.*'; if ($d.ShowDialog() -eq 'OK') { $d.FileName }",
+        ])
+        .output()
+        .ok()?;
+    let text = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    if text.is_empty() {
+        return None;
+    }
+    let path = PathBuf::from(text);
+    path.is_file().then_some(path)
+}
+
+const TIMELINE_WIDTH: f32 = 640.0;
+/// Hit cells `0..=TIMELINE_RATIO_DEN` so the last cell is duration (`num == den`).
+const TIMELINE_RATIO_DEN: u32 = 100;
+const TIMELINE_SLICES: u32 = TIMELINE_RATIO_DEN + 1;
+
+fn time_px(span: lattice_engine::Time, total: lattice_engine::Time) -> f32 {
     let n = span.num() as f64 / span.den().max(1) as f64;
     let d = total.num() as f64 / total.den().max(1) as f64;
     #[allow(clippy::cast_possible_truncation, clippy::cast_precision_loss)]
     {
-        ((n / d.max(0.001)) * 640.0).clamp(8.0, 640.0) as f32
+        ((n / d.max(0.001)) * f64::from(TIMELINE_WIDTH)).clamp(0.0, f64::from(TIMELINE_WIDTH))
+            as f32
     }
+}
+
+fn format_time(time: lattice_engine::Time) -> String {
+    let seconds = time.num() as f64 / time.den().max(1) as f64;
+    format!("{seconds:.2}s")
 }

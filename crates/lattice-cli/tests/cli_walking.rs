@@ -41,10 +41,12 @@ fn compile_json_twice_agrees() {
 
 #[test]
 fn render_writes_mp4() {
-    let vel = sample_vel();
     let dir = std::env::temp_dir().join("lattice-cli-walking");
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
+    std::fs::copy(sample_vel(), dir.join("main.vel")).unwrap();
+    lattice_media::generate_av_fixture(dir.join("capture.mp4"), 21).unwrap();
+    let vel = dir.join("main.vel");
     let out = dir.join("preview.mp4");
     let (_, stdout) = run_ok(&[
         "--json",

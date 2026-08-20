@@ -92,6 +92,18 @@ enum Command {
         #[arg(long)]
         artifacts: Option<PathBuf>,
     },
+    /// Create a VEL project from a real media file (reference in place, no copy).
+    Import {
+        media: PathBuf,
+        #[arg(short, long)]
+        output: Option<PathBuf>,
+    },
+    /// Alias of `import` that takes a project directory first.
+    New {
+        dir: PathBuf,
+        #[arg(long)]
+        media: PathBuf,
+    },
 }
 
 fn main() -> ExitCode {
@@ -177,7 +189,41 @@ fn run(cli: Cli) -> Result<ExitCode, Box<dyn std::error::Error>> {
             lock,
             artifacts,
         } => resolve_command(&file, lock.as_deref(), artifacts.as_deref(), cli.json),
+        Command::Import { media, output } => import_command(&media, output.as_deref(), cli.json),
+        Command::New { dir, media } => import_command(&media, Some(&dir), cli.json),
     }
+}
+
+fn import_command(
+    media: &Path,
+    output: Option<&Path>,
+    json: bool,
+) -> Result<ExitCode, Box<dyn std::error::Error>> {
+    let engine = Engine::default();
+    let imported = engine.import_media(media, output)?;
+    let compilation = engine.compile_path(&imported.vel_path)?;
+    if json {
+        let payload = serde_json::json!({
+            "ok": !compilation.has_errors(),
+            "file": imported.vel_path.display().to_string(),
+            "project_dir": imported.project_dir.display().to_string(),
+            "locator": imported.locator,
+            "duration": imported.media_info.duration.to_string(),
+            "width": imported.media_info.width,
+            "height": imported.media_info.height,
+            "has_video": imported.media_info.has_video,
+            "has_audio": imported.media_info.has_audio,
+            "diagnostics": compilation.diagnostics,
+        });
+        println!("{}", serde_json::to_string_pretty(&payload)?);
+    } else {
+        println!(
+            "ok: {} (duration {})",
+            imported.vel_path.display(),
+            imported.media_info.duration
+        );
+    }
+    Ok(exit_for(&compilation))
 }
 
 fn render_file(
@@ -375,8 +421,32 @@ fn apply_command(
     let engine = Engine::default();
     let compilation = engine.compile_path(file)?;
     let proposal: EditProposal = serde_json::from_str(&std::fs::read_to_string(proposal_path)?)?;
-    let applied = engine.apply_proposal(&compilation.source, &proposal);
-    std::fs::write(file, &applied)?;
+    let applied = match engine.apply_proposal(&compilation.source, &proposal) {
+        Ok(source) => source,
+        Err(err) => {
+            if let Some((expected, found)) = err.stale_revisions() {
+                if json {
+                    let payload = serde_json::json!({
+                        "ok": false,
+                        "applied": false,
+                        "error": {
+                            "code": "LAT-EDIT-STALE",
+                            "message": err.to_string(),
+                            "expected": expected,
+                            "found": found,
+                        },
+                        "file": file.display().to_string(),
+                    });
+                    println!("{}", serde_json::to_string_pretty(&payload)?);
+                } else {
+                    eprintln!("{err}");
+                }
+                return Ok(ExitCode::from(1));
+            }
+            return Err(err.into());
+        }
+    };
+    engine.write_source_atomic(file, &applied)?;
     let recompiled = engine.compile_path(file)?;
     if json {
         let payload = serde_json::json!({

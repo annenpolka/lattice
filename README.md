@@ -19,7 +19,7 @@ Lattice Alpha is a dogfoodable slice, not a NLE:
 | Shared locus (VEL ↔ Core ↔ timeline) | yes |
 | Review: propose / inspect / Apply / Reject | yes |
 | Resolve + lockable generated media | yes (local tone; TTS when a provider exists) |
-| `lattice check` / `compile --emit-ir` / `explain` / `render` | yes |
+| `lattice check` / `compile --emit-ir` / `explain` / `render` / `import` | yes |
 | Agent JSON: `locus` / `inspect` / `propose` / `apply` / `reject` / `resolve` | yes |
 | GPUI Studio (Windows) | vertical slice over the Engine |
 
@@ -35,6 +35,7 @@ cargo run -p lattice-cli -- check examples/gameplay-commentary/main.vel
 cargo run -p lattice-cli -- compile examples/gameplay-commentary/main.vel --emit-ir
 cargo run -p lattice-cli -- explain examples/gameplay-commentary/main.vel
 cargo run -p lattice-cli -- render examples/gameplay-commentary/main.vel -o preview.mp4
+cargo run -p lattice-cli -- import path\to\gameplay.mp4 -o project-dir
 ```
 
 Add `--json` for agent-friendly output.
@@ -42,8 +43,15 @@ Add `--json` for agent-friendly output.
 ```powershell
 cargo run -p lattice-cli -- --json inspect examples/gameplay-commentary/main.vel --locus demo:title:1
 cargo run -p lattice-cli -- --json propose examples/gameplay-commentary/main.vel --title-text World
-cargo run -p lattice-studio -- examples/gameplay-commentary/main.vel
 ```
+
+Studio is a GUI. Do **not** `cargo run -p lattice-studio` from a redirected pipe (agent shells, `Start-Process` with inherited stdout). Rust's `eprintln!` panics on a closed Windows pipe (`0x800700e8`) and the process dies before a window appears.
+
+```powershell
+./scripts/studio-debug.ps1 examples/gameplay-commentary/main.vel
+```
+
+That builds, starts `lattice-studio.exe` detached, waits, and prints `%LOCALAPPDATA%\lattice\studio.log`. Isolate GPUI from FFmpeg with `-NoPreview`. `LATTICE_STUDIO_LOG` overrides the log path. A panic writes to the same file.
 
 ## Layout
 
@@ -52,7 +60,7 @@ crates/lattice-core      semantic IR (no GPUI / FFmpeg / Wasmtime / VEL)
 crates/lattice-vel       lexer + generic invocation parser
 crates/lattice-wasm      lowering registry (in-process builtins until Wasm)
 crates/lattice-engine    compile / validate / explain orchestration
-crates/lattice-cli       check / compile / explain / render / locus / inspect / propose / apply / reject / resolve
+crates/lattice-cli       check / compile / explain / render / import / locus / inspect / propose / apply / reject / resolve
 crates/lattice-media     FFmpeg preview/export adapter
 crates/lattice-studio    GPUI Studio (Engine client; `--features window`)
 crates/lattice-stdlib-guest  WIT guest for freeze/title (wasm32-wasip2)

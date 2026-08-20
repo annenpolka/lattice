@@ -19,5 +19,8 @@ window = ["dep:gpui"]
 gpui = { version = "0.2.2", optional = true }
 lattice-engine.workspace = true
 
+[dev-dependencies]
+lattice-media.workspace = true
+
 [lints]
 workspace = true

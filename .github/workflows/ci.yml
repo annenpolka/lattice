@@ -39,6 +39,13 @@ jobs:
       - name: Install FFmpeg (Windows)
         if: runner.os == 'Windows'
         run: choco install ffmpeg -y --no-progress
+      - name: Font for drawtext (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          mkdir -p "$HOME/.local/share/fonts"
+          curl -fsSL -o "$HOME/.local/share/fonts/DejaVuSans.ttf" \
+            "https://github.com/dejavu-fonts/dejavu-fonts/raw/version_2_37/ttf/DejaVuSans.ttf"
+          echo "LATTICE_FONT=$HOME/.local/share/fonts/DejaVuSans.ttf" >> "$GITHUB_ENV"
       - name: fmt
         run: cargo fmt --all -- --check
       - name: clippy

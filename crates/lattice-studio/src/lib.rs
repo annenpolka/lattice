@@ -5,12 +5,13 @@
 
 mod layout;
 mod session;
+pub mod trace;
 
 pub use layout::{
     CanvasOverlay, CanvasView, InspectorView, ReviewView, SourceView, StudioLayout,
     TimelineClipView, TimelineTrackView, TimelineView, TreeNode,
 };
-pub use session::StudioSession;
+pub use session::{StudioSession, fit_preview_size};
 
 use lattice_engine::Engine;
 

@@ -1,5 +1,6 @@
 Media files live here.
 
-`main.vel` references `capture.mp4` next to the VEL file. If that file is missing,
-`lattice render` generates a deterministic `testsrc` clip (21s, 10 fps) beside the
-output. Tests use that generated fixture instead of real gameplay.
+`main.vel` references `capture.mp4` next to the VEL file. Production render
+fails with a diagnostic if that file is missing. Tests generate an explicit
+audio+video fixture when they need one; they do not rely on a silent testsrc
+fallback.

@@ -6,12 +6,24 @@
 mod export;
 mod fixture;
 mod plan;
+mod preview;
 mod probe;
 
-pub use export::{ExportError, ExportReport, PreviewOptions, export_preview, extract_frame};
-pub use fixture::{DEFAULT_SOURCE_DURATION_SECS, generate_test_source};
+pub use export::{
+    ExportError, ExportReport, PreviewOptions, export_preview, extract_frame, ffmpeg_bin,
+    ffprobe_bin,
+};
+pub use fixture::{
+    DEFAULT_SOURCE_DURATION_SECS, generate_av_fixture, generate_av_fixture_rate,
+    generate_av_fixture_size, generate_test_source,
+};
 pub use plan::{AudioWindow, OverlayWindow, PlanSegment, RenderPlan, plan_from_timeline};
-pub use probe::{ProbeError, content_pixels, mean_abs_diff, probe_duration, title_bar_present};
+pub use preview::{PreviewFrameRequest, map_timeline_to_source, preview_frame};
+pub use probe::{
+    MediaInfo, ProbeError, content_pixels, extract_pcm_s16le, extract_pcm_s16le_span, find_font,
+    has_audio_stream, mean_abs_diff, near_white_pixels, pcm_rms, probe_duration, probe_media,
+    title_bar_present,
+};
 
 pub const PREVIEW_FPS_NUM: i64 = 10;
 pub const PREVIEW_FPS_DEN: i64 = 1;

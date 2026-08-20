@@ -67,3 +67,14 @@ fn freeze_and_title_go_through_wasm_stdlib() {
             .any(|event| event.message.contains("TimeMap hold (rate 0)"))
     );
 }
+
+#[test]
+fn locus_id_docs_are_in_core() {
+    let locus = include_str!("../../lattice-core/src/locus.rs");
+    assert!(
+        locus.contains("Stable within one compilation")
+            || locus.contains("stable within one compilation")
+            || locus.contains("Stable within one compilation")
+            || locus.contains("Guarantees:")
+    );
+}

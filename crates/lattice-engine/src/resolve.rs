@@ -20,6 +20,9 @@ pub enum ResolveError {
 
 pub trait GeneratedMediaProvider {
     fn name(&self) -> &'static str;
+    fn version(&self) -> &'static str {
+        "1"
+    }
     fn generate(&mut self, request: &GenerateRequest) -> Result<Vec<u8>, ResolveError>;
 }
 
@@ -28,6 +31,25 @@ pub struct GenerateRequest {
     pub generator: String,
     pub key: String,
     pub duration: Time,
+    pub provider: String,
+    pub provider_version: String,
+    pub text: String,
+}
+
+/// Lock/cache identity for a generated-media request.
+///
+/// Includes generator, provider identity/version, content text, and duration so
+/// the same words at a different length cannot reuse an incompatible artifact.
+pub fn generated_request_key(request: &GenerateRequest) -> String {
+    format!(
+        "{}|{}|{}|{}|{}/{}",
+        request.generator,
+        request.provider,
+        request.provider_version,
+        request.text,
+        request.duration.num(),
+        request.duration.den()
+    )
 }
 
 #[derive(Clone, Debug)]
@@ -51,6 +73,10 @@ pub struct LocalToneProvider;
 impl GeneratedMediaProvider for LocalToneProvider {
     fn name(&self) -> &'static str {
         "speech-local-tone"
+    }
+
+    fn version(&self) -> &'static str {
+        "1"
     }
 
     fn generate(&mut self, request: &GenerateRequest) -> Result<Vec<u8>, ResolveError> {
@@ -83,6 +109,8 @@ pub fn resolve_project(
                         path: resolved.display().to_string(),
                         identity: identity.clone(),
                         duration: None,
+                        provider: None,
+                        provider_version: None,
                     };
                     assets.push(ResolvedAsset {
                         id: media.id.clone(),
@@ -103,8 +131,17 @@ pub fn resolve_project(
             }
             MediaLocator::Generated { generator, key } => {
                 let duration = generated_duration(project, &media.name).unwrap_or(Time::seconds(2));
+                let request = GenerateRequest {
+                    generator: generator.clone(),
+                    key: key.clone(),
+                    duration,
+                    provider: provider.name().to_string(),
+                    provider_version: provider.version().to_string(),
+                    text: key.clone(),
+                };
+                let request_key = generated_request_key(&request);
                 let locked = options.lock.and_then(|lock| {
-                    lock.get(Some(generator.as_str()), key)
+                    lock.get(Some(generator.as_str()), &request_key)
                         .filter(|asset| Path::new(&asset.path).is_file())
                         .cloned()
                 });
@@ -129,16 +166,14 @@ pub fn resolve_project(
                         span: None,
                     });
                 }
-                let bytes = provider.generate(&GenerateRequest {
-                    generator: generator.clone(),
-                    key: key.clone(),
-                    duration,
-                })?;
+                let bytes = provider.generate(&request)?;
                 provider_calls += 1;
                 let identity = AssetIdentity::new(fnv_hex(&bytes));
-                let path = options
-                    .artifact_dir
-                    .join(format!("{}-{}.wav", generator, slug(key)));
+                let path = options.artifact_dir.join(format!(
+                    "{}-{}.wav",
+                    generator,
+                    slug(&format!("{key}-{}-{}", duration.num(), duration.den()))
+                ));
                 if let Some(parent) = path.parent() {
                     std::fs::create_dir_all(parent)?;
                 }
@@ -146,10 +181,12 @@ pub fn resolve_project(
                 let asset = LockedAsset {
                     id: media.id.clone(),
                     generator: Some(generator.clone()),
-                    key: key.clone(),
+                    key: request_key,
                     path: path.display().to_string(),
                     identity: identity.clone(),
                     duration: Some(duration),
+                    provider: Some(request.provider),
+                    provider_version: Some(request.provider_version),
                 };
                 assets.push(ResolvedAsset {
                     id: media.id.clone(),
@@ -284,6 +321,10 @@ impl<P: GeneratedMediaProvider> CountingProvider<P> {
 impl<P: GeneratedMediaProvider> GeneratedMediaProvider for CountingProvider<P> {
     fn name(&self) -> &'static str {
         self.inner.name()
+    }
+
+    fn version(&self) -> &'static str {
+        self.inner.version()
     }
 
     fn generate(&mut self, request: &GenerateRequest) -> Result<Vec<u8>, ResolveError> {
