@@ -169,16 +169,9 @@ impl GpuRendererRuntime {
         self.rendered_frames
     }
 
+    #[cfg(windows)]
     fn check_failure(&self) -> Result<(), RendererRenderError> {
-        #[cfg(not(windows))]
-        {
-            Ok(())
-        }
-
-        #[cfg(windows)]
-        {
-            self.inner.failure_latch.check()
-        }
+        self.inner.failure_latch.check()
     }
 
     #[cfg(all(test, windows))]
@@ -194,9 +187,12 @@ impl GpuRendererRuntime {
         #[cfg(not(windows))]
         {
             let _ = (canvas, commands);
-            return Err(RendererRenderError::Validation {
-                message: "DX12 runtime cannot render on a non-Windows target".into(),
-            });
+            Err(RendererRenderError::Validation {
+                message: format!(
+                    "DX12 runtime `{}` cannot render on a non-Windows target",
+                    self.adapter_name
+                ),
+            })
         }
 
         #[cfg(windows)]
@@ -259,6 +255,7 @@ impl FrameRenderer for GpuCompositor {
         scene: &RenderScene,
         sampler: &mut dyn VideoDecoder,
     ) -> Result<RawFrame, ExportError> {
+        #[cfg(windows)]
         self.runtime.check_failure()?;
         if scene.has_text() && self.text_cache.is_none() {
             return Err(ExportError::MissingFont);
