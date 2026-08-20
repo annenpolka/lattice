@@ -1,9 +1,13 @@
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
+use std::str::FromStr;
 
-use clap::{Parser, Subcommand};
+use clap::{Args, Parser, Subcommand, ValueEnum};
 use lattice_core::{EditProposal, LocusId, SemanticEdit, Time};
-use lattice_engine::{Compilation, Engine, LocalToneProvider, ResolveOptions};
+use lattice_engine::{
+    Compilation, Engine, EngineError, ExportError, LocalToneProvider, OutputSpec, PreviewOptions,
+    RendererInitError, RendererRequest, ResolveOptions,
+};
 use serde::Serialize;
 
 #[derive(Debug, Parser)]
@@ -14,6 +18,88 @@ struct Cli {
     json: bool,
     #[command(subcommand)]
     command: Command,
+}
+
+#[derive(Clone, Copy, Debug, Default, ValueEnum)]
+enum RendererArg {
+    #[default]
+    Cpu,
+    GpuDx12,
+}
+
+impl From<RendererArg> for RendererRequest {
+    fn from(value: RendererArg) -> Self {
+        match value {
+            RendererArg::Cpu => Self::RequireCpu,
+            RendererArg::GpuDx12 => Self::RequireGpuDx12,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct FrameRateArg {
+    num: i64,
+    den: i64,
+}
+
+impl FromStr for FrameRateArg {
+    type Err = String;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        let (num, den) = match value.split_once('/') {
+            Some((num, den)) if !den.contains('/') => (num, den),
+            Some(_) => return Err("frame rate must be NUM or NUM/DEN".into()),
+            None => (value, "1"),
+        };
+        let num = num
+            .parse::<i64>()
+            .map_err(|_| "frame-rate numerator must be an integer".to_string())?;
+        let den = den
+            .parse::<i64>()
+            .map_err(|_| "frame-rate denominator must be an integer".to_string())?;
+        if num <= 0 || den <= 0 {
+            return Err("frame rate must be greater than zero".into());
+        }
+        Ok(Self { num, den })
+    }
+}
+
+fn parse_even_dimension(value: &str) -> Result<u32, String> {
+    let dimension = value
+        .parse::<u32>()
+        .map_err(|_| "dimension must be a positive integer".to_string())?;
+    if dimension == 0 {
+        return Err("dimension must be greater than zero".into());
+    }
+    if dimension % 2 != 0 {
+        return Err("dimension must be even for yuv420p output".into());
+    }
+    Ok(dimension)
+}
+
+#[derive(Clone, Copy, Debug, Args)]
+struct OutputSpecArgs {
+    /// Output width in pixels (must be even).
+    #[arg(long, default_value = "320", value_parser = parse_even_dimension)]
+    width: u32,
+    /// Output height in pixels (must be even).
+    #[arg(long, default_value = "180", value_parser = parse_even_dimension)]
+    height: u32,
+    /// Output frame rate as NUM or NUM/DEN (for example 30 or 30000/1001).
+    #[arg(long, default_value = "10", value_name = "NUM[/DEN]")]
+    fps: FrameRateArg,
+}
+
+impl OutputSpecArgs {
+    fn output_spec(self) -> OutputSpec {
+        OutputSpec {
+            width: self.width,
+            height: self.height,
+            fps_num: self.fps.num,
+            fps_den: self.fps.den,
+            ..OutputSpec::preview()
+        }
+    }
 }
 
 #[derive(Debug, Subcommand)]
@@ -35,12 +121,22 @@ enum Command {
         file: PathBuf,
         #[arg(short, long)]
         output: PathBuf,
+        /// Required frame renderer. A GPU request never silently falls back to CPU.
+        #[arg(long, value_enum, default_value = "cpu")]
+        renderer: RendererArg,
+        #[command(flatten)]
+        spec: OutputSpecArgs,
     },
     /// Alias of `render`.
     Preview {
         file: PathBuf,
         #[arg(short, long)]
         output: PathBuf,
+        /// Required frame renderer. A GPU request never silently falls back to CPU.
+        #[arg(long, value_enum, default_value = "cpu")]
+        renderer: RendererArg,
+        #[command(flatten)]
+        spec: OutputSpecArgs,
     },
     /// Project the shared locus (source / Core / timeline).
     Locus {
@@ -156,9 +252,24 @@ fn run(cli: Cli) -> Result<ExitCode, Box<dyn std::error::Error>> {
             report(cli.json, &file, &compilation, ReportMode::Explain, None)?;
             Ok(exit_for(&compilation))
         }
-        Command::Render { file, output } | Command::Preview { file, output } => {
-            render_file(&file, &output, cli.json)
+        Command::Render {
+            file,
+            output,
+            renderer,
+            spec,
         }
+        | Command::Preview {
+            file,
+            output,
+            renderer,
+            spec,
+        } => render_file(
+            &file,
+            &output,
+            spec.output_spec(),
+            renderer.into(),
+            cli.json,
+        ),
         Command::Locus {
             file,
             byte,
@@ -229,6 +340,8 @@ fn import_command(
 fn render_file(
     file: &Path,
     output: &Path,
+    spec: OutputSpec,
+    renderer: RendererRequest,
     json: bool,
 ) -> Result<ExitCode, Box<dyn std::error::Error>> {
     let compilation = compile_file(file)?;
@@ -239,58 +352,150 @@ fn render_file(
     let output = resolve_output(output);
     let media_root = file.parent().unwrap_or_else(|| Path::new("."));
     let engine = Engine::default();
-    let lock = {
-        let has_generated = compilation
-            .project
-            .media
-            .iter()
-            .any(|media| matches!(media.locator, lattice_core::MediaLocator::Generated { .. }));
-        if has_generated {
-            let artifact_dir = media_root.join(".lattice");
-            let lock_path = media_root.join("lattice.lock.json");
-            let existing = if lock_path.is_file() {
-                std::fs::read_to_string(&lock_path)
-                    .ok()
-                    .and_then(|text| serde_json::from_str(&text).ok())
-            } else {
-                None
-            };
-            let mut provider = LocalToneProvider;
-            let resolution = engine.resolve(
-                &compilation.project,
-                &ResolveOptions {
-                    media_root,
-                    artifact_dir: &artifact_dir,
-                    lock: existing.as_ref(),
-                },
-                &mut provider,
-            )?;
-            std::fs::write(&lock_path, serde_json::to_string_pretty(&resolution.lock)?)?;
-            Some(resolution.lock)
-        } else {
-            None
+    let lock = resolve_render_lock(&engine, &compilation, media_root)?;
+    let report = match engine.render_with_options(
+        &compilation.project,
+        &PreviewOptions {
+            output: output.clone(),
+            media_root: media_root.to_path_buf(),
+            lock: lock.or_else(|| Engine::load_lock(media_root)),
+            spec,
+            renderer,
+            allow_fixtures: false,
+            font: None,
+        },
+    ) {
+        Ok(report) => report,
+        Err(error) => {
+            if json && let Some(failure) = renderer_failure(&error, renderer) {
+                let payload = renderer_failure_json(file, &output, &failure);
+                println!("{}", serde_json::to_string_pretty(&payload)?);
+                return Ok(ExitCode::from(2));
+            }
+            return Err(error.into());
         }
     };
-    let report =
-        engine.render_with_lock(&compilation.project, &output, media_root, lock.as_ref())?;
     if json {
         let payload = serde_json::json!({
             "ok": true,
             "file": file.display().to_string(),
             "output": report.output,
             "duration": report.duration,
+            "spec": report.spec,
             "hold_segments": report.plan.hold_segments,
             "overlays": report.plan.overlays,
+            "renderer": report.renderer,
         });
         println!("{}", serde_json::to_string_pretty(&payload)?);
     } else {
         println!(
-            "ok: wrote {} (duration {})",
+            "ok: wrote {} (duration {}, {}x{} @ {}/{} fps, renderer {})",
             report.output.display(),
-            report.duration
+            report.duration,
+            report.spec.width,
+            report.spec.height,
+            report.spec.fps_num,
+            report.spec.fps_den,
+            report.renderer
         );
     }
     Ok(ExitCode::SUCCESS)
+}
+
+fn resolve_render_lock(
+    engine: &Engine,
+    compilation: &Compilation,
+    media_root: &Path,
+) -> Result<Option<lattice_core::ResolveLock>, Box<dyn std::error::Error>> {
+    let has_generated = compilation
+        .project
+        .media
+        .iter()
+        .any(|media| matches!(media.locator, lattice_core::MediaLocator::Generated { .. }));
+    if !has_generated {
+        return Ok(None);
+    }
+
+    let artifact_dir = media_root.join(".lattice");
+    let lock_path = media_root.join("lattice.lock.json");
+    let existing = std::fs::read_to_string(&lock_path)
+        .ok()
+        .and_then(|text| serde_json::from_str(&text).ok());
+    let mut provider = LocalToneProvider;
+    let resolution = engine.resolve(
+        &compilation.project,
+        &ResolveOptions {
+            media_root,
+            artifact_dir: &artifact_dir,
+            lock: existing.as_ref(),
+        },
+        &mut provider,
+    )?;
+    std::fs::write(&lock_path, serde_json::to_string_pretty(&resolution.lock)?)?;
+    Ok(Some(resolution.lock))
+}
+
+struct RendererFailure {
+    requested: RendererRequest,
+    phase: &'static str,
+    kind: &'static str,
+    stage: Option<String>,
+    reason: String,
+}
+
+fn renderer_failure_json(
+    file: &Path,
+    output: &Path,
+    failure: &RendererFailure,
+) -> serde_json::Value {
+    serde_json::json!({
+        "ok": false,
+        "file": file.display().to_string(),
+        "output": output,
+        "renderer": {
+            "requested": failure.requested,
+            "active": serde_json::Value::Null,
+            "adapter": serde_json::Value::Null,
+            "reason": failure.reason,
+        },
+        "failure": {
+            "phase": failure.phase,
+            "kind": failure.kind,
+            "stage": failure.stage,
+            "reason": failure.reason,
+        },
+    })
+}
+
+fn renderer_failure(error: &EngineError, requested: RendererRequest) -> Option<RendererFailure> {
+    let EngineError::Export(export) = error else {
+        return None;
+    };
+    match export {
+        ExportError::Renderer(init) => {
+            let (kind, stage) = match init {
+                RendererInitError::Unavailable { .. } => ("unavailable", None),
+                RendererInitError::Initialization { stage, .. } => {
+                    ("initialization", Some(stage.to_string()))
+                }
+            };
+            Some(RendererFailure {
+                requested: init.selection().requested,
+                phase: "initialization",
+                kind,
+                stage,
+                reason: error.to_string(),
+            })
+        }
+        ExportError::RendererRender(render) => Some(RendererFailure {
+            requested,
+            phase: "render",
+            kind: render.kind(),
+            stage: None,
+            reason: error.to_string(),
+        }),
+        _ => None,
+    }
 }
 
 fn resolve_output(output: &Path) -> PathBuf {
@@ -626,5 +831,89 @@ fn exit_for(compilation: &Compilation) -> ExitCode {
         ExitCode::from(1)
     } else {
         ExitCode::SUCCESS
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use lattice_engine::{RendererInitStage, RendererRenderError, RendererSelection};
+
+    #[test]
+    fn parses_integer_and_fractional_frame_rates() {
+        assert_eq!(
+            "30".parse::<FrameRateArg>().unwrap(),
+            FrameRateArg { num: 30, den: 1 }
+        );
+        assert_eq!(
+            "30000/1001".parse::<FrameRateArg>().unwrap(),
+            FrameRateArg {
+                num: 30_000,
+                den: 1001
+            }
+        );
+        for invalid in ["0", "30/0", "-1", "30/1/2", "x"] {
+            assert!(invalid.parse::<FrameRateArg>().is_err(), "{invalid}");
+        }
+    }
+
+    #[test]
+    fn classifies_renderer_init_and_render_failures_for_json() {
+        let request = RendererRequest::RequireGpuDx12;
+        let init = EngineError::Export(ExportError::Renderer(RendererInitError::Unavailable {
+            selection: RendererSelection {
+                requested: request,
+                active: None,
+                adapter: None,
+                reason: "no adapter".into(),
+            },
+        }));
+        let init = renderer_failure(&init, request).expect("init classification");
+        assert_eq!(init.requested, request);
+        assert_eq!(init.phase, "initialization");
+        assert_eq!(init.kind, "unavailable");
+        assert_eq!(init.stage, None);
+        assert!(init.reason.contains("no adapter"));
+
+        let staged =
+            EngineError::Export(ExportError::Renderer(RendererInitError::Initialization {
+                selection: RendererSelection {
+                    requested: request,
+                    active: None,
+                    adapter: None,
+                    reason: "device creation failed".into(),
+                },
+                stage: RendererInitStage::Device,
+                message: "lost device".into(),
+            }));
+        let staged = renderer_failure(&staged, request).expect("staged init classification");
+        assert_eq!(staged.kind, "initialization");
+        assert_eq!(staged.stage.as_deref(), Some("device"));
+
+        let render = EngineError::Export(ExportError::RendererRender(
+            RendererRenderError::DeviceLost {
+                reason: "destroyed".into(),
+                message: "queue submission failed".into(),
+            },
+        ));
+        let render = renderer_failure(&render, request).expect("render classification");
+        assert_eq!(render.requested, request);
+        assert_eq!(render.phase, "render");
+        assert_eq!(render.kind, "device_lost");
+        assert_eq!(render.stage, None);
+        assert!(render.reason.contains("destroyed"));
+
+        let payload = renderer_failure_json(Path::new("main.vel"), Path::new("out.mp4"), &render);
+        assert_eq!(payload["ok"], false);
+        assert_eq!(payload["renderer"]["requested"], "require_gpu_dx12");
+        assert!(payload["renderer"]["active"].is_null());
+        assert!(payload["renderer"]["adapter"].is_null());
+        assert_eq!(payload["failure"]["phase"], "render");
+        assert_eq!(payload["failure"]["kind"], "device_lost");
+        assert!(
+            payload["failure"]["reason"]
+                .as_str()
+                .is_some_and(|reason| reason.contains("destroyed"))
+        );
     }
 }

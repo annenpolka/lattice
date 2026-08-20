@@ -106,7 +106,7 @@ pub fn resolve_project(
                         id: media.id.clone(),
                         generator: None,
                         key: path.clone(),
-                        path: resolved.display().to_string(),
+                        path: lock_store_path(&resolved, options.media_root),
                         identity: identity.clone(),
                         duration: None,
                         provider: None,
@@ -115,7 +115,7 @@ pub fn resolve_project(
                     assets.push(ResolvedAsset {
                         id: media.id.clone(),
                         locator: media.locator.clone(),
-                        path: asset.path.clone(),
+                        path: resolved.display().to_string(),
                         identity,
                         from_lock: false,
                     });
@@ -140,31 +140,33 @@ pub fn resolve_project(
                     text: key.clone(),
                 };
                 let request_key = generated_request_key(&request);
-                let locked = options.lock.and_then(|lock| {
-                    lock.get(Some(generator.as_str()), &request_key)
-                        .filter(|asset| Path::new(&asset.path).is_file())
-                        .cloned()
-                });
-                if let Some(locked) = locked {
-                    let bytes = std::fs::read(&locked.path)?;
-                    let identity = AssetIdentity::new(fnv_hex(&bytes));
-                    if identity == locked.identity {
-                        assets.push(ResolvedAsset {
-                            id: media.id.clone(),
-                            locator: media.locator.clone(),
-                            path: locked.path.clone(),
-                            identity,
-                            from_lock: true,
+                let locked = options
+                    .lock
+                    .and_then(|lock| lock.get(Some(generator.as_str()), &request_key).cloned());
+                if let Some(mut locked) = locked {
+                    let on_disk = lock_load_path(&locked.path, options.media_root);
+                    if on_disk.is_file() {
+                        let bytes = std::fs::read(&on_disk)?;
+                        let identity = AssetIdentity::new(fnv_hex(&bytes));
+                        if identity == locked.identity {
+                            assets.push(ResolvedAsset {
+                                id: media.id.clone(),
+                                locator: media.locator.clone(),
+                                path: on_disk.display().to_string(),
+                                identity,
+                                from_lock: true,
+                            });
+                            locked.path = lock_store_path(&on_disk, options.media_root);
+                            lock.assets.push(locked);
+                            continue;
+                        }
+                        diagnostics.push(Diagnostic {
+                            code: "LAT-RES-002".into(),
+                            severity: Severity::Warning,
+                            message: format!("lock for `{key}` is stale; regenerating"),
+                            span: None,
                         });
-                        lock.assets.push(locked);
-                        continue;
                     }
-                    diagnostics.push(Diagnostic {
-                        code: "LAT-RES-002".into(),
-                        severity: Severity::Warning,
-                        message: format!("lock for `{key}` is stale; regenerating"),
-                        span: None,
-                    });
                 }
                 let bytes = provider.generate(&request)?;
                 provider_calls += 1;
@@ -182,7 +184,7 @@ pub fn resolve_project(
                     id: media.id.clone(),
                     generator: Some(generator.clone()),
                     key: request_key,
-                    path: path.display().to_string(),
+                    path: lock_store_path(&path, options.media_root),
                     identity: identity.clone(),
                     duration: Some(duration),
                     provider: Some(request.provider),
@@ -191,7 +193,7 @@ pub fn resolve_project(
                 assets.push(ResolvedAsset {
                     id: media.id.clone(),
                     locator: media.locator.clone(),
-                    path: asset.path.clone(),
+                    path: path.display().to_string(),
                     identity,
                     from_lock: false,
                 });
@@ -205,6 +207,40 @@ pub fn resolve_project(
                     span: None,
                 });
             }
+        }
+    }
+    let font_spec = lattice_core::FontSpec::preview_sans(18);
+    match lattice_media::materialize_font_for_lock(&font_spec, options.media_root, options.lock) {
+        Ok(font) => {
+            if let Some(message) = font.diagnostic.clone() {
+                diagnostics.push(Diagnostic {
+                    code: "LAT-RES-004".into(),
+                    severity: Severity::Warning,
+                    message,
+                    span: None,
+                });
+            }
+            lock.assets.push(lattice_media::locked_font_asset(
+                &font.identity,
+                options.media_root,
+            ));
+            assets.push(ResolvedAsset {
+                id: format!("font:{}", font.identity.identity.as_str()),
+                locator: MediaLocator::File {
+                    path: font.identity.path.clone(),
+                },
+                path: font.identity.path.clone(),
+                identity: font.identity.identity.clone(),
+                from_lock: matches!(font.identity.source, lattice_core::FontSource::Lock),
+            });
+        }
+        Err(_) => {
+            diagnostics.push(Diagnostic {
+                code: "LAT-RES-005".into(),
+                severity: Severity::Warning,
+                message: "no project-local or fixture font resolved".into(),
+                span: None,
+            });
         }
     }
     Ok(Resolution {
@@ -221,6 +257,47 @@ fn resolve_file_path(path: &str, media_root: &Path) -> PathBuf {
         candidate.to_path_buf()
     } else {
         media_root.join(candidate)
+    }
+}
+
+/// Persist lock paths relative to `media_root` so render can join them again
+/// regardless of process cwd (export also sets the encoder working directory
+/// to the output parent).
+fn lock_store_path(path: &Path, media_root: &Path) -> String {
+    if let Some(rel) = relative_to(path, media_root) {
+        return rel;
+    }
+    if let (Ok(path), Ok(root)) = (
+        std::fs::canonicalize(path),
+        std::fs::canonicalize(media_root),
+    ) && let Some(rel) = relative_to(&path, &root)
+    {
+        return rel;
+    }
+    path.display().to_string()
+}
+
+fn relative_to(path: &Path, root: &Path) -> Option<String> {
+    path.strip_prefix(root).ok().map(|rel| {
+        rel.components()
+            .map(|c| c.as_os_str().to_string_lossy())
+            .collect::<Vec<_>>()
+            .join("/")
+    })
+}
+
+fn lock_load_path(stored: &str, media_root: &Path) -> PathBuf {
+    let candidate = Path::new(stored);
+    if candidate.is_absolute() {
+        return candidate.to_path_buf();
+    }
+    let under_root = media_root.join(candidate);
+    if under_root.is_file() {
+        under_root
+    } else if candidate.is_file() {
+        candidate.to_path_buf()
+    } else {
+        under_root
     }
 }
 

@@ -165,7 +165,7 @@ pub(crate) fn parse_ffprobe_seconds(text: &str) -> Result<Time, ProbeError> {
     Ok(Time::milliseconds(millis))
 }
 
-/// True when the bottom title bar of a PPM frame is yellow (legacy drawbox overlay).
+/// True when the bottom title bar of a PPM frame is yellow.
 pub fn title_bar_present(ppm: impl AsRef<Path>) -> Result<bool, ProbeError> {
     let bytes = std::fs::read(ppm.as_ref())?;
     let image = parse_ppm6(&bytes).ok_or_else(|| ProbeError::Parse("not a P6 PPM".into()))?;
@@ -183,7 +183,7 @@ pub fn title_bar_present(ppm: impl AsRef<Path>) -> Result<bool, ProbeError> {
     Ok(yellow * 2 > image.width)
 }
 
-/// Count near-white pixels in a horizontal band (drawtext glyphs).
+/// Count near-white pixels in a horizontal band (title glyphs).
 #[allow(
     clippy::cast_possible_truncation,
     clippy::cast_sign_loss,
@@ -351,7 +351,7 @@ fn take_u32(bytes: &[u8]) -> Option<(u32, &[u8])> {
     Some((n, &bytes[i..]))
 }
 
-/// Locate a usable TTF/OTF for drawtext. Production render fails if none.
+/// Last-resort system TTF/OTF lookup. Production prefers project-local / lock / fixture.
 pub fn find_font() -> Option<PathBuf> {
     if let Some(path) = std::env::var_os("LATTICE_FONT") {
         let path = PathBuf::from(path);

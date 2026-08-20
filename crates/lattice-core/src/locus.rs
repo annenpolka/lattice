@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::ir::TimeSpan;
 use crate::provenance::Provenance;
+use crate::space::{NormalizedPosition, NormalizedScale};
 use crate::span::Span;
 
 /// Identity of a semantic "here" shared across VEL, Core, timeline, and agents.
@@ -85,6 +86,10 @@ pub struct VisualProjection {
     pub fit: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub opacity: Option<u8>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub position: Option<NormalizedPosition>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scale: Option<NormalizedScale>,
 }
 
 /// One locus seen from source, Core, and timeline together.
@@ -179,6 +184,8 @@ mod tests {
                 text: Some("Hello".into()),
                 fit: None,
                 opacity: None,
+                position: None,
+                scale: None,
             }),
         };
         let json = serde_json::to_value(&locus).unwrap();

@@ -1,8 +1,11 @@
 use std::path::{Path, PathBuf};
 
-use lattice_core::{MediaLocator, Time, Timeline, TimelineClip};
+use lattice_core::{MediaLocator, ResolveLock, Time, Timeline, TimelineClip};
 
-use crate::export::{ExportError, resolve_media_path, run_ffmpeg_extract_frame};
+use crate::backend::OutputSpec;
+use crate::backend::RendererRequest;
+use crate::export::{ExportError, PreviewOptions};
+use crate::sample::render_still;
 
 /// Semantic preview request. Studio must not construct `FFmpeg` argv.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -10,6 +13,8 @@ pub struct PreviewFrameRequest {
     pub timeline_time: Time,
     pub width: u32,
     pub height: u32,
+    pub fps_num: i64,
+    pub fps_den: i64,
 }
 
 /// Map a timeline time through scene offsets / trim / `TimeMap` / freeze to source content time.
@@ -45,7 +50,7 @@ fn video_clip_at(timeline: &Timeline, time: Time) -> Option<&TimelineClip> {
     hits.into_iter().max_by_key(|clip| clip.span.start)
 }
 
-/// Extract one source/rendered frame at a timeline time.
+/// Composite one frame at a timeline time using the shared sample/render path.
 pub fn preview_frame(
     timeline: &Timeline,
     request: &PreviewFrameRequest,
@@ -53,12 +58,27 @@ pub fn preview_frame(
     output: &Path,
     allow_fixtures: bool,
 ) -> Result<PathBuf, ExportError> {
-    let (locator, content_time) = map_timeline_to_source(timeline, request.timeline_time)?;
-    let input = resolve_media_path(&locator, media_root, output, allow_fixtures)?;
-    run_ffmpeg_extract_frame(
-        &input,
-        content_time,
-        output,
-        Some((request.width, request.height)),
-    )
+    let spec = OutputSpec {
+        width: request.width,
+        height: request.height,
+        fps_num: request.fps_num,
+        fps_den: request.fps_den,
+        sample_rate: 44_100,
+        channels: 2,
+    };
+    let options = PreviewOptions {
+        output: output.to_path_buf(),
+        media_root: media_root.to_path_buf(),
+        lock: load_lock_file(media_root),
+        spec,
+        renderer: RendererRequest::RequireCpu,
+        allow_fixtures,
+        font: None,
+    };
+    render_still(timeline, request.timeline_time, spec, &options, output)
+}
+
+fn load_lock_file(media_root: &Path) -> Option<ResolveLock> {
+    let text = std::fs::read_to_string(media_root.join("lattice.lock.json")).ok()?;
+    serde_json::from_str(&text).ok()
 }

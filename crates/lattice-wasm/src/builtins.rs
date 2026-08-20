@@ -50,9 +50,13 @@ pub fn lower_title(inv: &InvocationView, draft: &mut SceneDraft) -> Result<(), L
         .and_then(super::view::ValueView::as_time)
         .unwrap_or(Time::seconds(3));
     let opacity = body_opacity(inv);
+    let position = body_position(inv);
+    let scale = body_scale(inv);
     let id = draft.next_placement_id("title");
     let mut visual = Visual::text_overlay(text.clone());
     visual.opacity = opacity;
+    visual.position = position;
+    visual.scale = scale;
     draft.placements.push(Placement {
         id,
         kind: PlacementKind::Title,
@@ -63,11 +67,13 @@ pub fn lower_title(inv: &InvocationView, draft: &mut SceneDraft) -> Result<(), L
         provenance: Provenance::invocation("title", Some(inv.span)),
     });
     let opacity_note = opacity.map_or(String::new(), |value| format!(" opacity {value}"));
+    let position_note = position.map_or(String::new(), |value| format!(" position {value}"));
+    let scale_note = scale.map_or(String::new(), |value| format!(" scale {value}"));
     draft.explain(
         Origin::Invocation {
             command: "title".into(),
         },
-        format!("title {text:?} at {at} for {hold}{opacity_note}"),
+        format!("title {text:?} at {at} for {hold}{opacity_note}{position_note}{scale_note}"),
     );
     Ok(())
 }
@@ -88,12 +94,17 @@ pub fn lower_callout(inv: &InvocationView, draft: &mut SceneDraft) -> Result<(),
         .and_then(ValueView::as_time)
         .unwrap_or(Time::seconds(2));
     let id = draft.next_placement_id("callout");
+    let position = body_position(inv);
+    let scale = body_scale(inv);
+    let mut visual = Visual::text_overlay(text.clone());
+    visual.position = position;
+    visual.scale = scale;
     draft.placements.push(Placement {
         id,
         kind: PlacementKind::Callout,
         source_id: None,
         span: TimeSpan::new(at, hold),
-        visual: Some(Visual::text_overlay(text.clone())),
+        visual: Some(visual),
         audio: None,
         provenance: Provenance::invocation("callout", Some(inv.span)),
     });
@@ -101,7 +112,11 @@ pub fn lower_callout(inv: &InvocationView, draft: &mut SceneDraft) -> Result<(),
         Origin::Invocation {
             command: "callout".into(),
         },
-        format!("callout {text:?} at {at} for {hold}"),
+        format!(
+            "callout {text:?} at {at} for {hold}{}{}",
+            position.map_or(String::new(), |value| format!(" position {value}")),
+            scale.map_or(String::new(), |value| format!(" scale {value}"))
+        ),
     );
     Ok(())
 }
@@ -214,6 +229,25 @@ fn body_opacity(inv: &InvocationView) -> Option<u8> {
             .first()
             .and_then(ValueView::as_int)
             .and_then(|value| u8::try_from(value).ok()),
+        _ => None,
+    })
+}
+
+fn body_position(inv: &InvocationView) -> Option<lattice_core::NormalizedPosition> {
+    inv.body.iter().find_map(|item| match item {
+        BodyItem::Invocation(inner) if inner.command == "position" => inner
+            .args
+            .first()
+            .and_then(ValueView::as_normalized_position),
+        _ => None,
+    })
+}
+
+fn body_scale(inv: &InvocationView) -> Option<lattice_core::NormalizedScale> {
+    inv.body.iter().find_map(|item| match item {
+        BodyItem::Invocation(inner) if inner.command == "scale" => {
+            inner.args.first().and_then(ValueView::as_normalized_scale)
+        }
         _ => None,
     })
 }

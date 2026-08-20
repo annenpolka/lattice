@@ -38,16 +38,42 @@ jobs:
       - name: Install FFmpeg (Windows)
         if: runner.os == 'Windows'
         run: choco install ffmpeg -y --no-progress
-      - name: Font for drawtext (Linux)
-        if: runner.os == 'Linux'
+      - name: Fixture font
+        shell: bash
         run: |
-          mkdir -p "$HOME/.local/share/fonts"
-          curl -fsSL -o "$HOME/.local/share/fonts/DejaVuSans.ttf" \
-            "https://github.com/dejavu-fonts/dejavu-fonts/raw/version_2_37/ttf/DejaVuSans.ttf"
-          echo "LATTICE_FONT=$HOME/.local/share/fonts/DejaVuSans.ttf" >> "$GITHUB_ENV"
+          font="$PWD/fixtures/fonts/MPLUS1p-Regular.ttf"
+          test -f "$font"
+          echo "LATTICE_FONT=$font" >> "$GITHUB_ENV"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      # Pin Quint. Do not install @informalsystems/quint@latest.
+      - name: Quint specs
+        env:
+          QUINT_VERSION: "0.32.0"
+        shell: bash
+        run: |
+          set -euo pipefail
+          QUINT="npx --yes @informalsystems/quint@${QUINT_VERSION}"
+          for spec in spec/*.qnt; do
+            echo "::group::parse ${spec}"
+            ${QUINT} parse "${spec}"
+            echo "::endgroup::"
+            echo "::group::typecheck ${spec}"
+            ${QUINT} typecheck "${spec}"
+            echo "::endgroup::"
+            echo "::group::test ${spec}"
+            ${QUINT} test "${spec}"
+            echo "::endgroup::"
+            echo "::group::run ${spec}"
+            ${QUINT} run "${spec}" --max-steps=30 --invariant=inv
+            echo "::endgroup::"
+          done
       - name: fmt
         run: cargo fmt --all -- --check
       - name: clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
+      # Studio window smoke (`scripts/studio-smoke.ps1`) stays a local desktop
+      # gate. GitHub-hosted Windows is not a reliable interactive GPU/DWM session.
       - name: test
         run: cargo test --workspace

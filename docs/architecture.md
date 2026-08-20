@@ -11,9 +11,15 @@ Validator
    ↓
 Explain / Timeline flatten
    ↓
-Render Plan
+Resolve (lockable assets, fonts)
    ↓
-FFmpeg                          lattice-media
+evaluate(t) → RenderScene + AudioPlan     lattice-core
+   ↓
+Lattice compositor + PCM mixer            lattice-media
+   ↓  raw RGBA frames + PCM
+Encoder (mux)                             lattice-media
+   ↓
+FFmpeg as codec/I/O backend only
 ```
 
 CLI (`lattice-cli`) and Studio (`lattice-studio`) are clients of `lattice-engine`. They must not fork business logic.
@@ -51,13 +57,19 @@ lattice-vel  lattice-wasm  lattice-media
 
 ## Phases
 
-| Phase | Input | Output | May be non-deterministic? |
-|---|---|---|---|
-| Compile | VEL | Core IR + diagnostics + explain | no |
-| Resolve | Core IR + media/TTS/analysis | lockable artifacts | yes, then lock |
-| Render | resolved IR | frames / file | no, given locks |
+These names match the Quint specs in `spec/*.qnt` (`build_protocol`, `resolution`, `rendering`) and the Rust entry points.
 
-Alpha implements Compile, an explicit Resolve (paths, generated media, locks), and Render (timeline flatten + FFmpeg). Compile never calls a generated-media provider.
+| Phase | Quint | Rust | Input | Output | May be non-deterministic? |
+|---|---|---|---|---|---|
+| Compile | `compile` | `Engine::compile` | VEL | Core IR + diagnostics + explain | no |
+| Resolve | `resolveOpen` / `resolveLocked` | `Engine::resolve` | Core IR + media/TTS/fonts | `lattice.lock.json` | yes, then lock |
+| Evaluate | `evaluateScene` | `evaluate_at` | resolved timeline + `t` | `RenderScene` + `AudioPlan` | no, given locks |
+| Render | `startRender` / `finishFrames` | `sample_frame` / compositor | `RenderScene` | raw RGBA + mixed PCM | no, given locks |
+| Encode | `startEncode` / `finishEncode` | `Encoder` | frames + PCM | container (mp4, …) | no (codec choice is not scene state) |
+
+**Render ≠ Encode.** Preview and export call the same `evaluate_at` / `sample_frame` path. FFmpeg may decode, probe, encode, and mux; it is not the visual or audio compositor. A valid lock then Render/Encode must not increment provider calls. Stale or missing assets (including fonts) block render start. Renderer/backend failure must not mutate VEL source or the lock.
+
+Compile never calls a generated-media provider. Preview and export share `evaluate_at` / `sample_frame`. The compositor is Lattice-owned (CPU reference path, optional wgpu offscreen). `FFmpeg` is decode/encode/mux only.
 
 ## Locus
 

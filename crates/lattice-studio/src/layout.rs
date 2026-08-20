@@ -2,7 +2,8 @@
 //! Every pane is derived from Engine compile / timeline / plan / locus.
 
 use lattice_engine::{
-    EditProposal, Engine, Locus, LocusId, LocusKind, Origin, Span, Time, plan_from_timeline,
+    Canvas, EditProposal, Engine, Locus, LocusId, LocusKind, NormalizedScale, Origin, Span, Time,
+    plan_from_timeline, text_overlay_size,
 };
 
 use crate::session::StudioSession;
@@ -22,6 +23,11 @@ pub struct CanvasOverlay {
     pub text: String,
     pub callout: bool,
     pub selected: bool,
+    pub x: i32,
+    pub y: i32,
+    pub width: u32,
+    pub height: u32,
+    pub scale: NormalizedScale,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -57,6 +63,8 @@ pub struct TimelineClipView {
     pub start: Time,
     pub duration: Time,
     pub selected: bool,
+    pub scene_id: String,
+    pub handles: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -69,6 +77,10 @@ pub struct TimelineTrackView {
 pub struct TimelineView {
     pub duration: Time,
     pub tracks: Vec<TimelineTrackView>,
+    pub snap_indicator: Option<Time>,
+    pub insertion_marker: Option<Time>,
+    pub viewport_start: Time,
+    pub viewport_duration: Time,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -106,6 +118,7 @@ pub fn from_session(session: &StudioSession) -> Result<StudioLayout, lattice_eng
         file_label: file_label(session.path()),
         tree: tree_from_compilation(compilation, &loci, current_id.as_ref()),
         canvas: canvas_from_plan(
+            session,
             &plan,
             &loci,
             current_id.as_ref(),
@@ -118,7 +131,7 @@ pub fn from_session(session: &StudioSession) -> Result<StudioLayout, lattice_eng
             highlight: current.as_ref().and_then(|locus| locus.source_span),
         },
         inspector: inspector_from_locus(current.as_ref(), session.path()),
-        timeline: timeline_view(&timeline, current_id.as_ref()),
+        timeline: timeline_view(session, &timeline, current.as_ref()),
         review: session.review_proposal().map(review_from_proposal),
         playhead: session.playhead(),
         dirty: session.is_dirty(),
@@ -225,6 +238,7 @@ fn node_for(
 }
 
 fn canvas_from_plan(
+    session: &StudioSession,
     plan: &lattice_engine::RenderPlan,
     loci: &[Locus],
     current: Option<&LocusId>,
@@ -235,19 +249,50 @@ fn canvas_from_plan(
     let overlays = plan
         .overlays
         .iter()
-        .filter(|overlay| overlay.span.contains(playhead))
+        .filter(|overlay| {
+            let locus = loci.iter().find(|locus| locus.id == overlay.locus_id);
+            match locus {
+                Some(locus) => crate::interaction::overlay_playhead_visible(
+                    session,
+                    locus.id.as_str(),
+                    overlay.span,
+                ),
+                None => overlay.span.contains(playhead),
+            }
+        })
         .filter_map(|overlay| {
             let text = overlay.text.clone()?;
-            let locus = loci.iter().find(|locus| {
-                locus.label == text
-                    && matches!(locus.kind, LocusKind::Title | LocusKind::Callout)
-                    && locus.timeline_span.is_none_or(|span| span == overlay.span)
-            })?;
+            let locus = loci.iter().find(|locus| locus.id == overlay.locus_id)?;
+            let (mut x, mut y, base_width, base_height) =
+                overlay_bounds(overlay.callout, preview_size.0, preview_size.1);
+            let resize = session.canvas_overlay_resize_preview(&locus.id);
+            let requested_scale = resize
+                .map(|preview| preview.scale)
+                .or_else(|| locus.visual.as_ref().and_then(|visual| visual.scale))
+                .unwrap_or_default();
+            let scale =
+                requested_scale.fit_within(base_width, base_height, preview_size.0, preview_size.1);
+            let width = scale.scaled_extent(base_width);
+            let height = scale.scaled_extent(base_height);
+            let position = resize
+                .map(|preview| preview.position)
+                .or_else(|| session.canvas_overlay_drag_position(&locus.id))
+                .or_else(|| locus.visual.as_ref().and_then(|visual| visual.position));
+            if let Some(position) = position {
+                (x, y) = position.pixel_origin(preview_size.0, preview_size.1, width, height);
+            } else if !overlay.callout {
+                y = i32::try_from(preview_size.1.saturating_sub(height)).unwrap_or(0);
+            }
             Some(CanvasOverlay {
                 selected: current.is_some_and(|id| id == &locus.id),
                 locus_id: locus.id.as_str().to_string(),
                 text,
                 callout: overlay.callout,
+                x,
+                y,
+                width,
+                height,
+                scale,
             })
         })
         .collect();
@@ -290,7 +335,12 @@ fn inspector_from_locus(locus: Option<&Locus>, path: &std::path::Path) -> Inspec
     }
 }
 
-fn timeline_view(timeline: &lattice_engine::Timeline, current: Option<&LocusId>) -> TimelineView {
+fn timeline_view(
+    session: &StudioSession,
+    timeline: &lattice_engine::Timeline,
+    current: Option<&Locus>,
+) -> TimelineView {
+    let current_id = current.map(|locus| locus.id.clone());
     let clips: Vec<TimelineClipView> = timeline
         .clips
         .iter()
@@ -301,14 +351,44 @@ fn timeline_view(timeline: &lattice_engine::Timeline, current: Option<&LocusId>)
                 "audio" => "audio",
                 _ => "video",
             };
+            let scene_id = session
+                .compilation()
+                .project
+                .scenes
+                .iter()
+                .find(|scene| {
+                    scene
+                        .placements
+                        .iter()
+                        .any(|placement| placement.id == clip.id)
+                })
+                .map(|scene| scene.id.clone())
+                .unwrap_or_default();
+            let overlay = matches!(kind.as_str(), "title" | "callout");
+            let selected = current.is_some_and(|locus| {
+                if overlay {
+                    return locus.id.as_str() == clip.id || locus.node_id == clip.id;
+                }
+                locus.id.as_str() == clip.id
+                    || locus.node_id == clip.id
+                    || locus.scene_id.as_deref() == Some(scene_id.as_str())
+                    || current_id
+                        .as_ref()
+                        .is_some_and(|id| id.as_str() == scene_id)
+            });
+            let (start, duration) = crate::interaction::ephemeral_clip_span(session, &clip.id)
+                .unwrap_or((clip.span.start, clip.span.duration));
+            let handles = selected && matches!(kind.as_str(), "video" | "title" | "callout");
             TimelineClipView {
-                selected: current.is_some_and(|id| id.as_str() == clip.id),
+                selected,
                 id: clip.id.clone(),
                 kind,
                 track: track.into(),
                 label: clip.text.clone().unwrap_or_else(|| clip.id.clone()),
-                start: clip.span.start,
-                duration: clip.span.duration,
+                start,
+                duration,
+                scene_id,
+                handles,
             }
         })
         .collect();
@@ -319,6 +399,10 @@ fn timeline_view(timeline: &lattice_engine::Timeline, current: Option<&LocusId>)
             track_named("Audio", "audio", &clips),
             track_named("Text", "text", &clips),
         ],
+        snap_indicator: session.snap_indicator(),
+        insertion_marker: crate::interaction::insertion_marker(session),
+        viewport_start: session.viewport().visible_start(),
+        viewport_duration: session.viewport().visible_duration(),
     }
 }
 
@@ -338,6 +422,20 @@ fn review_from_proposal(proposal: &EditProposal) -> ReviewView {
         description: proposal.description.clone(),
         vel_diff: proposal.vel_diff.clone(),
         locus_id: proposal.locus_id.as_str().to_string(),
+    }
+}
+
+/// Matches `evaluate` title/callout geometry so GPUI chrome sits on the composited frame.
+fn overlay_bounds(callout: bool, canvas_w: u32, canvas_h: u32) -> (i32, i32, u32, u32) {
+    let (width, height) = text_overlay_size(Canvas {
+        width: canvas_w,
+        height: canvas_h,
+    });
+    if callout {
+        (0, 0, width, height)
+    } else {
+        let y = i32::try_from(canvas_h.saturating_sub(height)).unwrap_or(0);
+        (0, y, width, height)
     }
 }
 

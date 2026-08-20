@@ -6,8 +6,9 @@ use lattice_core::{
     TimelineError, flatten_project,
 };
 use lattice_media::{
-    ExportError, ExportReport, MediaInfo, PreviewFrameRequest, PreviewOptions, export_preview,
-    preview_frame, probe_media,
+    AudioMixError, ExportError, ExportReport, MediaInfo, MixSpec, PreparedAudio,
+    PreviewFrameRequest, PreviewOptions, RendererRequest, export_preview, mix_timeline_audio,
+    probe_media,
 };
 use lattice_vel::{Document, Expr, Item, ParseError};
 use lattice_wasm::{ExplainLine, LoweringRegistry, SceneDraft};
@@ -28,6 +29,8 @@ pub enum EngineError {
     Timeline(#[from] TimelineError),
     #[error(transparent)]
     Export(#[from] ExportError),
+    #[error(transparent)]
+    Audio(#[from] AudioMixError),
     #[error(transparent)]
     Io(#[from] std::io::Error),
     #[error("edit: {0}")]
@@ -204,6 +207,41 @@ impl Engine {
         None
     }
 
+    /// Load `lattice.lock.json` next to the project if present.
+    pub fn load_lock(media_root: &Path) -> Option<lattice_core::ResolveLock> {
+        let path = media_root.join("lattice.lock.json");
+        let text = std::fs::read_to_string(path).ok()?;
+        serde_json::from_str(&text).ok()
+    }
+
+    fn preview_spec(request: &PreviewFrameRequest) -> lattice_media::OutputSpec {
+        lattice_media::OutputSpec {
+            width: request.width,
+            height: request.height,
+            fps_num: request.fps_num,
+            fps_den: request.fps_den,
+            sample_rate: 44_100,
+            channels: 2,
+        }
+    }
+
+    fn preview_options(
+        media_root: &Path,
+        output: &Path,
+        lock: Option<&lattice_core::ResolveLock>,
+        renderer: RendererRequest,
+    ) -> PreviewOptions {
+        PreviewOptions {
+            output: output.to_path_buf(),
+            media_root: media_root.to_path_buf(),
+            lock: lock.cloned().or_else(|| Self::load_lock(media_root)),
+            spec: lattice_media::OutputSpec::preview(),
+            renderer,
+            allow_fixtures: false,
+            font: None,
+        }
+    }
+
     pub fn preview_frame(
         &self,
         project: &Project,
@@ -211,10 +249,107 @@ impl Engine {
         media_root: &Path,
         output: &Path,
     ) -> Result<std::path::PathBuf, EngineError> {
+        self.preview_frame_with_lock(project, request, media_root, output, None)
+    }
+
+    pub fn preview_frame_with_lock(
+        &self,
+        project: &Project,
+        request: &PreviewFrameRequest,
+        media_root: &Path,
+        output: &Path,
+        lock: Option<&lattice_core::ResolveLock>,
+    ) -> Result<std::path::PathBuf, EngineError> {
         let timeline = flatten_project(project)?;
-        Ok(preview_frame(
-            &timeline, request, media_root, output, false,
+        let options = Self::preview_options(media_root, output, lock, RendererRequest::RequireCpu);
+        Ok(lattice_media::render_still(
+            &timeline,
+            request.timeline_time,
+            Self::preview_spec(request),
+            &options,
+            output,
         )?)
+    }
+
+    pub fn sample_frame(
+        &self,
+        project: &Project,
+        request: &PreviewFrameRequest,
+        media_root: &Path,
+        lock: Option<&lattice_core::ResolveLock>,
+    ) -> Result<(lattice_core::RenderScene, lattice_media::RawFrame), EngineError> {
+        let timeline = flatten_project(project)?;
+        let options = Self::preview_options(
+            media_root,
+            &media_root.join("_lattice_sample"),
+            lock,
+            RendererRequest::RequireCpu,
+        );
+        Ok(lattice_media::sample_frame(
+            &timeline,
+            request.timeline_time,
+            Self::preview_spec(request),
+            &options,
+        )?)
+    }
+
+    /// Warm sample-at-t session for Studio stills. Not a realtime decoder.
+    pub fn preview_sampler(
+        &self,
+        project: &Project,
+        request: &PreviewFrameRequest,
+        media_root: &Path,
+        output: &Path,
+        lock: Option<&lattice_core::ResolveLock>,
+    ) -> Result<lattice_media::PreviewSampler, EngineError> {
+        self.sample_session(
+            project,
+            request,
+            media_root,
+            output,
+            lock,
+            RendererRequest::RequireCpu,
+        )
+    }
+
+    /// Create a reusable sample-at-t session with a required renderer.
+    pub fn sample_session(
+        &self,
+        project: &Project,
+        request: &PreviewFrameRequest,
+        media_root: &Path,
+        output: &Path,
+        lock: Option<&lattice_core::ResolveLock>,
+        renderer: RendererRequest,
+    ) -> Result<lattice_media::SampleSession, EngineError> {
+        let timeline = flatten_project(project)?;
+        let options = Self::preview_options(media_root, output, lock, renderer);
+        Ok(lattice_media::SampleSession::open(
+            timeline,
+            Self::preview_spec(request),
+            &options,
+        )?)
+    }
+
+    /// Prepare the full timeline mix for Studio monitoring.
+    ///
+    /// The media backend is shared with export. `None` means the timeline has
+    /// no audio windows; missing referenced or generated media is an error.
+    pub fn prepare_audio(
+        &self,
+        project: &Project,
+        media_root: &Path,
+        lock: Option<&lattice_core::ResolveLock>,
+        spec: MixSpec,
+    ) -> Result<Option<PreparedAudio>, EngineError> {
+        let timeline = flatten_project(project)?;
+        let options = Self::preview_options(
+            media_root,
+            &media_root.join(".lattice-audio-monitor"),
+            lock,
+            RendererRequest::RequireCpu,
+        );
+        Ok(mix_timeline_audio(&timeline, &options, spec)?)
     }
 
     pub fn reject_proposal(&self, source: &str, _proposal: &EditProposal) -> String {
@@ -251,7 +386,9 @@ impl Engine {
             &PreviewOptions {
                 output: output.to_path_buf(),
                 media_root: media_root.to_path_buf(),
-                lock: lock.cloned(),
+                lock: lock.cloned().or_else(|| Self::load_lock(media_root)),
+                spec: lattice_media::OutputSpec::preview(),
+                renderer: RendererRequest::RequireCpu,
                 allow_fixtures: false,
                 font: None,
             },

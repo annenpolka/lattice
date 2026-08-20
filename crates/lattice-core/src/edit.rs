@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::locus::LocusId;
+use crate::space::{NormalizedPosition, NormalizedScale};
 use crate::time::Time;
 
 /// Fingerprint of VEL source bytes a proposal was created against.
@@ -48,6 +49,27 @@ pub enum SemanticEdit {
         #[serde(skip_serializing_if = "Option::is_none")]
         fade_in: Option<Time>,
     },
+    /// Move the targeted scene so it sits immediately before `before`.
+    /// `before: None` appends the scene at the end of the sequence.
+    ReorderScene {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        before: Option<String>,
+    },
+    Callout {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        at: Option<Time>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        duration: Option<Time>,
+    },
+    /// Move the targeted visual placement in normalized Canvas Space.
+    SetPosition {
+        position: NormalizedPosition,
+    },
+    /// Resize a visual while atomically preserving its opposite-corner anchor.
+    ResizeOverlay {
+        position: NormalizedPosition,
+        scale: NormalizedScale,
+    },
 }
 
 /// Inspectable proposal. Current VEL is unchanged until Apply writes `new_source`.
@@ -80,7 +102,13 @@ impl SemanticEdit {
                 out_point,
             } => in_point.is_none() && out_point.is_none(),
             Self::SetFade { fade_in } => fade_in.is_none(),
-            Self::Split { .. } | Self::Delete | Self::SetGain { .. } => false,
+            Self::Callout { at, duration } => at.is_none() && duration.is_none(),
+            Self::Split { .. }
+            | Self::Delete
+            | Self::SetGain { .. }
+            | Self::ReorderScene { .. }
+            | Self::SetPosition { .. }
+            | Self::ResizeOverlay { .. } => false,
         }
     }
 
@@ -135,6 +163,32 @@ impl SemanticEdit {
                 Some(time) => format!("set fade in {time}"),
                 None => "no fade change".into(),
             },
+            Self::ReorderScene { before } => match before {
+                Some(name) => format!("reorder scene before {name}"),
+                None => "reorder scene to end".into(),
+            },
+            Self::Callout { at, duration } => {
+                let mut parts = Vec::new();
+                if let Some(at) = at {
+                    parts.push(format!("at {at}"));
+                }
+                if let Some(duration) = duration {
+                    parts.push(format!("for {duration}"));
+                }
+                if parts.is_empty() {
+                    "no callout change".into()
+                } else {
+                    format!("set callout {}", parts.join(", "))
+                }
+            }
+            Self::SetPosition { position } => format!(
+                "set canvas position ({:.2}%, {:.2}%)",
+                f64::from(position.x) / 100.0,
+                f64::from(position.y) / 100.0
+            ),
+            Self::ResizeOverlay { position, scale } => {
+                format!("resize overlay to {scale} at {position}")
+            }
         }
     }
 }

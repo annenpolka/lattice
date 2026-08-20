@@ -362,3 +362,67 @@ scene clip {
     let timeline = Engine::timeline(&compilation.project).unwrap();
     assert!(timeline.video_clips().any(|clip| clip.fade_in.is_some()));
 }
+
+#[test]
+fn reorder_scene_rewrites_sequence_order() {
+    let vel = r#"project "demo"
+convention commentary
+media game "capture.mp4"
+
+sequence main {
+  a
+  b
+  c
+}
+
+scene a {
+  game[0s..1s] as v
+}
+scene b {
+  game[1s..2s] as v
+}
+scene c {
+  game[2s..3s] as v
+}
+"#;
+    let engine = Engine::default();
+    let compilation = engine.compile(vel).unwrap();
+    let scene_c = engine
+        .loci(&compilation)
+        .unwrap()
+        .into_iter()
+        .find(|locus| locus.kind == lattice_core::LocusKind::Scene && locus.label == "c")
+        .expect("scene c");
+    let proposal = engine
+        .propose(
+            &compilation,
+            &scene_c,
+            SemanticEdit::ReorderScene {
+                before: Some("b".into()),
+            },
+        )
+        .unwrap();
+    let next = engine.apply_proposal(vel, &proposal).unwrap();
+    let body = next
+        .split("sequence main")
+        .nth(1)
+        .and_then(|rest| rest.split("scene ").next())
+        .unwrap();
+    assert!(
+        body.contains('a') && body.contains('c') && body.contains('b'),
+        "{body}"
+    );
+    let a = body.find('a').unwrap();
+    let c = body.find('c').unwrap();
+    let b = body.find('b').unwrap();
+    assert!(a < c && c < b, "move c before b => a c b, got:\n{body}");
+    let compiled = engine.compile(&next).unwrap();
+    assert_eq!(
+        compiled.project.sequences[0].scene_ids,
+        vec![
+            "scene:a".to_string(),
+            "scene:c".to_string(),
+            "scene:b".to_string()
+        ]
+    );
+}

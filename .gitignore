@@ -1,8 +1,13 @@
 /target
 /crates/lattice-stdlib-guest/target
 .lattice/
+.lattice-cache/
 lattice.lock.json
 studio-preview.mp4
+preview.mp4
+*.mp4
+_lattice_overlay.ttf
+_lattice_source.mp4
 **/*.rs.bk
 .idea/
 .vscode/

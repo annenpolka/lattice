@@ -2,8 +2,19 @@
 
 use std::path::PathBuf;
 
-use lattice_engine::{Engine, Origin, Time, map_timeline_to_source};
+use lattice_engine::{Engine, Origin, PreviewFrameRequest, Time, map_timeline_to_source};
 use lattice_studio::StudioSession;
+
+fn unique_dir(tag: &str) -> PathBuf {
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    let dir = std::env::temp_dir().join(format!("lattice-studio-{tag}-{nanos}"));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    dir
+}
 
 fn png_ihdr_size(path: &std::path::Path) -> (u32, u32) {
     let bytes = std::fs::read(path).expect("read still");
@@ -37,6 +48,12 @@ fn open_compiles_through_engine_and_exposes_locus_provenance_preview() {
     assert_eq!(title.label, "Hello");
     let current = session.current_locus().unwrap().expect("current");
     assert_eq!(current.id, title.id);
+    let projection_json = session
+        .current_projection_json()
+        .unwrap()
+        .expect("agent locus JSON");
+    let projection: serde_json::Value = serde_json::from_str(&projection_json).unwrap();
+    assert_eq!(projection["locus"]["id"], title.id.as_str());
     let provenance = session.current_provenance().unwrap().expect("provenance");
     assert!(
         matches!(
@@ -68,6 +85,69 @@ fn open_compiles_through_engine_and_exposes_locus_provenance_preview() {
         "canvas preview must show the title at the playhead"
     );
     assert!(!layout.dirty);
+}
+
+#[test]
+fn working_source_recompiles_atomically_and_only_success_enters_undo() {
+    let mut session = StudioSession::open(demo_vel()).expect("open");
+    let original = session.source().to_string();
+    let undo_before = session.undo_len();
+
+    session
+        .set_working_source("scene {")
+        .expect_err("invalid VEL must not replace the compiled working source");
+    assert_eq!(session.source(), original);
+    assert_eq!(session.undo_len(), undo_before);
+
+    let edited = original.replacen("title \"Hello\"", "title \"Edited in VEL\"", 1);
+    session
+        .set_working_source(edited)
+        .expect("valid VEL must recompile");
+    assert!(session.source().contains("Edited in VEL"));
+    assert!(!session.compilation().has_errors());
+    assert_eq!(session.undo_len(), undo_before + 1);
+    session.undo().expect("source edit undo");
+    assert_eq!(session.source(), original);
+}
+
+#[test]
+fn studio_resolve_persists_lock_and_render_consumes_generated_audio() {
+    let dir = unique_dir("resolve-render");
+    let vel = dir.join("main.vel");
+    std::fs::copy(demo_vel(), &vel).expect("copy gameplay VEL");
+    lattice_media::generate_av_fixture(dir.join("capture.mp4"), 21).expect("fixture");
+    let mut session = StudioSession::open(&vel).expect("open");
+    let before = session.request_preview_job();
+
+    let first = session.resolve_media().expect("first resolve");
+    assert_eq!(first.provider_calls, 1, "speech must materialize once");
+    assert!(dir.join("lattice.lock.json").is_file());
+    assert!(
+        first.assets.iter().any(|asset| {
+            let path = std::path::Path::new(&asset.path);
+            path.extension()
+                .is_some_and(|extension| extension.eq_ignore_ascii_case("wav"))
+                && path.is_file()
+        }),
+        "generated speech artifact must exist: {:?}",
+        first.assets
+    );
+    let after = session.request_preview_job();
+    assert_ne!(before.lock_stamp, after.lock_stamp);
+    assert_ne!(before.stamp, after.stamp);
+
+    let second = session.resolve_media().expect("locked resolve");
+    assert_eq!(
+        second.provider_calls, 0,
+        "valid lock must avoid regeneration"
+    );
+
+    let output = session.render_preview().expect("render with lock");
+    assert!(output.is_file());
+    assert!(
+        lattice_media::has_audio_stream(&output).expect("probe audio"),
+        "Studio render must include resolved speech/audio"
+    );
 }
 
 #[test]
@@ -423,6 +503,117 @@ fn timeline_ratio_play_and_preview_stay_aligned() {
 }
 
 #[test]
+fn play_clock_samples_stills_through_engine_preview_sampler() {
+    let dir = unique_dir("play-sampler");
+    let media = dir.join("gameplay.mp4");
+    lattice_media::generate_av_fixture(&media, 4).unwrap();
+    let mut session = StudioSession::open_video(&media).expect("open video");
+    let media_root = session.path().parent().unwrap().to_path_buf();
+    let (width, height) = session.preview_pixel_size();
+    let mut sampler = session
+        .engine()
+        .preview_sampler(
+            &session.compilation().project,
+            &PreviewFrameRequest {
+                timeline_time: session.playhead(),
+                width,
+                height,
+                fps_num: 10,
+                fps_den: 1,
+            },
+            &media_root,
+            &media_root.join("play-still.png"),
+            None,
+        )
+        .expect("preview sampler");
+
+    session.play();
+    assert!(session.is_playing());
+    let t0 = session.snapped_preview_time();
+    let (_, frame0) = sampler.sample(t0).expect("still at play origin");
+    assert!(
+        frame0.rgba.iter().any(|b| *b > 40),
+        "play still must not be blank"
+    );
+
+    for _ in 0..20 {
+        session.step_clock(Time::milliseconds(50));
+    }
+    assert!(
+        session.is_playing(),
+        "1s of a 4s clip must still be playing"
+    );
+    let t1 = session.snapped_preview_time();
+    assert_ne!(
+        t1, t0,
+        "50ms play-clock steps must advance snapped still time"
+    );
+    let (_, frame1) = sampler.sample(t1).expect("still after play clock");
+    let mismatch = frame0
+        .rgba
+        .iter()
+        .zip(&frame1.rgba)
+        .filter(|(a, b)| a.abs_diff(**b) > 8)
+        .count();
+    assert!(
+        mismatch > 64,
+        "moving play stills must differ after 1s, mismatches={mismatch}"
+    );
+
+    session.pause();
+    let frozen = session.playhead();
+    session.step_clock(Time::milliseconds(50));
+    assert_eq!(session.playhead(), frozen);
+}
+
+#[test]
+fn preview_cache_key_uses_lock_stamp_not_mailbox_generation() {
+    let dir = unique_dir("preview-cache-key");
+    let media = dir.join("gameplay.mp4");
+    lattice_media::generate_av_fixture(&media, 4).unwrap();
+    let mut session = StudioSession::open_video(&media).expect("open video");
+
+    let first = session.request_preview_job();
+    let second = session.request_preview_job();
+    assert_ne!(
+        first.generation, second.generation,
+        "each request opens a mailbox generation"
+    );
+    assert_eq!(
+        first.output, second.output,
+        "mailbox generation must not be part of the still cache key"
+    );
+    assert_eq!(first.lock_stamp, "nolock");
+    let name = first.output.file_name().unwrap().to_string_lossy();
+    assert!(
+        name.contains("-nolock-"),
+        "cache key must include lock stamp: {name}"
+    );
+
+    let media_root = session.path().parent().unwrap();
+    std::fs::write(media_root.join("lattice.lock.json"), "{\"v\":1}\n").unwrap();
+    let locked = session.request_preview_job();
+    assert_ne!(locked.lock_stamp, "nolock");
+    assert_ne!(
+        locked.output, first.output,
+        "lock fingerprint must change the still cache key"
+    );
+    let locked_name = locked.output.file_name().unwrap().to_string_lossy();
+    assert!(
+        locked_name.contains(&locked.lock_stamp),
+        "cache key must include lock stamp: {locked_name}"
+    );
+
+    session.apply_title_text("Hello").expect("title edit");
+    let after_edit = session.request_preview_job();
+    assert_ne!(
+        after_edit.output, locked.output,
+        "edit must bump the renderer generation / source revision in the cache key"
+    );
+    assert_ne!(after_edit.source_revision, locked.source_revision);
+}
+
+#[test]
 fn studio_crate_source_has_no_gpui_in_session() {
     let session = include_str!("../src/session.rs");
     assert!(
@@ -431,4 +622,17 @@ fn studio_crate_source_has_no_gpui_in_session() {
     );
     let core = include_str!("../../../crates/lattice-core/Cargo.toml");
     assert!(!core.contains("gpui"));
+    let main = include_str!("../src/main.rs");
+    assert!(
+        main.contains("LATTICE_STUDIO_AUTOPLAY"),
+        "Studio must honor autoplay for process smoke"
+    );
+    assert!(
+        main.contains("LATTICE_STUDIO_SMOKE_MS"),
+        "Studio must honor a smoke timeout for process smoke"
+    );
+    assert!(
+        main.contains("play samples"),
+        "Play and autoplay must share the sample-clock log line"
+    );
 }

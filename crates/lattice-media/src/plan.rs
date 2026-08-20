@@ -1,7 +1,9 @@
-use lattice_core::{MediaLocator, Time, TimeMap, TimeSpan, Timeline, TimelineError};
+use lattice_core::{
+    LocusId, MediaLocator, NormalizedPosition, NormalizedScale, Time, TimeMap, TimeSpan, Timeline,
+    TimelineClip, TimelineError,
+};
 
-use crate::PREVIEW_FPS_DEN;
-use crate::PREVIEW_FPS_NUM;
+use crate::OutputSpec;
 
 /// Backend-facing plan. Built from a [`Timeline`], not from VEL.
 ///
@@ -30,10 +32,14 @@ pub struct PlanSegment {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct OverlayWindow {
+    /// Stable identity shared by the Core placement, timeline clip, and Studio locus.
+    pub locus_id: LocusId,
     pub span: TimeSpan,
     pub text: Option<String>,
     pub opacity: Option<u8>,
     pub callout: bool,
+    pub position: Option<NormalizedPosition>,
+    pub scale: Option<NormalizedScale>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -48,6 +54,17 @@ pub struct AudioWindow {
 }
 
 pub fn plan_from_timeline(timeline: &Timeline) -> Result<RenderPlan, TimelineError> {
+    plan_from_timeline_with_spec(timeline, OutputSpec::preview())
+}
+
+/// Build a render plan whose frame-rate contract matches the export session.
+///
+/// [`plan_from_timeline`] remains the compatibility entry point for the
+/// 320x180 at 10 fps preview contract.
+pub fn plan_from_timeline_with_spec(
+    timeline: &Timeline,
+    spec: OutputSpec,
+) -> Result<RenderPlan, TimelineError> {
     if timeline.video_clips().next().is_none() {
         return Err(TimelineError::NoVideo);
     }
@@ -83,19 +100,14 @@ pub fn plan_from_timeline(timeline: &Timeline) -> Result<RenderPlan, TimelineErr
     }
     let mut overlays: Vec<OverlayWindow> = timeline
         .title_clips()
-        .map(|clip| OverlayWindow {
-            span: clip.span,
-            text: clip.text.clone(),
-            opacity: clip.opacity,
-            callout: false,
-        })
+        .map(|clip| overlay_window(clip, false))
         .collect();
-    overlays.extend(timeline.callout_clips().map(|clip| OverlayWindow {
-        span: clip.span,
-        text: clip.text.clone(),
-        opacity: clip.opacity,
-        callout: true,
-    }));
+    overlays.extend(
+        timeline
+            .callout_clips()
+            .map(|clip| overlay_window(clip, true)),
+    );
+
     let fade_in = timeline.video_clips().next().and_then(|clip| clip.fade_in);
     let mut audio = Vec::new();
     for clip in timeline.audio_clips() {
@@ -137,11 +149,23 @@ pub fn plan_from_timeline(timeline: &Timeline) -> Result<RenderPlan, TimelineErr
     }
     Ok(RenderPlan {
         duration: timeline.duration,
-        fps_num: PREVIEW_FPS_NUM,
-        fps_den: PREVIEW_FPS_DEN,
+        fps_num: spec.fps_num,
+        fps_den: spec.fps_den,
         segments,
         overlays,
         fade_in,
         audio,
     })
+}
+
+fn overlay_window(clip: &TimelineClip, callout: bool) -> OverlayWindow {
+    OverlayWindow {
+        locus_id: LocusId::new(clip.id.clone()),
+        span: clip.span,
+        text: clip.text.clone(),
+        opacity: clip.opacity,
+        callout,
+        position: clip.position,
+        scale: clip.scale,
+    }
 }

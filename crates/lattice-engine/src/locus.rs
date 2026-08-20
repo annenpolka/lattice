@@ -129,6 +129,8 @@ pub fn loci_from_project(
                     text: visual.text.clone(),
                     fit: visual.fit.clone(),
                     opacity: visual.opacity,
+                    position: visual.position,
+                    scale: visual.scale,
                 }),
             });
         }

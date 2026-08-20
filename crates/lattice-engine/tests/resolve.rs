@@ -38,6 +38,22 @@ fn second_resolve_against_lock_does_not_invoke_provider() {
         )
         .unwrap();
     assert_eq!(provider.calls, 1, "first resolve materializes speech");
+    let font_lock = first
+        .lock
+        .assets
+        .iter()
+        .find(|asset| asset.generator.as_deref() == Some("font"))
+        .expect("font lock");
+    assert!(
+        !std::path::Path::new(&font_lock.path).is_absolute(),
+        "font lock must be project-relative: {}",
+        font_lock.path
+    );
+    assert!(
+        dir.join(&font_lock.path).is_file(),
+        "font lock file missing at {}",
+        font_lock.path
+    );
     assert!(
         first
             .lock
@@ -49,6 +65,22 @@ fn second_resolve_against_lock_does_not_invoke_provider() {
         matches!(asset.locator, lattice_core::MediaLocator::Generated { .. })
             && std::path::Path::new(&asset.path).is_file()
     }));
+    let speech_lock = first
+        .lock
+        .assets
+        .iter()
+        .find(|asset| asset.generator.as_deref() == Some("speech"))
+        .expect("speech lock");
+    assert!(
+        !std::path::Path::new(&speech_lock.path).is_absolute(),
+        "lock path must be media_root-relative: {}",
+        speech_lock.path
+    );
+    assert!(
+        dir.join(&speech_lock.path).is_file(),
+        "relative lock path must resolve under media_root: {}",
+        speech_lock.path
+    );
 
     let second = engine
         .resolve(
@@ -142,5 +174,12 @@ scene demo {
         .key
         .clone();
     assert_ne!(short_key, long_key);
-    assert!(!second.assets.iter().any(|asset| asset.from_lock));
+    assert!(
+        !second
+            .assets
+            .iter()
+            .filter(|asset| matches!(asset.locator, lattice_core::MediaLocator::Generated { .. }))
+            .any(|asset| asset.from_lock),
+        "speech at a new duration must not reuse the previous lock"
+    );
 }

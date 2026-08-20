@@ -133,6 +133,8 @@ impl WasmStdlib {
             .and_then(ValueView::as_time)
             .unwrap_or(Time::seconds(3));
         let opacity = title_opacity(inv);
+        let position = body_position(inv);
+        let scale = body_scale(inv);
         let span = to_wit_span(inv.span);
         let (mut store, bindings) = self.instantiate()?;
         let fragment = bindings
@@ -152,6 +154,8 @@ impl WasmStdlib {
         let id = draft.next_placement_id("title");
         let mut visual = Visual::text_overlay(fragment.text.clone());
         visual.opacity = fragment.opacity;
+        visual.position = position;
+        visual.scale = scale;
         draft.placements.push(Placement {
             id,
             kind: PlacementKind::Title,
@@ -164,11 +168,16 @@ impl WasmStdlib {
         let opacity_note = fragment
             .opacity
             .map_or(String::new(), |value| format!(" opacity {value}"));
+        let position_note = position.map_or(String::new(), |value| format!(" position {value}"));
+        let scale_note = scale.map_or(String::new(), |value| format!(" scale {value}"));
         draft.explain(
             lattice_core::Origin::Invocation {
                 command: "title".into(),
             },
-            format!("title {:?} at {at} for {hold}{opacity_note}", fragment.text),
+            format!(
+                "title {:?} at {at} for {hold}{opacity_note}{position_note}{scale_note}",
+                fragment.text
+            ),
         );
         Ok(())
     }
@@ -182,6 +191,27 @@ fn title_opacity(inv: &InvocationView) -> Option<u8> {
             .first()
             .and_then(ValueView::as_int)
             .and_then(|value| u8::try_from(value).ok()),
+        _ => None,
+    })
+}
+
+fn body_position(inv: &InvocationView) -> Option<lattice_core::NormalizedPosition> {
+    use crate::view::BodyItem;
+    inv.body.iter().find_map(|item| match item {
+        BodyItem::Invocation(inner) if inner.command == "position" => inner
+            .args
+            .first()
+            .and_then(ValueView::as_normalized_position),
+        _ => None,
+    })
+}
+
+fn body_scale(inv: &InvocationView) -> Option<lattice_core::NormalizedScale> {
+    use crate::view::BodyItem;
+    inv.body.iter().find_map(|item| match item {
+        BodyItem::Invocation(inner) if inner.command == "scale" => {
+            inner.args.first().and_then(ValueView::as_normalized_scale)
+        }
         _ => None,
     })
 }

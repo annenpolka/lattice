@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::locator::MediaLocator;
 use crate::provenance::Provenance;
+use crate::space::{NormalizedPosition, NormalizedScale};
 use crate::time::Time;
 use crate::time_map::TimeMap;
 
@@ -133,6 +134,13 @@ pub struct Visual {
     pub fade_in: Option<Time>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub fade_out: Option<Time>,
+    /// Absolute top-left in normalized Canvas Space. `None` keeps the
+    /// renderer's conventional title/callout placement.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub position: Option<NormalizedPosition>,
+    /// Uniform aspect-preserving scale (`1000` = `100%`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scale: Option<NormalizedScale>,
 }
 
 #[cfg(test)]
@@ -222,6 +230,8 @@ impl Visual {
             opacity: None,
             fade_in: None,
             fade_out: None,
+            position: None,
+            scale: None,
         }
     }
 
@@ -232,6 +242,8 @@ impl Visual {
             opacity: None,
             fade_in: None,
             fade_out: None,
+            position: None,
+            scale: None,
         }
     }
 }

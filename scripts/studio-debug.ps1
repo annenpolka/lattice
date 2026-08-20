@@ -2,7 +2,7 @@
 # Builds the bin, starts it detached, waits, then prints the durable log.
 #
 #   ./scripts/studio-debug.ps1
-#   ./scripts/studio-debug.ps1 examples/gameplay-commentary/main.vel
+#   ./scripts/studio-debug.ps1 examples/warframe-cut/main.vel
 #   ./scripts/studio-debug.ps1 -NoPreview C:\path\to\main.vel
 #
 # Log file: $env:LATTICE_STUDIO_LOG or %LOCALAPPDATA%\lattice\studio.log
@@ -20,7 +20,7 @@ $Root = Split-Path -Parent $PSScriptRoot
 Set-Location $Root
 
 if (-not $Vel) {
-    $Vel = Join-Path $Root "examples\gameplay-commentary\main.vel"
+    $Vel = Join-Path $Root "examples\warframe-cut\main.vel"
 }
 $Vel = (Resolve-Path $Vel).Path
 

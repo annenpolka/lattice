@@ -12,6 +12,7 @@ lattice-media.workspace = true
 lattice-vel.workspace = true
 lattice-wasm.workspace = true
 serde.workspace = true
+serde_json.workspace = true
 thiserror.workspace = true
 
 [dev-dependencies]

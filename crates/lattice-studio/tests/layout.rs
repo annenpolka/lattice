@@ -2,7 +2,7 @@
 
 use std::path::PathBuf;
 
-use lattice_engine::{Engine, Origin, SemanticEdit, plan_from_timeline};
+use lattice_engine::{Engine, LocusKind, Origin, SemanticEdit, plan_from_timeline};
 use lattice_studio::StudioSession;
 
 fn demo_vel() -> PathBuf {
@@ -22,6 +22,121 @@ fn temp_copy() -> PathBuf {
     let dest = dir.join("main.vel");
     std::fs::copy(demo_vel(), &dest).unwrap();
     dest
+}
+
+fn temp_render_fixture() -> PathBuf {
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .expect("time")
+        .as_nanos();
+    let dir = std::env::temp_dir().join(format!("lattice-studio-layout-render-{nanos}"));
+    std::fs::create_dir_all(&dir).unwrap();
+    let dest = dir.join("main.vel");
+    std::fs::write(
+        &dest,
+        r#"project "layout-render"
+
+convention commentary
+
+media game "capture.mp4"
+
+sequence main {
+  demo
+}
+
+scene demo {
+  game[0s..2s] as clip
+
+  title "Hello" {
+    at 0s for 1s
+  }
+}
+"#,
+    )
+    .unwrap();
+    dest
+}
+
+fn temp_duplicate_overlay_fixture() -> PathBuf {
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .expect("time")
+        .as_nanos();
+    let dir = std::env::temp_dir().join(format!("lattice-studio-duplicate-overlay-{nanos}"));
+    std::fs::create_dir_all(&dir).unwrap();
+    let dest = dir.join("main.vel");
+    std::fs::write(
+        &dest,
+        r#"project "duplicate-overlays"
+convention commentary
+media game "capture.mp4"
+sequence main {
+  demo
+}
+scene demo {
+  game[0s..2s] as clip
+  title "Same" {
+    at 0s for 2s
+  }
+  title "Same" {
+    at 0s for 2s
+  }
+  callout "Same" {
+    at 0s for 2s
+  }
+}
+"#,
+    )
+    .unwrap();
+    dest
+}
+
+#[test]
+fn duplicate_overlay_text_and_span_keep_distinct_locus_ids() {
+    let mut session = StudioSession::open(temp_duplicate_overlay_fixture()).expect("open");
+    let loci = session.loci().expect("loci");
+    let mut expected: Vec<_> = loci
+        .iter()
+        .filter(|locus| matches!(locus.kind, LocusKind::Title | LocusKind::Callout))
+        .map(|locus| locus.id.as_str().to_string())
+        .collect();
+    expected.sort();
+
+    let layout = session.layout().expect("layout");
+    let mut actual: Vec<_> = layout
+        .canvas
+        .overlays
+        .iter()
+        .map(|overlay| overlay.locus_id.clone())
+        .collect();
+    actual.sort();
+    assert_eq!(actual, expected, "canvas must preserve placement identity");
+    for overlay in &layout.canvas.overlays {
+        let locus = loci
+            .iter()
+            .find(|locus| locus.id.as_str() == overlay.locus_id)
+            .expect("overlay locus");
+        assert_eq!(overlay.callout, locus.kind == LocusKind::Callout);
+    }
+
+    let target = loci
+        .iter()
+        .filter(|locus| locus.kind == LocusKind::Title)
+        .nth(1)
+        .expect("second title")
+        .id
+        .clone();
+    session.point_at(target.clone());
+    let selected: Vec<_> = session
+        .layout()
+        .expect("selected layout")
+        .canvas
+        .overlays
+        .into_iter()
+        .filter(|overlay| overlay.selected)
+        .map(|overlay| overlay.locus_id)
+        .collect();
+    assert_eq!(selected, vec![target.as_str().to_string()]);
 }
 
 #[test]
@@ -265,7 +380,7 @@ fn cargo_toml_defaults_to_window_binary() {
 
 #[test]
 fn apply_title_text_rewrites_vel_and_render_preview_writes_mp4() {
-    let vel = temp_copy();
+    let vel = temp_render_fixture();
     let mut session = StudioSession::open(&vel).unwrap();
     let original = session.source().to_string();
     session.apply_title_text("World").expect("apply title");
@@ -277,7 +392,7 @@ fn apply_title_text_rewrites_vel_and_render_preview_writes_mp4() {
     let timeline = Engine::timeline(&compilation.project).unwrap();
     let title = timeline.title_clips().next().expect("title");
     assert_eq!(title.text.as_deref(), Some("World"));
-    lattice_media::generate_av_fixture(vel.parent().unwrap().join("capture.mp4"), 21).unwrap();
+    lattice_media::generate_av_fixture(vel.parent().unwrap().join("capture.mp4"), 3).unwrap();
     let preview = session.render_preview().expect("render");
     assert!(
         preview.is_file(),
@@ -346,10 +461,12 @@ fn window_source_composes_documented_panes() {
         main.contains("on_mouse_down")
             && main.contains("on_mouse_move")
             && main.contains("on_mouse_up")
-            && main.contains("scrub_timeline_ratio")
-            && main.contains("click_timeline_ratio")
-            && main.contains("TIMELINE_RATIO_DEN"),
-        "timeline pointer-down/move/up must map slice index to session rail ratio"
+            && main.contains("begin_timeline_pointer")
+            && main.contains("update_timeline_pointer")
+            && main.contains("commit_timeline_pointer")
+            && !main.contains("TIMELINE_RATIO_DEN")
+            && !main.contains("scrub_timeline_ratio"),
+        "timeline pointer-down/move/up must use continuous viewport x, not 101 hit cells"
     );
     assert!(
         main.contains("spawn_play_clock") && main.contains("step_clock"),
@@ -362,6 +479,14 @@ fn window_source_composes_documented_panes() {
     assert!(
         main.contains("id(\"playhead\")"),
         "timeline must draw a playhead aligned to Time"
+    );
+    assert!(
+        main.contains("capture_any_mouse_down"),
+        "clip children must not steal timeline pointer-down from the rail"
+    );
+    assert!(
+        !main.contains(".text_xl().text_color(rgb(0xffffff)).child(text)"),
+        "GPUI overlay must be selection chrome, not a second title compositor"
     );
     assert!(
         !main.contains("eprintln!") && !main.contains("println!"),
@@ -377,8 +502,19 @@ fn window_source_composes_documented_panes() {
 fn session_and_layout_have_no_gpui() {
     let session = include_str!("../src/session.rs");
     let layout = include_str!("../src/layout.rs");
+    let gesture = include_str!("../src/gesture.rs");
+    let viewport = include_str!("../src/viewport.rs");
+    let preview = include_str!("../src/preview.rs");
+    let interaction = include_str!("../src/interaction.rs");
     assert!(!session.contains("gpui"), "session must stay GPUI-free");
     assert!(!layout.contains("gpui"), "layout must stay GPUI-free");
+    assert!(!gesture.contains("gpui"), "gesture must stay GPUI-free");
+    assert!(!viewport.contains("gpui"), "viewport must stay GPUI-free");
+    assert!(!preview.contains("gpui"), "preview must stay GPUI-free");
+    assert!(
+        !interaction.contains("gpui"),
+        "interaction must stay GPUI-free"
+    );
     let core = include_str!("../../../crates/lattice-core/Cargo.toml");
     assert!(!core.contains("gpui"));
 }

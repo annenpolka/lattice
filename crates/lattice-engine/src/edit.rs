@@ -1,5 +1,6 @@
 use lattice_core::{
-    EditProposal, Locus, LocusKind, SemanticEdit, Span, Time, TimeSpan, source_revision,
+    EditProposal, Locus, LocusKind, NormalizedPosition, NormalizedScale, SemanticEdit, Span, Time,
+    TimeSpan, source_revision,
 };
 use lattice_vel::{Document, Expr, Invocation, Item};
 
@@ -69,6 +70,18 @@ fn apply_semantic_edit(
             let fade = fade_in.ok_or_else(|| EngineError::Edit("fade has no duration".into()))?;
             apply_fade(source, document, locus, fade)
         }
+        SemanticEdit::ReorderScene { before } => {
+            apply_reorder(source, document, locus, before.as_deref())
+        }
+        SemanticEdit::Callout { at, duration } => {
+            apply_callout(source, document, locus, *at, *duration)
+        }
+        SemanticEdit::SetPosition { position } => {
+            apply_position(source, document, locus, *position)
+        }
+        SemanticEdit::ResizeOverlay { position, scale } => {
+            apply_resize_overlay(source, document, locus, *position, *scale)
+        }
     }
 }
 
@@ -83,7 +96,7 @@ fn apply_title(
     opacity: Option<u8>,
 ) -> Result<String, EngineError> {
     if let Some(inv) = find_title(document, locus) {
-        return splice_title(source, inv, text, at, duration, opacity);
+        return splice_title(source, inv, "title", text, at, duration, opacity);
     }
     if matches!(
         locus.kind,
@@ -102,6 +115,7 @@ fn apply_title(
 fn splice_title(
     source: &str,
     inv: &Invocation,
+    word: &str,
     text: Option<&String>,
     at: Option<Time>,
     duration: Option<Time>,
@@ -110,17 +124,20 @@ fn splice_title(
     let mut splices = Vec::new();
     if let Some(text) = text {
         let span = string_arg_span(inv)
-            .ok_or_else(|| EngineError::Edit("title has no string argument".into()))?;
+            .ok_or_else(|| EngineError::Edit(format!("{word} has no string argument")))?;
         splices.push((span, quote_vel_string(text)));
     }
     if let Some(at) = at {
         let span = modifier_value_span(inv, "at")
-            .ok_or_else(|| EngineError::Edit("title has no `at` modifier".into()))?;
+            .ok_or_else(|| EngineError::Edit(format!("{word} has no `at` modifier")))?;
         splices.push((span, at.to_string()));
     }
     if let Some(duration) = duration {
+        if duration < Time::ZERO {
+            return Err(EngineError::Edit("duration must not be negative".into()));
+        }
         let span = modifier_value_span(inv, "for")
-            .ok_or_else(|| EngineError::Edit("title has no `for` modifier".into()))?;
+            .ok_or_else(|| EngineError::Edit(format!("{word} has no `for` modifier")))?;
         splices.push((span, duration.to_string()));
     }
     if let Some(opacity) = opacity {
@@ -135,9 +152,9 @@ fn splice_title(
             );
             splices.push((insert_at, format!("    opacity {opacity}\n  ")));
         } else {
-            return Err(EngineError::Edit(
-                "title has no body to attach opacity".into(),
-            ));
+            return Err(EngineError::Edit(format!(
+                "{word} has no body to attach opacity"
+            )));
         }
     }
     Ok(apply_splices(source, splices))
@@ -425,6 +442,244 @@ fn apply_fade(
     ))
 }
 
+fn apply_callout(
+    source: &str,
+    document: &Document,
+    locus: &Locus,
+    at: Option<Time>,
+    duration: Option<Time>,
+) -> Result<String, EngineError> {
+    if at.is_none() && duration.is_none() {
+        return Err(EngineError::Edit("callout edit has no fields".into()));
+    }
+    if duration.is_some_and(|time| time < Time::ZERO) {
+        return Err(EngineError::Edit("duration must not be negative".into()));
+    }
+    let inv = find_invocation(document, locus, "callout").ok_or_else(|| {
+        EngineError::Edit("callout locus did not match a callout invocation".into())
+    })?;
+    splice_title(source, inv, "callout", None, at, duration, None)
+}
+
+fn apply_position(
+    source: &str,
+    document: &Document,
+    locus: &Locus,
+    position: NormalizedPosition,
+) -> Result<String, EngineError> {
+    let word = match locus.kind {
+        LocusKind::Title => "title",
+        LocusKind::Callout => "callout",
+        _ => {
+            return Err(EngineError::Edit(
+                "canvas position needs a title or callout locus".into(),
+            ));
+        }
+    };
+    let inv = find_invocation(document, locus, word).ok_or_else(|| {
+        EngineError::Edit(format!("{word} locus did not match its source invocation"))
+    })?;
+    let replacement = format_position(position);
+    if let Some(span) = position_arg_span(inv) {
+        return Ok(apply_splices(source, vec![(span, replacement)]));
+    }
+    let body = inv
+        .body
+        .as_ref()
+        .ok_or_else(|| EngineError::Edit(format!("{word} has no body to attach position")))?;
+    let insert_at = Span::new(
+        body.span.end.saturating_sub(1),
+        body.span.end.saturating_sub(1),
+        body.span.line,
+        body.span.column,
+    );
+    Ok(apply_splices(
+        source,
+        vec![(insert_at, format!("    position {replacement}\n  "))],
+    ))
+}
+
+fn apply_resize_overlay(
+    source: &str,
+    document: &Document,
+    locus: &Locus,
+    position: NormalizedPosition,
+    scale: NormalizedScale,
+) -> Result<String, EngineError> {
+    let (word, inv) = visual_invocation(document, locus)?;
+    let mut splices = Vec::new();
+    let mut insert = String::new();
+    let position = format_position(position);
+    if let Some(span) = position_arg_span(inv) {
+        splices.push((span, position));
+    } else {
+        insert.push_str("    position ");
+        insert.push_str(&position);
+        insert.push('\n');
+    }
+    let scale = format_scale(scale);
+    if let Some(span) = scale_arg_span(inv) {
+        splices.push((span, scale));
+    } else {
+        insert.push_str("    scale ");
+        insert.push_str(&scale);
+        insert.push('\n');
+    }
+    if !insert.is_empty() {
+        let body = inv
+            .body
+            .as_ref()
+            .ok_or_else(|| EngineError::Edit(format!("{word} has no body to attach resize")))?;
+        let insert_at = Span::new(
+            body.span.end.saturating_sub(1),
+            body.span.end.saturating_sub(1),
+            body.span.line,
+            body.span.column,
+        );
+        insert.push_str("  ");
+        splices.push((insert_at, insert));
+    }
+    Ok(apply_splices(source, splices))
+}
+
+fn visual_invocation<'a>(
+    document: &'a Document,
+    locus: &Locus,
+) -> Result<(&'static str, &'a Invocation), EngineError> {
+    let word = match locus.kind {
+        LocusKind::Title => "title",
+        LocusKind::Callout => "callout",
+        _ => {
+            return Err(EngineError::Edit(
+                "canvas resize needs a title or callout locus".into(),
+            ));
+        }
+    };
+    let inv = find_invocation(document, locus, word).ok_or_else(|| {
+        EngineError::Edit(format!("{word} locus did not match its source invocation"))
+    })?;
+    Ok((word, inv))
+}
+
+fn apply_reorder(
+    source: &str,
+    document: &Document,
+    locus: &Locus,
+    before: Option<&str>,
+) -> Result<String, EngineError> {
+    let scene_name = scene_name_of(locus)
+        .ok_or_else(|| EngineError::Edit("reorder needs a scene identity".into()))?;
+    let Item::Sequence { body, .. } = find_sequence_for(document, &scene_name)
+        .ok_or_else(|| EngineError::Edit("reorder target is not in a sequence".into()))?
+    else {
+        return Err(EngineError::Edit("reorder expected a sequence".into()));
+    };
+    let refs: Vec<(&str, Span)> = body
+        .items
+        .iter()
+        .filter_map(|item| match item {
+            Item::Invocation(inv) if inv.args.is_empty() => Some((inv.name.as_str(), inv.span)),
+            _ => None,
+        })
+        .collect();
+    if refs.is_empty() {
+        return Err(EngineError::Edit(
+            "sequence has no scenes to reorder".into(),
+        ));
+    }
+    let from = refs
+        .iter()
+        .position(|(name, _)| *name == scene_name)
+        .ok_or_else(|| EngineError::Edit(format!("scene `{scene_name}` is not in the sequence")))?;
+    let mut names: Vec<&str> = refs.iter().map(|(name, _)| *name).collect();
+    let moved = names.remove(from);
+    let insert_at = match before {
+        Some(target) => names
+            .iter()
+            .position(|name| *name == target)
+            .ok_or_else(|| EngineError::Edit(format!("reorder before unknown scene `{target}`")))?,
+        None => names.len(),
+    };
+    names.insert(insert_at, moved);
+    let original: Vec<&str> = refs.iter().map(|(name, _)| *name).collect();
+    if names == original {
+        return Err(EngineError::Edit(
+            "reorder does not change scene order".into(),
+        ));
+    }
+    let first = refs.first().expect("refs non-empty").1;
+    let last = refs.last().expect("refs non-empty").1;
+    let start = first.start as usize;
+    let indent = source[..start.min(source.len())]
+        .chars()
+        .rev()
+        .take_while(|ch| *ch == ' ')
+        .count();
+    let indent_str = " ".repeat(indent);
+    let mut replacement = String::new();
+    for (i, name) in names.iter().enumerate() {
+        if i > 0 {
+            replacement.push('\n');
+            replacement.push_str(&indent_str);
+        }
+        replacement.push_str(name);
+    }
+    Ok(apply_splices(
+        source,
+        vec![(
+            Span::new(first.start, last.end, first.line, first.column),
+            replacement,
+        )],
+    ))
+}
+
+fn scene_name_of(locus: &Locus) -> Option<String> {
+    if locus.kind == LocusKind::Scene {
+        return Some(locus.label.clone());
+    }
+    if let Some(id) = &locus.scene_id {
+        if let Some(name) = id.strip_prefix("scene:") {
+            return Some(name.to_string());
+        }
+        return Some(id.clone());
+    }
+    if let Some(name) = locus.node_id.strip_prefix("scene:") {
+        return Some(name.to_string());
+    }
+    None
+}
+
+fn find_sequence_for<'a>(document: &'a Document, scene_name: &str) -> Option<&'a Item> {
+    walk_items(&document.items).find(|item| {
+        let Item::Sequence { body, .. } = item else {
+            return false;
+        };
+        body.items.iter().any(|inner| {
+            matches!(inner, Item::Invocation(inv) if inv.args.is_empty() && inv.name == scene_name)
+        })
+    })
+}
+
+fn find_invocation<'a>(
+    document: &'a Document,
+    locus: &Locus,
+    name: &str,
+) -> Option<&'a Invocation> {
+    let want = locus.source_span?;
+    for item in walk_items(&document.items) {
+        let Item::Invocation(inv) = item else {
+            continue;
+        };
+        if inv.name != name {
+            continue;
+        }
+        if inv.span.start == want.start && inv.span.end == want.end {
+            return Some(inv);
+        }
+    }
+    None
+}
+
 fn primary_source_name<'a>(body: &'a lattice_vel::Block, locus: &Locus) -> Option<&'a str> {
     if locus.kind == LocusKind::Source {
         for item in &body.items {
@@ -587,6 +842,52 @@ fn opacity_arg_span(inv: &Invocation) -> Option<Span> {
         }
     }
     None
+}
+
+fn position_arg_span(inv: &Invocation) -> Option<Span> {
+    let body = inv.body.as_ref()?;
+    body.items.iter().find_map(|item| match item {
+        Item::Invocation(inner) if inner.name == "position" => inner.args.first().map(Expr::span),
+        _ => None,
+    })
+}
+
+fn scale_arg_span(inv: &Invocation) -> Option<Span> {
+    let body = inv.body.as_ref()?;
+    body.items.iter().find_map(|item| match item {
+        Item::Invocation(inner) if inner.name == "scale" => inner.args.first().map(Expr::span),
+        _ => None,
+    })
+}
+
+fn format_position(position: NormalizedPosition) -> String {
+    format!(
+        "({}, {})",
+        format_percent(position.x),
+        format_percent(position.y)
+    )
+}
+
+fn format_percent(basis_points: u16) -> String {
+    let whole = basis_points / 100;
+    let fraction = basis_points % 100;
+    if fraction == 0 {
+        format!("{whole}%")
+    } else if fraction.is_multiple_of(10) {
+        format!("{whole}.{}%", fraction / 10)
+    } else {
+        format!("{whole}.{fraction:02}%")
+    }
+}
+
+fn format_scale(scale: NormalizedScale) -> String {
+    let whole = scale.milli / 10;
+    let fraction = scale.milli % 10;
+    if fraction == 0 {
+        format!("{whole}%")
+    } else {
+        format!("{whole}.{fraction}%")
+    }
 }
 
 fn quote_vel_string(text: &str) -> String {
