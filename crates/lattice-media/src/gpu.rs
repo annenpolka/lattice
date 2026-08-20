@@ -1251,9 +1251,11 @@ mod tests {
     use std::path::Path;
 
     use super::*;
+    #[cfg(windows)]
+    use lattice_core::ImageNode;
     use lattice_core::{
-        AssetRef, EffectNode, FontSpec, ImageNode, MaskNode, MediaLocator, NodeProps, ShapeKind,
-        ShapeNode, TimeMap, VideoNode,
+        AssetRef, EffectNode, FontSpec, MaskNode, MediaLocator, NodeProps, ShapeKind, ShapeNode,
+        TimeMap, VideoNode,
     };
 
     struct GradientDecoder {
