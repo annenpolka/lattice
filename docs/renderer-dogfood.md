@@ -31,6 +31,16 @@ The successful JSON renderer report must contain `requested=require_gpu_dx12`, `
 
 ## Reproducible runs
 
+Strict CPU/DX12 pixel conformance is an explicit hardware gate. Ordinary workspace CI does not opportunistically run it against an arbitrary GitHub-hosted adapter:
+
+```powershell
+$env:LATTICE_REQUIRE_DX12_TESTS = "1"
+$env:LATTICE_DX12_ADAPTER = "NVIDIA"
+cargo test -p lattice-media gpu::tests::dx12_ --offline -- --nocapture
+```
+
+Change the adapter filter to `AMD` (or another vendor substring) to record each hardware row. When the gate is enabled, a missing/mismatched adapter or any initialization/render/conformance failure fails the test; there is no CPU fallback.
+
 Short debug Studio smoke:
 
 ```powershell

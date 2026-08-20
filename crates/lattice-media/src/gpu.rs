@@ -1724,19 +1724,18 @@ mod tests {
     fn dx12_hardware_test_compositor_with_font(
         font: Option<FontResolution>,
     ) -> Option<GpuCompositor> {
+        let explicitly_required =
+            std::env::var("LATTICE_REQUIRE_DX12_TESTS").ok().as_deref() == Some("1");
+        if !explicitly_required {
+            eprintln!(
+                "DX12 conformance soft-skip: set LATTICE_REQUIRE_DX12_TESTS=1 to run the \
+                 explicit hardware gate"
+            );
+            return None;
+        }
         match GpuCompositor::new_dx12(font) {
             Ok(gpu) => Some(gpu),
-            Err(error) => {
-                let explicitly_required = std::env::var_os("LATTICE_REQUIRE_DX12_TESTS").is_some();
-                if matches!(&error, RendererInitError::Unavailable { .. }) && !explicitly_required {
-                    eprintln!(
-                        "DX12 conformance soft-skip: {error}; set \
-                         LATTICE_REQUIRE_DX12_TESTS=1 to make missing hardware fail"
-                    );
-                    return None;
-                }
-                panic!("DX12 conformance gate failed: {error}");
-            }
+            Err(error) => panic!("DX12 conformance gate failed: {error}"),
         }
     }
 
