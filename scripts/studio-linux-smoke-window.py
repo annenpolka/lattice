@@ -151,15 +151,14 @@ def identify(
         raise IdentifyError("root _NET_CLIENT_LIST is empty")
 
     windows: dict[int, tuple[int | None, dict]] = {}
-    errors: list[str] = []
     for wid in client_ids:
         p_code, p_out, p_err = runner(["xprop", "-id", str(wid), "_NET_WM_PID"])
         i_code, i_out, i_err = runner(["xwininfo", "-id", str(wid)])
         if p_code != 0 or i_code != 0:
-            errors.append(
-                f"{wid}: xprop={p_err.strip() or p_code} xwininfo={i_err.strip() or i_code}"
+            raise IdentifyError(
+                f"cannot prove uniqueness: probe failed for client {wid} "
+                f"(xprop={p_err.strip() or p_code} xwininfo={i_err.strip() or i_code})"
             )
-            continue
         windows[wid] = (parse_net_pid(p_out), parse_xwininfo(i_out))
 
     wid, info = select_unique_viewable(pid, client_ids, windows)
@@ -170,7 +169,10 @@ def identify(
 
     e_code, e_out, e_err = runner(["xprop", "-id", str(wid), "_NET_FRAME_EXTENTS"])
     if e_code != 0:
-        errors.append(f"extents {wid}: {e_err.strip() or e_code}")
+        print(
+            f"extents probe failed for {wid}: {e_err.strip() or e_code}",
+            file=sys.stderr,
+        )
     left, right, top, bottom = parse_frame_extents(e_out if e_code == 0 else "")
 
     c_code, c_out, _c_err = runner(["xprop", "-id", str(wid), "WM_CLASS"])
@@ -197,8 +199,6 @@ def identify(
         "display": display,
         "mapped": True,
     }
-    if errors:
-        payload["probe_errors"] = errors
     return payload
 
 
@@ -363,6 +363,30 @@ def self_test() -> None:
         assert "changed" in str(exc)
     else:
         raise AssertionError("XID change must fail")
+
+    probe_fail = dict(replies)
+    probe_fail[("xprop", "-root", "_NET_CLIENT_LIST")] = (
+        0,
+        "_NET_CLIENT_LIST(WINDOW): window id # 0x1a00007, 0x1a0000c\n",
+        "",
+    )
+    probe_fail[("xprop", "-id", "27262988", "_NET_WM_PID")] = (
+        1,
+        "",
+        "xprop: error: No such window",
+    )
+    probe_fail[("xwininfo", "-id", "27262988")] = (1, "", "xwininfo: error")
+
+    def failing_runner(cmd: list[str]) -> tuple[int, str, str]:
+        return probe_fail[tuple(cmd)]
+
+    try:
+        identify(23500, ":1", runner=failing_runner)
+    except IdentifyError as exc:
+        assert "cannot prove uniqueness" in str(exc)
+        assert "27262988" in str(exc)
+    else:
+        raise AssertionError("unprobed sibling client must fail-closed")
 
     suffix = (
         'semantic_state {"reason":"timeline-pointer-begin","playhead":"0.80s"}\n'
