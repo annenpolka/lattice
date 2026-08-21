@@ -1,13 +1,18 @@
 #!/usr/bin/env bash
 # Agent/Linux Studio smoke. Not a product Linux target and not CHI-63.
 #
-# Builds lattice-studio, launches a deterministic --ui-fixture window with
-# preview/audio detached, waits for the durable log, screenshots DISPLAY,
-# and optionally injects one click plus one scrub-style drag via xdotool.
+# Demonstrated CHI-64 path: an existing X11 session (Cursor Cloud XFCE is
+# DISPLAY=:1). Xvfb is an explicit fallback, not that path.
 #
-#   ./scripts/studio-linux-smoke.sh
-#   ./scripts/studio-linux-smoke.sh --fixture drag-valid
-#   ./scripts/studio-linux-smoke.sh --no-interact
+# Builds lattice-studio, launches --ui-fixture with preview/audio detached,
+# waits for open_window ok / first paint, captures the identified Studio
+# window (not ${DISPLAY}.0), asserts nonblank pixels, then optionally
+# clicks Play and scrub-drags using widget bounds logged by Studio.
+#
+#   DISPLAY=:1 ./scripts/studio-linux-smoke.sh
+#   DISPLAY=:1 ./scripts/studio-linux-smoke.sh --fixture drag-valid
+#   DISPLAY=:1 ./scripts/studio-linux-smoke.sh --no-interact
+#   ./scripts/studio-linux-smoke.sh --allow-xvfb   # labeled fallback only
 #
 # Windows dogfood remains scripts/studio-smoke.ps1 / studio-debug.ps1.
 
@@ -19,24 +24,27 @@ cd "$Root"
 Fixture="timeline-basic"
 Interact=1
 Release=0
-SmokeMs=20000
+SmokeMs=25000
 WaitSeconds=0
+AllowXvfb=0
 
 usage() {
   cat <<'EOF'
 Usage: ./scripts/studio-linux-smoke.sh [options]
 
   --fixture NAME   timeline-basic | drag-valid | drag-invalid | dense-project
-  --no-interact    skip xdotool click/drag (still requires a visible window)
+  --no-interact    skip OS click/drag (still requires a visible nonblank window)
+  --allow-xvfb     start Xvfb if DISPLAY is unset (not the CHI-64 demonstrated path)
   --release        cargo build --release
-  --smoke-ms N     LATTICE_STUDIO_SMOKE_MS watchdog (default 20000)
-  --wait-seconds N process wait budget (default smoke-ms/1000 + 15)
+  --smoke-ms N     LATTICE_STUDIO_SMOKE_MS watchdog (default 25000)
+  --wait-seconds N process wait budget (default smoke-ms/1000 + 20)
   -h, --help       show this help
 
 Environment:
-  DISPLAY must already be an X11 session, or Xvfb will be started.
+  Demonstrated path: an existing X11 DISPLAY (Cursor Cloud XFCE = :1).
   LATTICE_STUDIO_PREVIEW=0 and LATTICE_STUDIO_AUDIO_MONITOR=0 are forced.
   Software Vulkan (lavapipe) is selected when its ICD is present.
+  PREVIEW=0 does not skip GPUI/Blade GPU init. NoSupportedDeviceFound is fatal.
 EOF
 }
 
@@ -48,6 +56,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --no-interact)
       Interact=0
+      shift
+      ;;
+    --allow-xvfb)
+      AllowXvfb=1
       shift
       ;;
     --release)
@@ -97,9 +109,14 @@ fi
 exe="$target_root/$profile/lattice-studio"
 [[ -x "$exe" ]] || fail "missing $exe"
 
+display_path="existing-x11"
 if [[ -z "${DISPLAY:-}" ]]; then
-  echo "DISPLAY unset; starting Xvfb :99"
+  if [[ "$AllowXvfb" -ne 1 ]]; then
+    fail "DISPLAY is unset. Demonstrated CHI-64 path is an existing X11 session (DISPLAY=:1 on Cursor Cloud). Pass --allow-xvfb only for a labeled Xvfb fallback."
+  fi
+  echo "DISPLAY unset; starting Xvfb :99 (CHI-64 fallback, not the demonstrated DISPLAY=:1 path)"
   export DISPLAY=:99
+  display_path="xvfb-fallback"
   Xvfb :99 -screen 0 1920x1200x24 >/tmp/lattice-studio-xvfb.log 2>&1 &
   xvfb_pid=$!
   trap 'kill "$xvfb_pid" 2>/dev/null || true' EXIT
@@ -135,10 +152,13 @@ log="$out/studio-linux-smoke-$stamp.log"
 stdout="$out/studio-linux-smoke-$stamp.stdout.log"
 stderr="$out/studio-linux-smoke-$stamp.stderr.log"
 state="$out/studio-linux-smoke-$stamp.state.json"
+geom="$out/studio-linux-smoke-$stamp.geom.json"
 shot="$out/studio-linux-smoke-$stamp.png"
+shot_after="$out/studio-linux-smoke-$stamp-after.png"
 
 export LATTICE_STUDIO_LOG="$log"
 export LATTICE_STUDIO_STATE="$state"
+export LATTICE_STUDIO_GEOM="$geom"
 export LATTICE_STUDIO_PREVIEW=0
 export LATTICE_STUDIO_AUDIO_MONITOR=0
 export LATTICE_STUDIO_AUTOPLAY=0
@@ -147,21 +167,22 @@ export LATTICE_STUDIO_RENDERER="${LATTICE_STUDIO_RENDERER:-cpu}"
 export RUST_BACKTRACE="${RUST_BACKTRACE:-1}"
 
 {
-  echo "==== studio-linux-smoke $(date -Iseconds) fixture=$Fixture preview=off audio=off display=${DISPLAY} vulkan=${VK_ICD_FILENAMES:-default} ===="
+  echo "==== studio-linux-smoke $(date -Iseconds) fixture=$Fixture preview=off audio=off display=${DISPLAY} path=${display_path} vulkan=${VK_ICD_FILENAMES:-default} ===="
 } >>"$log"
 
 echo "starting $exe --ui-fixture $Fixture"
-echo "  log   $log"
-echo "  state $state"
-echo "  shot  $shot"
-echo "  display $DISPLAY"
+echo "  log    $log"
+echo "  state  $state"
+echo "  geom   $geom"
+echo "  shot   $shot"
+echo "  display $DISPLAY ($display_path)"
 
 "$exe" --ui-fixture "$Fixture" >"$stdout" 2>"$stderr" &
 pid=$!
 echo "pid $pid"
 
 if [[ "$WaitSeconds" -le 0 ]]; then
-  WaitSeconds=$((SmokeMs / 1000 + 15))
+  WaitSeconds=$((SmokeMs / 1000 + 20))
 fi
 
 ready=0
@@ -177,54 +198,218 @@ while (( SECONDS < deadline )); do
     tail -n 80 "$log" 2>/dev/null || true
     echo "----- stderr -----"
     tail -n 80 "$stderr" 2>/dev/null || true
+    if grep -Eq 'NoSupportedDeviceFound|panicked at' "$log" "$stderr" 2>/dev/null; then
+      fail "lattice-studio died during GPU/window init (NoSupportedDeviceFound is not hidden)"
+    fi
     fail "lattice-studio exited before the window became ready"
   fi
   sleep 0.25
 done
 if [[ "$ready" -ne 1 ]]; then
   kill "$pid" 2>/dev/null || true
-  fail "timed out waiting for open_window ok / first paint"
+  fail "timed out waiting for open_window ok / first paint on DISPLAY=$DISPLAY ($display_path)"
 fi
 
-if ! command -v ffmpeg >/dev/null; then
-  fail "ffmpeg is required to capture the DISPLAY screenshot"
-fi
-size="$(xdpyinfo | awk '/dimensions:/ { print $2; exit }')"
-[[ -n "$size" ]] || fail "could not read X11 dimensions from DISPLAY=$DISPLAY"
-ffmpeg -y -hide_banner -loglevel error -f x11grab -video_size "$size" -i "${DISPLAY}.0" -frames:v 1 "$shot"
-[[ -s "$shot" ]] || fail "screenshot was not written: $shot"
-echo "screenshot $shot ($(wc -c <"$shot") bytes)"
+command -v xdotool >/dev/null || fail "xdotool is required to identify the Studio window"
+command -v ffmpeg >/dev/null || fail "ffmpeg is required to capture the Studio window"
+command -v python3 >/dev/null || fail "python3 is required to assert nonblank pixels"
+
+win=""
+for _ in $(seq 1 40); do
+  win="$(xdotool search --name 'Lattice Studio' 2>/dev/null | head -n 1 || true)"
+  if [[ -n "$win" ]]; then
+    break
+  fi
+  sleep 0.25
+done
+[[ -n "$win" ]] || fail "xdotool could not find a Lattice Studio window"
+xdotool windowactivate --sync "$win"
+eval "$(xdotool getwindowgeometry --shell "$win")"
+[[ "${WIDTH:-0}" -gt 200 && "${HEIGHT:-0}" -gt 200 ]] || fail "Studio window geometry is implausible: ${WIDTH:-?}x${HEIGHT:-?}"
+echo "window id=$win x=${X} y=${Y} ${WIDTH}x${HEIGHT}"
+printf '%s\n' "{\"id\":\"$win\",\"x\":$X,\"y\":$Y,\"w\":$WIDTH,\"h\":$HEIGHT,\"display\":\"$DISPLAY\"}" >"$out/studio-linux-smoke-$stamp.window.json"
+
+capture_window() {
+  local dest="$1"
+  ffmpeg -y -hide_banner -loglevel error \
+    -f x11grab -video_size "${WIDTH}x${HEIGHT}" -i "${DISPLAY}+${X},${Y}" \
+    -frames:v 1 "$dest"
+  [[ -s "$dest" ]] || fail "screenshot was not written: $dest"
+}
+
+assert_nonblank() {
+  local dest="$1"
+  python3 - "$dest" <<'PY'
+import struct, sys, zlib
+from pathlib import Path
+
+path = Path(sys.argv[1])
+data = path.read_bytes()
+if data[:8] != b"\x89PNG\r\n\x1a\n":
+    raise SystemExit(f"not a PNG: {path}")
+pos = 8
+width = height = None
+rows = []
+while pos + 8 <= len(data):
+    length, ctype = struct.unpack(">I4s", data[pos : pos + 8])
+    chunk = data[pos + 8 : pos + 8 + length]
+    pos += 12 + length
+    if ctype == b"IHDR":
+        width, height, bit, color, *_ = struct.unpack(">IIBBBBB", chunk)
+        if bit != 8 or color not in (2, 6):
+            raise SystemExit(f"unsupported PNG {width}x{height} bit={bit} color={color}")
+    elif ctype == b"IDAT":
+        rows.append(chunk)
+    elif ctype == b"IEND":
+        break
+raw = zlib.decompress(b"".join(rows))
+bpp = 3 if color == 2 else 4
+stride = 1 + width * bpp
+if len(raw) < stride * height:
+    raise SystemExit(f"truncated PNG payload {len(raw)}")
+colors = {}
+dark = bright = 0
+total = width * height
+for y in range(height):
+    row = raw[y * stride + 1 : (y + 1) * stride]
+    for x in range(width):
+        r, g, b = row[x * bpp : x * bpp + 3]
+        key = (r >> 4, g >> 4, b >> 4)
+        colors[key] = colors.get(key, 0) + 1
+        luma = (int(r) + int(g) + int(b)) / 3
+        if luma < 24:
+            dark += 1
+        if luma > 80:
+            bright += 1
+unique = len(colors)
+top = max(colors.values()) / total
+if unique < 8:
+    raise SystemExit(f"blank/flat capture: {unique} quantized colors in {width}x{height}")
+if top > 0.97:
+    raise SystemExit(f"near-solid capture: dominant color occupies {top:.3f} of {width}x{height}")
+if dark < total * 0.05 or bright < total * 0.01:
+    raise SystemExit(
+        f"missing Studio contrast: dark={dark} bright={bright} unique={unique} {width}x{height}"
+    )
+print(f"nonblank {path} {width}x{height} unique={unique} dark={dark} bright={bright}")
+PY
+}
+
+capture_window "$shot"
+echo "screenshot $shot ($(wc -c <"$shot") bytes) window=${WIDTH}x${HEIGHT}+${X}+${Y}"
+assert_nonblank "$shot"
+
+json_field() {
+  python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get(sys.argv[2],""))' "$1" "$2"
+}
+
+wait_log() {
+  local pattern="$1"
+  local label="$2"
+  local budget="${3:-8}"
+  local until=$((SECONDS + budget))
+  while (( SECONDS < until )); do
+    if [[ -f "$log" ]] && grep -q "$pattern" "$log"; then
+      return 0
+    fi
+    if ! kill -0 "$pid" 2>/dev/null; then
+      fail "Studio exited while waiting for $label"
+    fi
+    sleep 0.1
+  done
+  fail "missing $label"
+}
 
 if [[ "$Interact" -eq 1 ]]; then
-  command -v xdotool >/dev/null || fail "xdotool is required for --interact (pass --no-interact to skip)"
-  win=""
-  for _ in $(seq 1 40); do
-    win="$(xdotool search --name 'Lattice Studio' 2>/dev/null | head -n 1 || true)"
-    if [[ -n "$win" ]]; then
+  geom_deadline=$((SECONDS + 8))
+  while (( SECONDS < geom_deadline )) && [[ ! -s "$geom" ]]; do
+    sleep 0.1
+  done
+  [[ -s "$geom" ]] || fail "Studio did not write smoke_geom widget bounds ($geom)"
+
+  play_cx="$(python3 - "$geom" "$X" "$Y" <<'PY'
+import json,sys
+g=json.load(open(sys.argv[1]))
+ox,oy=int(sys.argv[2]),int(sys.argv[3])
+p=g["play"]
+print(int(ox+p["x"]+p["w"]/2), int(oy+p["y"]+p["h"]/2))
+PY
+)"
+  read -r play_x play_y <<<"$play_cx"
+  [[ "$play_x" -ge "$X" && "$play_x" -le $((X + WIDTH)) ]] || fail "Play coord $play_x is outside window X"
+  [[ "$play_y" -ge "$Y" && "$play_y" -le $((Y + HEIGHT)) ]] || fail "Play coord $play_y is outside window Y"
+  echo "click Play at ${play_x},${play_y} (from smoke_geom + verified window origin)"
+  xdotool mousemove --sync "$play_x" "$play_y" click 1
+  wait_log 'semantic_state .*\"reason\":\"play\"' "standalone Play click (reason=play)" 6
+  before_playhead="$(json_field "$state" "playhead")"
+  before_locus="$(python3 -c 'import json,sys; s=json.load(open(sys.argv[1])); print((s.get("locus") or {}).get("id",""))' "$state")"
+  echo "after Play: playhead=$before_playhead locus=$before_locus"
+
+  drag="$(python3 - "$geom" "$X" "$Y" <<'PY'
+import json,sys
+g=json.load(open(sys.argv[1]))
+ox,oy=int(sys.argv[2]),int(sys.argv[3])
+ruler=g.get("ruler")
+if not ruler:
+    raise SystemExit("no ruler bounds in smoke_geom")
+x0=int(ox+ruler["x"]+ruler["w"]*0.20)
+x1=int(ox+ruler["x"]+ruler["w"]*0.80)
+y=int(oy+ruler["y"]+ruler["h"]/2)
+print(x0, y, x1)
+PY
+)"
+  read -r from_x rail_y to_x <<<"$drag"
+  [[ "$from_x" -ge "$X" && "$to_x" -le $((X + WIDTH)) ]] || fail "scrub X outside verified window"
+  [[ "$rail_y" -ge "$Y" && "$rail_y" -le $((Y + HEIGHT)) ]] || fail "scrub Y outside verified window"
+  echo "scrub-drag ${from_x},${rail_y} -> ${to_x},${rail_y} (ruler, verified client bounds)"
+  xdotool mousemove --sync "$from_x" "$rail_y" mousedown 1
+  sleep 0.15
+  xdotool mousemove --sync "$to_x" "$rail_y"
+  sleep 0.15
+  xdotool mouseup 1
+  wait_log 'semantic_state .*\"reason\":\"timeline-pointer-begin\"' "in-flight timeline-pointer-begin" 6
+  wait_log 'semantic_state .*\"reason\":\"timeline-pointer-commit\"' "timeline-pointer-commit" 6
+  after_playhead="$(json_field "$state" "playhead")"
+  echo "after scrub: playhead=$after_playhead"
+  if [[ "$after_playhead" == "$before_playhead" ]]; then
+    fail "playhead did not change after verified-ruler scrub ($before_playhead)"
+  fi
+
+  clip="$(python3 - "$geom" "$X" "$Y" <<'PY'
+import json,sys
+g=json.load(open(sys.argv[1]))
+ox,oy=int(sys.argv[2]),int(sys.argv[3])
+tracks=g.get("tracks") or []
+track=next((t for t in tracks if t.get("name")=="Video"), tracks[0] if tracks else None)
+if track is None:
+    raise SystemExit("no timeline track bounds in smoke_geom")
+print(int(ox+track["x"]+track["w"]*0.55), int(oy+track["y"]+track["h"]/2), track["name"])
+PY
+)"
+  read -r clip_x clip_y track_name <<<"$clip"
+  [[ "$clip_x" -ge "$X" && "$clip_x" -le $((X + WIDTH)) ]] || fail "clip click X outside window"
+  [[ "$clip_y" -ge "$Y" && "$clip_y" -le $((Y + HEIGHT)) ]] || fail "clip click Y outside window"
+  echo "click $track_name clip at ${clip_x},${clip_y} (locus transition)"
+  xdotool mousemove --sync "$clip_x" "$clip_y" click 1
+  after_locus="$before_locus"
+  locus_deadline=$((SECONDS + 6))
+  while (( SECONDS < locus_deadline )); do
+    after_locus="$(python3 -c 'import json,sys; s=json.load(open(sys.argv[1])); print((s.get("locus") or {}).get("id",""))' "$state")"
+    if [[ -n "$after_locus" && "$after_locus" != "$before_locus" ]]; then
       break
     fi
-    sleep 0.25
+    sleep 0.1
   done
-  [[ -n "$win" ]] || fail "xdotool could not find a Lattice Studio window"
-  xdotool windowactivate --sync "$win"
-  eval "$(xdotool getwindowgeometry --shell "$win")"
-  echo "window id=$win x=${X} y=${Y} ${WIDTH}x${HEIGHT}"
-  # Toolbar Play sits on the first row, right of the CPU/DX12 toggles.
-  click_x=$((X + WIDTH * 72 / 100))
-  click_y=$((Y + HEIGHT * 8 / 100))
-  echo "click play-ish ${click_x},${click_y}"
-  xdotool mousemove --sync "$click_x" "$click_y" click 1
-  sleep 0.3
-  # Timeline rail is TIMELINE_WIDTH (640) plus a 64px label, left-aligned
-  # in the bottom bar — not the full 1400px window.
-  from_x=$((X + 120))
-  to_x=$((X + 520))
-  rail_y=$((Y + HEIGHT * 92 / 100))
-  echo "scrub-drag ${from_x},${rail_y} -> ${to_x},${rail_y}"
-  xdotool mousemove --sync "$from_x" "$rail_y" mousedown 1
-  xdotool mousemove --sync "$to_x" "$rail_y"
-  xdotool mouseup 1
-  sleep 0.5
+  echo "after clip click: locus=$after_locus (was $before_locus)"
+  if [[ -z "$after_locus" ]]; then
+    fail "locus missing after timeline clip click"
+  fi
+  if [[ "$after_locus" == "$before_locus" ]]; then
+    fail "locus did not transition after verified Video-track click ($after_locus)"
+  fi
+  capture_window "$shot_after"
+  assert_nonblank "$shot_after"
+  echo "after-screenshot $shot_after"
 fi
 
 deadline=$((SECONDS + WaitSeconds))
@@ -242,11 +427,14 @@ wait "$pid" || true
 
 echo ""
 echo "----- studio log tail -----"
-tail -n 40 "$log" || true
+tail -n 60 "$log" || true
 
 log_text="$(cat "$log")"
-if grep -Eq 'PANIC|panicked at|fatal runtime error' <<<"$log_text"; then
-  fail "Studio log contains a panic or fatal runtime error"
+if grep -Eq 'PANIC|panicked at|fatal runtime error|NoSupportedDeviceFound' <<<"$log_text"; then
+  fail "Studio log contains a panic, fatal runtime error, or NoSupportedDeviceFound"
+fi
+if grep -q "semantic_state write failed" <<<"$log_text"; then
+  fail "LATTICE_STUDIO_STATE write failed"
 fi
 if ! grep -q "open_window ok" <<<"$log_text"; then
   fail "missing open_window ok"
@@ -260,13 +448,21 @@ fi
 if ! grep -q 'semantic_state .*\"reason\":\"first-paint\"' <<<"$log_text"; then
   fail "missing semantic_state reason=first-paint"
 fi
-if [[ "$Interact" -eq 1 ]] && ! grep -q 'semantic_state .*\"reason\":\"timeline-pointer-commit\"' <<<"$log_text"; then
-  echo "WARN: no timeline-pointer-commit semantic_state (xdotool may have missed the ruler)"
+if [[ "$Interact" -eq 1 ]]; then
+  if ! grep -q 'semantic_state .*\"reason\":\"play\"' <<<"$log_text"; then
+    fail "missing standalone Play click effect (reason=play)"
+  fi
+  if ! grep -q 'semantic_state .*\"reason\":\"timeline-pointer-begin\"' <<<"$log_text"; then
+    fail "missing in-flight timeline-pointer-begin"
+  fi
+  if ! grep -q 'semantic_state .*\"reason\":\"timeline-pointer-commit\"' <<<"$log_text"; then
+    fail "missing timeline-pointer-commit"
+  fi
 fi
 if ! grep -q "smoke quit" <<<"$log_text"; then
   echo "WARN: missing smoke quit (process was stopped by the script after the window was observed)"
 fi
 
 echo ""
-echo "LINUX SMOKE OK fixture=$Fixture pid=$pid shot=$shot log=$log"
+echo "LINUX SMOKE OK fixture=$Fixture display=$DISPLAY path=$display_path pid=$pid shot=$shot log=$log"
 exit 0

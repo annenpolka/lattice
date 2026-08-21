@@ -36,7 +36,7 @@ use lattice_studio::audio::{
 };
 use lattice_studio::{
     CanvasPoint, CanvasRect, CanvasSize, CursorKind, PLAYBACK_TICK, PreviewInbox, ResizeCorner,
-    StudioSession, UiFixture, playback_target, trace, write_state_file,
+    StudioSession, UiFixture, playback_target, trace, write_geom_file, write_state_file,
 };
 
 #[cfg(test)]
@@ -73,6 +73,40 @@ mod launch_tests {
             parse_launch(args(&["/tmp/demo.vel"])).unwrap(),
             LaunchSpec::Vel(path) if path.ends_with("demo.vel")
         ));
+    }
+
+    #[test]
+    fn windows_vel_path_launch_stays_a_single_path() {
+        let windows_vel = parse_launch(args(&[r"C:\work\project\main.vel"])).unwrap();
+        match windows_vel {
+            LaunchSpec::Vel(path) => {
+                let text = path.to_string_lossy();
+                assert!(
+                    text.contains("main.vel"),
+                    "Windows VEL path must be preserved, got {text}"
+                );
+            }
+            other => panic!("expected Vel, got {other:?}"),
+        }
+        assert!(matches!(
+            parse_launch(args(&[])).unwrap(),
+            LaunchSpec::DefaultDemo
+        ));
+        assert!(
+            parse_launch(args(&[
+                "--ui-fixture",
+                "timeline-basic",
+                r"C:\work\project\main.vel"
+            ]))
+            .is_err(),
+            "Windows dogfood still passes a VEL path alone; fixture+path must stay rejected"
+        );
+        assert!(
+            parse_launch(args(&["--ui-fixture", "timeline-basic"]))
+                .unwrap()
+                .vel_path()
+                .is_ok()
+        );
     }
 }
 
@@ -125,6 +159,7 @@ fn main() -> ExitCode {
     ExitCode::SUCCESS
 }
 
+#[derive(Debug)]
 enum LaunchSpec {
     Help,
     DefaultDemo,
@@ -265,7 +300,9 @@ fn window_main(path: PathBuf, fixture: Option<String>) -> Result<(), Box<dyn std
     }
     initial["reason"] = serde_json::Value::String("open".into());
     trace::log(format!("semantic_state {initial}"));
-    write_state_file(&initial);
+    if let Err(err) = write_state_file(&initial) {
+        trace::log(format!("semantic_state write failed: {err}"));
+    }
     trace::log(format!(
         "open ok dirty={} playhead={:?} diagnostics={}",
         session.is_dirty(),
@@ -416,7 +453,12 @@ struct StudioView {
     preview_shown: bool,
     rail_geom: Arc<Mutex<(f32, f32)>>,
     track_geoms: Arc<Mutex<Vec<(String, f32, f32, f32, f32)>>>,
+    play_geom: Arc<Mutex<Option<(f32, f32, f32, f32)>>>,
+    ruler_geom: Arc<Mutex<Option<(f32, f32, f32, f32)>>>,
     canvas_geom: Arc<Mutex<Option<(f32, f32, f32, f32)>>>,
+    last_focused: Option<String>,
+    last_inflight_key: Option<String>,
+    geom_logged: bool,
     preview_dirty: bool,
     preview_slot: Arc<Mutex<PreviewSlot>>,
     preview_inbox: std::sync::Arc<PreviewInbox>,
@@ -869,7 +911,12 @@ impl StudioView {
             preview_shown: false,
             rail_geom: Arc::new(Mutex::new((0.0_f32, TIMELINE_WIDTH))),
             track_geoms: Arc::new(Mutex::new(Vec::new())),
+            play_geom: Arc::new(Mutex::new(None)),
+            ruler_geom: Arc::new(Mutex::new(None)),
             canvas_geom: Arc::new(Mutex::new(None)),
+            last_focused: None,
+            last_inflight_key: None,
+            geom_logged: false,
             preview_dirty: true,
             preview_slot: Arc::new(Mutex::new(None)),
             preview_inbox: PreviewInbox::new(),
@@ -901,28 +948,106 @@ impl StudioView {
         }
     }
 
-    fn log_semantic_state(&self, reason: &str, window: Option<&Window>) {
+    fn focused_name(&self, window: &Window) -> Option<&'static str> {
+        if self.title_focus.is_focused(window) {
+            Some("inspector.title")
+        } else if self.source_focus.is_focused(window) {
+            Some("vel.editor")
+        } else if self.focus.is_focused(window) {
+            Some("studio")
+        } else {
+            None
+        }
+    }
+
+    fn refresh_focus(&mut self, window: &Window) {
+        if let Some(focused) = self.focused_name(window) {
+            self.last_focused = Some(focused.to_string());
+        }
+    }
+
+    fn log_semantic_state(&mut self, reason: &str, window: Option<&Window>) {
+        if let Some(window) = window {
+            self.refresh_focus(window);
+        }
         let mut state = self.session.semantic_state();
         if let Some(name) = &self.ui_fixture {
             state["fixture"] = serde_json::Value::String(name.clone());
         }
         state["reason"] = serde_json::Value::String(reason.into());
-        if let Some(window) = window {
-            let focused = if self.title_focus.is_focused(window) {
-                Some("inspector.title")
-            } else if self.source_focus.is_focused(window) {
-                Some("vel.editor")
-            } else if self.focus.is_focused(window) {
-                Some("studio")
-            } else {
-                None
-            };
-            if let Some(focused) = focused {
-                state["focused"] = serde_json::Value::String(focused.into());
-            }
+        if let Some(focused) = &self.last_focused {
+            state["focused"] = serde_json::Value::String(focused.clone());
         }
         trace::log(format!("semantic_state {state}"));
-        write_state_file(&state);
+        if let Err(err) = write_state_file(&state) {
+            trace::log(format!("semantic_state write failed: {err}"));
+        }
+    }
+
+    fn log_inflight_semantic_state(&mut self, reason: &str) {
+        let state = self.session.semantic_state();
+        let key = format!(
+            "{reason}:{}:{}:{}",
+            state["playhead"], state["interaction"], state["drag"]
+        );
+        if self.last_inflight_key.as_deref() == Some(key.as_str()) {
+            return;
+        }
+        self.last_inflight_key = Some(key);
+        self.log_semantic_state(reason, None);
+    }
+
+    fn maybe_log_smoke_geom(&mut self) {
+        if self.geom_logged {
+            return;
+        }
+        let play = self.play_geom.lock().ok().and_then(|slot| *slot);
+        let ruler = self.ruler_geom.lock().ok().and_then(|slot| *slot);
+        let tracks = self
+            .track_geoms
+            .lock()
+            .ok()
+            .map(|slots| slots.clone())
+            .unwrap_or_default();
+        let rail = self.rail_geom.lock().ok().map(|slot| *slot);
+        let Some((play_x, play_y, play_w, play_h)) = play else {
+            return;
+        };
+        let Some((ruler_x, ruler_y, ruler_w, ruler_h)) = ruler else {
+            return;
+        };
+        if tracks.is_empty() {
+            return;
+        }
+        let Some((rail_x, rail_w)) = rail else {
+            return;
+        };
+        if rail_x <= 0.0 && rail_w <= 1.0 {
+            return;
+        }
+        let tracks_json: Vec<serde_json::Value> = tracks
+            .iter()
+            .map(|(name, x, y, w, h)| {
+                serde_json::json!({
+                    "name": name,
+                    "x": x,
+                    "y": y,
+                    "w": w,
+                    "h": h,
+                })
+            })
+            .collect();
+        let geom = serde_json::json!({
+            "play": { "x": play_x, "y": play_y, "w": play_w, "h": play_h },
+            "ruler": { "x": ruler_x, "y": ruler_y, "w": ruler_w, "h": ruler_h },
+            "rail": { "x": rail_x, "w": rail_w },
+            "tracks": tracks_json,
+        });
+        trace::log(format!("smoke_geom {geom}"));
+        if let Err(err) = write_geom_file(&geom) {
+            trace::log(format!("smoke_geom write failed: {err}"));
+        }
+        self.geom_logged = true;
     }
 
     fn adopt_locus_label(&mut self) {
@@ -1399,6 +1524,8 @@ impl StudioView {
         self.sync_audio_monitor("timeline-pointer");
         self.preview_inbox.clear_pending();
         self.preview_dirty = true;
+        self.last_inflight_key = None;
+        self.log_semantic_state("timeline-pointer-begin", None);
     }
 
     fn update_timeline_pointer(&mut self, window_x: gpui::Pixels, snap_off: bool) {
@@ -1416,6 +1543,7 @@ impl StudioView {
         }
         self.sync_audio_monitor("timeline-pointer-update");
         self.preview_dirty = true;
+        self.log_inflight_semantic_state("timeline-pointer-update");
     }
 
     fn commit_timeline_pointer(&mut self, window_x: gpui::Pixels, snap_off: bool) {
@@ -1441,6 +1569,7 @@ impl StudioView {
         }
         self.sync_audio_monitor("timeline-pointer-commit");
         self.adopt_locus_label();
+        self.last_inflight_key = None;
         self.log_semantic_state("timeline-pointer-commit", None);
         self.preview_dirty = true;
     }
@@ -1504,6 +1633,8 @@ impl StudioView {
                     "canvas drag begin locus={locus_id} pointer={:.1},{:.1}",
                     pointer.x, pointer.y
                 ));
+                self.last_inflight_key = None;
+                self.log_semantic_state("canvas-drag-begin", None);
             }
             Err(err) => {
                 trace::log(format!("canvas drag begin: {err}"));
@@ -1539,6 +1670,8 @@ impl StudioView {
                     "canvas resize begin locus={locus_id} corner={corner:?} pointer={:.1},{:.1}",
                     pointer.x, pointer.y
                 ));
+                self.last_inflight_key = None;
+                self.log_semantic_state("canvas-resize-begin", None);
             }
             Err(err) => {
                 trace::log(format!("canvas resize begin: {err}"));
@@ -1559,6 +1692,7 @@ impl StudioView {
             {
                 trace::log(format!("canvas resize update: {err}"));
             }
+            self.log_inflight_semantic_state("canvas-resize-update");
             return true;
         }
         if !self.session.canvas_overlay_drag_active() {
@@ -1569,6 +1703,7 @@ impl StudioView {
         {
             trace::log(format!("canvas drag update: {err}"));
         }
+        self.log_inflight_semantic_state("canvas-drag-update");
         true
     }
 
@@ -1600,6 +1735,7 @@ impl StudioView {
                 }
             }
             self.adopt_locus_label();
+            self.last_inflight_key = None;
             self.log_semantic_state("canvas-resize-commit", None);
             self.refresh_preview("canvas-resize");
             self.queue_preview();
@@ -1629,6 +1765,7 @@ impl StudioView {
             }
         }
         self.adopt_locus_label();
+        self.last_inflight_key = None;
         self.log_semantic_state("canvas-drag-commit", None);
         self.refresh_preview("canvas-drag");
         self.queue_preview();
@@ -2063,6 +2200,8 @@ impl Render for StudioView {
             trace::log(format!("first paint preview={preview}"));
             self.log_semantic_state("first-paint", Some(window));
         }
+        self.refresh_focus(window);
+        self.maybe_log_smoke_geom();
         let file = layout
             .as_ref()
             .map(|item| item.file_label.clone())
@@ -2337,10 +2476,40 @@ impl StudioView {
                     cx.notify();
                 },
             ))
-            .child(action_button("Play", TEAL, cx, move |this, cx| {
-                this.start_play();
-                cx.notify();
-            }))
+            .child({
+                let geom = Arc::clone(&self.play_geom);
+                div()
+                    .id("Play")
+                    .debug_selector(|| "toolbar.play".into())
+                    .relative()
+                    .px_3()
+                    .py_1()
+                    .bg(rgb(TEAL))
+                    .text_color(rgb(TEXT))
+                    .cursor_pointer()
+                    .on_click(cx.listener(|this, _, _, cx| {
+                        this.start_play();
+                        cx.notify();
+                    }))
+                    .child("Play")
+                    .child(
+                        canvas(
+                            move |bounds, _, _| {
+                                if let Ok(mut slot) = geom.lock() {
+                                    *slot = Some((
+                                        f32::from(bounds.origin.x),
+                                        f32::from(bounds.origin.y),
+                                        f32::from(bounds.size.width),
+                                        f32::from(bounds.size.height),
+                                    ));
+                                }
+                            },
+                            |_, _, _, _| {},
+                        )
+                        .absolute()
+                        .size_full(),
+                    )
+            })
             .child(action_button("Pause", LINE, cx, move |this, cx| {
                 this.catch_up_play_clock();
                 this.audio_play_pending = false;
@@ -3185,10 +3354,29 @@ impl StudioView {
                         .debug_selector(|| "timeline.ruler".into())
                         // Match the ruler's test/interaction bounds to the track rail:
                         // the track row reserves 56 px for its label plus an 8 px gap.
+                        .relative()
                         .ml(px(64.0))
                         .w(px(TIMELINE_WIDTH))
                         .text_color(rgb(MUTED))
                         .cursor(CursorStyle::IBeam)
+                        .child({
+                            let geom = Arc::clone(&self.ruler_geom);
+                            canvas(
+                                move |bounds, _, _| {
+                                    if let Ok(mut slot) = geom.lock() {
+                                        *slot = Some((
+                                            f32::from(bounds.origin.x),
+                                            f32::from(bounds.origin.y),
+                                            f32::from(bounds.size.width),
+                                            f32::from(bounds.size.height),
+                                        ));
+                                    }
+                                },
+                                |_, _, _, _| {},
+                            )
+                            .absolute()
+                            .size_full()
+                        })
                         .on_mouse_down(
                             MouseButton::Left,
                             cx.listener(|this, event: &MouseDownEvent, _, cx| {
@@ -3203,6 +3391,8 @@ impl StudioView {
                                     "gesture begin-scrub x={x:.1} playhead={}",
                                     format_time(this.session.playhead())
                                 ));
+                                this.last_inflight_key = None;
+                                this.log_semantic_state("timeline-pointer-begin", None);
                                 this.refresh_preview("timeline-clip");
                                 this.queue_preview();
                                 cx.notify();

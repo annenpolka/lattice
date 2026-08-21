@@ -37,7 +37,7 @@ pub use preview::{
     PLAYBACK_TICK, PreviewInbox, PreviewInboxStats, PreviewJob, PreviewMailbox, PreviewPush,
     playback_frame_at_or_before, playback_target,
 };
-pub use semantic_state::{snapshot as semantic_snapshot, write_state_file};
+pub use semantic_state::{snapshot as semantic_snapshot, write_geom_file, write_state_file};
 pub use session::{StudioSession, fit_preview_size};
 pub use ui_fixture::UiFixture;
 pub use viewport::TimelineViewport;

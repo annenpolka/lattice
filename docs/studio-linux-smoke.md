@@ -4,6 +4,8 @@ This is **not** product Linux support. Parent CHI-19 still holds: Studio dogfood
 
 CHI-63 (`VisualTestContext` / `UiDriver`) stays the later reduction of computer-use for ordinary button and drag correctness. This document is the OS-boundary computer-use / process smoke.
 
+Do not mark CHI-54 / CHI-64 / CHI-65 / CHI-66 / CHI-67 Done from this document alone.
+
 ## What the path is
 
 ```text
@@ -20,13 +22,19 @@ lattice-studio --ui-fixture timeline-basic
 | `drag-invalid` | One short title pinned at `0s`; left-edge trim has no legal room |
 | `dense-project` | Four scenes, each with title + callout |
 
-Windows launch is unchanged: `lattice-studio path\to\main.vel` and `scripts/studio-debug.ps1` / `scripts/studio-smoke.ps1`.
+Windows launch is unchanged: `lattice-studio path\to\main.vel` and `scripts/studio-debug.ps1` / `scripts/studio-smoke.ps1`. Those scripts still pass a single VEL path as the process argument. `--ui-fixture` is an additional Linux-agent entry; it does not replace the VEL-path launch.
 
-## Environment
+## Environment (CHI-64)
 
-The agent VM needs an X11 `DISPLAY`. A running XFCE/Xfwm session is enough. If `DISPLAY` is unset, `scripts/studio-linux-smoke.sh` starts Xvfb.
+CHI-54's display target is **X11**. The demonstrated Cursor Cloud path is an already-running XFCE/Xfwm session:
 
-GPUI 0.2 opens a real window and expects Vulkan. On a machine without a hardware ICD, install Mesa's software implementation (`mesa-vulkan-drivers`) and point `VK_ICD_FILENAMES` at `lvp_icd.x86_64.json`. The smoke script does this when the file exists and also sets `LIBGL_ALWAYS_SOFTWARE=1`.
+```bash
+DISPLAY=:1
+```
+
+`scripts/studio-linux-smoke.sh` does **not** start Xvfb when `DISPLAY` is set. Xvfb is a labeled fallback only (`--allow-xvfb` when `DISPLAY` is unset). An Xvfb run is not a substitute for the `DISPLAY=:1` demonstration.
+
+GPUI 0.2 opens a real window and expects Vulkan. `LATTICE_STUDIO_PREVIEW=0` skips live frame extract. It does **not** skip Blade / wgpu GPU init. On a machine without a hardware ICD, install Mesa's software implementation (`mesa-vulkan-drivers`) and point `VK_ICD_FILENAMES` at `lvp_icd.json` / `lvp_icd.x86_64.json`. The smoke script does this when the file exists and also sets `LIBGL_ALWAYS_SOFTWARE=1`. Those variables are a hypothesis that has worked on this Cloud VM; they must not hide `NoSupportedDeviceFound`. If GPU init fails, the process dies and the script fails.
 
 Link-time packages already required by Linux CI remain: `libxcb1-dev`, `libxkbcommon-dev`, `libxkbcommon-x11-dev`. A C++ linker (`g++` / `libstdc++`) is also required to link GPUI.
 
@@ -40,38 +48,49 @@ LATTICE_STUDIO_RENDERER=cpu
 
 Audio monitoring is Windows-only; the Linux stub already returns `UnsupportedPlatform`. Preview extract is optional and is the usual launch blocker when FFmpeg/media is missing.
 
-## Observable semantic state
+## Observable semantic state (CHI-66)
 
-Each launch writes `semantic_state {json}` lines to the durable Studio log (`LATTICE_STUDIO_LOG`). When `LATTICE_STUDIO_STATE` is set, the latest snapshot is also written as pretty JSON.
+Each launch writes `semantic_state {json}` lines to the durable Studio log (`LATTICE_STUDIO_LOG`). When `LATTICE_STUDIO_STATE` is set, the latest snapshot is also written as pretty JSON. A write failure is logged as `semantic_state write failed` and fails the smoke. The env var being unset is a no-op.
 
 The snapshot is a hook over existing session fields:
 
 - current locus (`id` / `kind` / `label`) or `null`
-- focused entity when a window is available (`studio`, `vel.editor`, `inspector.title`)
-- playhead and playing flag
+- focused entity when known (`studio`, `vel.editor`, `inspector.title`), including on commit snapshots
+- playhead, duration, and playing flag
 - active interaction/mode
-- drag source / target / validity when a gesture is in flight
+- drag source / target / validity while a gesture is in flight
 
-It is emitted on `open`, `first-paint`, timeline pointer commit, and canvas drag/resize commit. It is not a permanent on-canvas debug HUD.
+It is emitted on `open`, `first-paint`, Play, timeline pointer begin/update/commit, and canvas drag/resize begin/update/commit. Begin/update lines exist so source/target/validity is visible before commit resets `gesture` to `none`. It is not a permanent on-canvas debug HUD.
+
+Widget bounds used by the OS smoke (Play, ruler, tracks) are written to `LATTICE_STUDIO_GEOM` as `smoke_geom` JSON. Those are window-local GPUI pixels; the script adds the verified X11 window origin.
 
 ## Reproducing the smoke
 
+Documented CHI-64 / CHI-67 command (this Cloud VM):
+
 ```bash
-./scripts/studio-linux-smoke.sh
-./scripts/studio-linux-smoke.sh --fixture drag-valid
-./scripts/studio-linux-smoke.sh --no-interact
+DISPLAY=:1 ./scripts/studio-linux-smoke.sh --fixture timeline-basic
+```
+
+Other forms:
+
+```bash
+DISPLAY=:1 ./scripts/studio-linux-smoke.sh --fixture drag-valid
+DISPLAY=:1 ./scripts/studio-linux-smoke.sh --no-interact
+./scripts/studio-linux-smoke.sh --allow-xvfb   # fallback only; not the demonstrated path
 ```
 
 The script:
 
 1. Builds `lattice-studio`.
-2. Launches `--ui-fixture` with preview/audio detached and a smoke watchdog.
-3. Waits for `open_window ok` and `first paint`.
-4. Captures the X11 display to `target/studio-linux-smoke/*.png` via `ffmpeg -f x11grab`.
-5. Optionally clicks once and performs one horizontal scrub-style drag with `xdotool`.
-6. Asserts `semantic_state` lines for `open` and `first-paint`.
+2. Requires an existing `DISPLAY` unless `--allow-xvfb` is passed.
+3. Launches `--ui-fixture` with preview/audio detached and a smoke watchdog.
+4. Waits for `open_window ok` and `first paint`.
+5. Identifies the Studio window with xdotool and captures **that window**, not `${DISPLAY}.0`.
+6. Asserts the PNG is a nonblank Studio frame (color diversity / contrast), not merely a non-empty file.
+7. With interact: clicks Play from `smoke_geom` (must emit `reason=play`), scrub-drags the ruler (must emit begin + commit and move the playhead), then clicks the Video clip (must change locus). Percent positions are fractions of verified widget bounds, then offset by the verified window origin. Missing `timeline-pointer-commit` fails the script.
 
-Artifacts stay under `target/studio-linux-smoke/` (gitignored with the rest of `target/`).
+Artifacts stay under `target/studio-linux-smoke/` (gitignored with the rest of `target/`). PR-visible evidence is copied to `docs/screenshots/`.
 
 ## Spike results (Cursor Cloud Ubuntu)
 
@@ -82,25 +101,20 @@ Recorded on the CHI-54 implementing agent (`DISPLAY=:1`, XFCE/Xfwm 1920×1200, M
 | build | pass | `cargo build -p lattice-studio --features window` after `libxkbcommon*-dev` + `g++`/`libstdc++` |
 | launch | pass | `open_window ok`; `LATTICE_STUDIO_PREVIEW=0` and `LATTICE_STUDIO_AUDIO_MONITOR=0` |
 | visible | pass | Window title `Lattice Studio · CPU`; sequence / Canvas / VEL / Inspector / Timeline all draw |
-| screenshot | pass | `ffmpeg -f x11grab` artifact under `target/studio-linux-smoke/` |
-| input | pass | Computer-use click on Play (`play samples` at 0s) then a timeline clip drag; playhead ended at `4s` and locus moved `demo:title:1` → `scene:demo` |
+| screenshot | pass | Window-cropped `ffmpeg -f x11grab` of the identified Studio window; nonblank-pixel check |
+| input | in script | Fail-closed xdotool using `smoke_geom` + verified client bounds. Manual Computer Use is supporting evidence only |
 
 Classification notes:
 
 - **Environment:** `vulkaninfo --summary` failed with `X_CreateWindow BadMatch`. That is a WSI probe issue, not Studio. GPUI still opened a window through lavapipe.
 - **App platform-coupling (fixed in this path):** a title-only VEL cannot flatten (`timeline has no video clip`), so fixtures include a `media` + video clip in Core IR. The media file itself is not required for UI-only smoke.
-- **Environment / input tool:** `xdotool` can miss the 640px timeline rail. Computer-use is the reliable agent input path; the script still tries one click + one scrub-style drag.
+- **CHI-64 remainder:** a human still needs to look at the committed Studio-window PNGs. Process start + PNG byte count is not enough.
+- **CHI-67 remainder:** a green percent-xdotool script without `timeline-pointer-commit` / playhead / locus assertions is not Done. CHI-63 UiDriver is not reimplemented here.
 
-Initial fixture semantic state (stable across opens):
-
-```json
-{"locus":{"id":"demo:title:1","kind":"title","label":"Hello"},"playhead":"0s","playing":false,"interaction":"idle","drag":null}
-```
-
-After the agent Play click + timeline drag:
+Initial fixture semantic state (stable across opens; see `UiFixture::expected_initial`):
 
 ```json
-{"locus":{"id":"scene:demo","kind":"scene","label":"demo"},"playhead":"4s","playing":false,"interaction":"idle","reason":"timeline-pointer-commit"}
+{"locus":{"id":"demo:title:1","kind":"title","label":"Hello"},"playhead":"0s","duration":"4s","playing":false,"interaction":"idle","drag":null}
 ```
 
 ## Non-goals

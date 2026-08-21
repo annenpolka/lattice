@@ -23,6 +23,7 @@ pub fn snapshot(session: &StudioSession) -> Value {
     json!({
         "locus": locus,
         "playhead": session.playhead().to_string(),
+        "duration": session.duration().to_string(),
         "playing": session.is_playing(),
         "interaction": interaction_mode(session),
         "gesture": gesture_value(session.gesture()),
@@ -187,14 +188,76 @@ fn drag_value(session: &StudioSession) -> Value {
 }
 
 /// Persist the latest snapshot when `LATTICE_STUDIO_STATE` is set.
-pub fn write_state_file(state: &Value) {
-    let Ok(path) = std::env::var("LATTICE_STUDIO_STATE") else {
-        return;
+///
+/// A missing env var is a no-op. A set path that cannot be created or written
+/// is an error — callers must surface it. Silent `let _ =` I/O is not allowed.
+pub fn write_state_file(state: &Value) -> Result<(), String> {
+    write_env_json("LATTICE_STUDIO_STATE", state)
+}
+
+/// Persist window-local widget bounds when `LATTICE_STUDIO_GEOM` is set.
+pub fn write_geom_file(geom: &Value) -> Result<(), String> {
+    write_env_json("LATTICE_STUDIO_GEOM", geom)
+}
+
+fn write_env_json(var: &str, value: &Value) -> Result<(), String> {
+    let Ok(path) = std::env::var(var) else {
+        return Ok(());
     };
-    if let Some(parent) = std::path::Path::new(&path).parent() {
-        let _ = std::fs::create_dir_all(parent);
+    if path.trim().is_empty() {
+        return Ok(());
     }
-    if let Ok(text) = serde_json::to_string_pretty(state) {
-        let _ = std::fs::write(path, text);
+    write_json_file(&path, value)
+}
+
+/// Write `value` to `path`, creating parents. Failures are returned, not swallowed.
+pub fn write_json_file(path: &str, value: &Value) -> Result<(), String> {
+    let parent = std::path::Path::new(path).parent();
+    if let Some(parent) = parent
+        && !parent.as_os_str().is_empty()
+    {
+        std::fs::create_dir_all(parent)
+            .map_err(|err| format!("create JSON parent {}: {err}", parent.display()))?;
+    }
+    let text = serde_json::to_string_pretty(value)
+        .map_err(|err| format!("serialize JSON file {path}: {err}"))?;
+    std::fs::write(path, text).map_err(|err| format!("write JSON file {path}: {err}"))?;
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::write_json_file;
+    use serde_json::json;
+
+    #[test]
+    fn write_json_file_creates_and_reads_back() {
+        let dir = std::env::temp_dir().join(format!(
+            "lattice-semantic-state-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let path = dir.join("nested").join("state.json");
+        write_json_file(path.to_str().unwrap(), &json!({"reason": "open"})).expect("write");
+        let text = std::fs::read_to_string(&path).unwrap();
+        assert!(text.contains("\"reason\": \"open\""));
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn write_json_file_reports_unwritable_path() {
+        let path = if cfg!(windows) {
+            "\\\\?\\CON\\state.json"
+        } else {
+            "/proc/lattice-studio-no-such/state.json"
+        };
+        let err = write_json_file(path, &json!({"ok": false})).expect_err("must fail");
+        assert!(
+            err.contains("write JSON file") || err.contains("create JSON parent"),
+            "{err}"
+        );
     }
 }

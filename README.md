@@ -166,11 +166,11 @@ See [docs/renderer-dogfood.md](docs/renderer-dogfood.md) for the debug/release c
 Ubuntu agent verification of the GPUI window (not CI, not product Linux support):
 
 ```bash
-./scripts/studio-linux-smoke.sh
-./scripts/studio-linux-smoke.sh --fixture drag-valid
+DISPLAY=:1 ./scripts/studio-linux-smoke.sh --fixture timeline-basic
+DISPLAY=:1 ./scripts/studio-linux-smoke.sh --fixture drag-valid
 ```
 
-The Linux script forces `LATTICE_STUDIO_PREVIEW=0` and `LATTICE_STUDIO_AUDIO_MONITOR=0`, writes a screenshot plus `semantic_state` log lines, and is documented in [docs/studio-linux-smoke.md](docs/studio-linux-smoke.md).
+The Linux script forces `LATTICE_STUDIO_PREVIEW=0` and `LATTICE_STUDIO_AUDIO_MONITOR=0`, captures the identified Studio window (not the whole DISPLAY), writes `semantic_state` begin/update/commit lines, and is documented in [docs/studio-linux-smoke.md](docs/studio-linux-smoke.md). Xvfb is `--allow-xvfb` only. Windows `studio-smoke.ps1` / `studio-debug.ps1` still launch a single VEL path.
 
 ## Repository layout
 
