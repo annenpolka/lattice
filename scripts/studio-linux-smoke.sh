@@ -7,7 +7,9 @@
 # Builds lattice-studio, launches --ui-fixture with preview/audio detached,
 # waits for open_window ok / first paint, captures the identified Studio
 # window (not ${DISPLAY}.0), asserts nonblank pixels, then optionally
-# clicks Play and scrub-drags using widget bounds logged by Studio.
+# clicks Play and scrub-drags using app-emitted smoke_geom
+# (play / ruler / rail / tracks / canvas). debug_selector is a test-only
+# no-op in the product binary and is not used here.
 #
 #   DISPLAY=:1 ./scripts/studio-linux-smoke.sh
 #   DISPLAY=:1 ./scripts/studio-linux-smoke.sh --fixture drag-valid
@@ -43,8 +45,12 @@ Usage: ./scripts/studio-linux-smoke.sh [options]
 Environment:
   Demonstrated path: an existing X11 DISPLAY (Cursor Cloud XFCE = :1).
   LATTICE_STUDIO_PREVIEW=0 and LATTICE_STUDIO_AUDIO_MONITOR=0 are forced.
-  Software Vulkan (lavapipe) is selected when its ICD is present.
-  PREVIEW=0 does not skip GPUI/Blade GPU init. NoSupportedDeviceFound is fatal.
+  PREVIEW=0 / RENDERER=cpu do not skip GPUI/Blade window init.
+  mesa-vulkan-drivers (lavapipe ICD in /usr/share/vulkan/icd.d/) is enough;
+  this script does not set VK_ICD_FILENAMES and does not gate on vulkaninfo.
+  If default cc is clang, RUSTFLAGS=-C linker=gcc is set so rustc can link
+  libstdc++. That is not baked into Cargo.toml / .cargo/config.toml.
+  NoSupportedDeviceFound is fatal. Missing timeline-pointer-commit fails.
 EOF
 }
 
@@ -92,6 +98,60 @@ fail() {
   exit 1
 }
 
+need_cmd() {
+  local bin="$1"
+  local packages="$2"
+  if ! command -v "$bin" >/dev/null 2>&1; then
+    fail "missing $bin. Install: sudo apt-get install -y $packages"
+  fi
+}
+
+preflight_packages() {
+  need_cmd gcc "g++ gcc"
+  need_cmd g++ "g++ gcc"
+  if [[ ! -e /usr/include/xkbcommon/xkbcommon.h ]] && ! pkg-config --exists xkbcommon 2>/dev/null; then
+    fail "missing libxkbcommon headers. Install: sudo apt-get install -y libxkbcommon-dev libxkbcommon-x11-dev"
+  fi
+  local icds=()
+  if [[ -d /usr/share/vulkan/icd.d ]]; then
+    shopt -s nullglob
+    icds=(/usr/share/vulkan/icd.d/*.json)
+    shopt -u nullglob
+  fi
+  if [[ ${#icds[@]} -eq 0 ]]; then
+    fail "no Vulkan ICD in /usr/share/vulkan/icd.d/. Install: sudo apt-get install -y mesa-vulkan-drivers. lavapipe is enough; do not set VK_ICD_FILENAMES and do not gate on vulkaninfo."
+  fi
+  echo "vulkan ICD present (${#icds[@]}): ${icds[*]}"
+  need_cmd xdotool xdotool
+  need_cmd ffmpeg ffmpeg
+  need_cmd python3 python3
+  if [[ "$AllowXvfb" -eq 1 && -z "${DISPLAY:-}" ]]; then
+    need_cmd Xvfb xvfb
+  fi
+}
+
+# Cloud VMs often ship cc=clang. rustc then passes -lstdc++ to clang and
+# link fails even with g++ / libstdc++-*-dev installed. gcc as the rustc
+# linker works. Do not put this in Cargo.toml or .cargo/config.toml.
+maybe_set_gcc_linker() {
+  if [[ "${RUSTFLAGS:-}" == *"-C linker="* || "${RUSTFLAGS:-}" == *"-Clinker="* ]]; then
+    echo "RUSTFLAGS already names a linker; leaving as-is"
+    return 0
+  fi
+  local cc_ver
+  cc_ver="$(cc --version 2>/dev/null | head -n1 || true)"
+  if [[ "$cc_ver" == *[Cc]lang* ]]; then
+    if ! command -v gcc >/dev/null 2>&1; then
+      fail "default cc is clang ($cc_ver) but gcc is missing. rustc -lstdc++ fails with the clang driver. Install: sudo apt-get install -y g++ gcc. Re-run; this script sets RUSTFLAGS=-C linker=gcc. Do not bake the linker into Cargo.toml."
+    fi
+    export RUSTFLAGS="${RUSTFLAGS:+$RUSTFLAGS }-C linker=gcc"
+    echo "note: default cc is clang; setting RUSTFLAGS=-C linker=gcc so rustc can link libstdc++ (not Cargo.toml)"
+  fi
+}
+
+preflight_packages
+maybe_set_gcc_linker
+
 profile=debug
 cargo_args=(build -p lattice-studio --features window)
 if [[ "$Release" -eq 1 ]]; then
@@ -129,20 +189,14 @@ if [[ -z "${WAYLAND_DISPLAY:-}" ]]; then
   unset WAYLAND_DISPLAY || true
 fi
 
-lavapipe=""
-for candidate in \
-  /usr/share/vulkan/icd.d/lvp_icd.x86_64.json \
-  /usr/share/vulkan/icd.d/lvp_icd.json
-do
-  if [[ -f "$candidate" ]]; then
-    lavapipe="$candidate"
-    break
-  fi
-done
-if [[ -n "$lavapipe" && -z "${VK_ICD_FILENAMES:-}" ]]; then
-  export VK_ICD_FILENAMES="$lavapipe"
+# Do not force VK_ICD_FILENAMES. After mesa-vulkan-drivers, lavapipe is
+# selected from /usr/share/vulkan/icd.d/ without this variable. Leave a
+# caller-supplied value alone. Do not run vulkaninfo (BadMatch is not fatal).
+if [[ -n "${VK_ICD_FILENAMES:-}" ]]; then
+  echo "VK_ICD_FILENAMES already set; leaving as-is"
+else
+  echo "VK_ICD_FILENAMES unset; using ICD directory (mesa-vulkan-drivers / lavapipe)"
 fi
-export LIBGL_ALWAYS_SOFTWARE="${LIBGL_ALWAYS_SOFTWARE:-1}"
 
 stamp="$(date +%Y%m%d-%H%M%S)"
 out="${LATTICE_STUDIO_SMOKE_DIR:-$target_root/studio-linux-smoke}"
@@ -215,10 +269,6 @@ if [[ "$ready" -ne 1 ]]; then
   kill "$pid" 2>/dev/null || true
   fail "timed out waiting for open_window ok / first paint on DISPLAY=$DISPLAY ($display_path)"
 fi
-
-command -v xdotool >/dev/null || fail "xdotool is required to identify the Studio window"
-command -v ffmpeg >/dev/null || fail "ffmpeg is required to capture the Studio window"
-command -v python3 >/dev/null || fail "python3 is required to assert nonblank pixels"
 
 win=""
 for _ in $(seq 1 40); do
@@ -415,6 +465,7 @@ PY
   sleep 0.15
   xdotool mouseup 1
   wait_log 'semantic_state .*\"reason\":\"timeline-pointer-begin\"' "in-flight timeline-pointer-begin" 6
+  # Fail-closed: a miss that never commits must not print LINUX SMOKE OK.
   wait_log 'semantic_state .*\"reason\":\"timeline-pointer-commit\"' "timeline-pointer-commit" 6
   after_playhead="$(json_field "$state" "playhead")"
   echo "after scrub: playhead=$after_playhead"

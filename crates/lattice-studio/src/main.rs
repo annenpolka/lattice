@@ -133,12 +133,14 @@ fn main() -> ExitCode {
     let fixture = launch.fixture_name();
     trace::log(format!(
         "start exe={} cwd={} vel={} fixture={} log={} preview={} autoplay={} smoke={} rustc={}",
-        std::env::current_exe()
-            .map(|p| p.display().to_string())
-            .unwrap_or_else(|_| "?".into()),
-        std::env::current_dir()
-            .map(|p| p.display().to_string())
-            .unwrap_or_else(|_| "?".into()),
+        match std::env::current_exe() {
+            Ok(p) => p.display().to_string(),
+            Err(_) => "?".into(),
+        },
+        match std::env::current_dir() {
+            Ok(p) => p.display().to_string(),
+            Err(_) => "?".into(),
+        },
         path.display(),
         fixture.unwrap_or("none"),
         log_path.display(),
@@ -1000,13 +1002,12 @@ impl StudioView {
     fn maybe_log_smoke_geom(&mut self) {
         let play = self.play_geom.lock().ok().and_then(|slot| *slot);
         let ruler = self.ruler_geom.lock().ok().and_then(|slot| *slot);
-        let tracks = self
-            .track_geoms
-            .lock()
-            .ok()
-            .map(|slots| slots.clone())
-            .unwrap_or_default();
+        let tracks = match self.track_geoms.lock() {
+            Ok(slots) => slots.clone(),
+            Err(_) => Vec::new(),
+        };
         let rail = self.rail_geom.lock().ok().map(|slot| *slot);
+        let canvas = self.canvas_geom.lock().ok().and_then(|slot| *slot);
         let Some((play_x, play_y, play_w, play_h)) = play else {
             return;
         };
@@ -1034,17 +1035,29 @@ impl StudioView {
                 })
             })
             .collect();
-        let key = format!("{play_x:.0}:{play_y:.0}:{ruler_y:.0}:{rail_w:.0}");
+        let canvas_key = match canvas {
+            Some((x, y, w, h)) => format!("{x:.0}:{y:.0}:{w:.0}:{h:.0}"),
+            None => "-".into(),
+        };
+        let key = format!("{play_x:.0}:{play_y:.0}:{ruler_y:.0}:{rail_w:.0}:{canvas_key}");
         if self.last_geom_key.as_deref() == Some(key.as_str()) {
             return;
         }
         self.last_geom_key = Some(key);
-        let geom = serde_json::json!({
+        let mut geom = serde_json::json!({
             "play": { "x": play_x, "y": play_y, "w": play_w, "h": play_h },
             "ruler": { "x": ruler_x, "y": ruler_y, "w": ruler_w, "h": ruler_h },
             "rail": { "x": rail_x, "w": rail_w },
             "tracks": tracks_json,
         });
+        if let Some((canvas_x, canvas_y, canvas_w, canvas_h)) = canvas {
+            geom["canvas"] = serde_json::json!({
+                "x": canvas_x,
+                "y": canvas_y,
+                "w": canvas_w,
+                "h": canvas_h,
+            });
+        }
         trace::log(format!("smoke_geom {geom}"));
         if let Err(err) = write_geom_file(&geom) {
             trace::log(format!("smoke_geom write failed: {err}"));
@@ -1498,11 +1511,10 @@ impl StudioView {
     }
 
     fn pointer_x(&self, window_x: gpui::Pixels) -> f64 {
-        let (origin, width) = self
-            .rail_geom
-            .lock()
-            .map(|g| *g)
-            .unwrap_or((0.0, TIMELINE_WIDTH));
+        let (origin, width) = match self.rail_geom.lock() {
+            Ok(geom) => *geom,
+            Err(_) => (0.0, TIMELINE_WIDTH),
+        };
         let x = f32::from(window_x) - origin;
         let _ = width;
         f64::from(x)
@@ -1582,11 +1594,10 @@ impl StudioView {
     }
 
     fn apply_rail_width(&mut self) {
-        let width = self
-            .rail_geom
-            .lock()
-            .map(|g| f64::from(g.1))
-            .unwrap_or(f64::from(TIMELINE_WIDTH));
+        let width = match self.rail_geom.lock() {
+            Ok(geom) => f64::from(geom.1),
+            Err(_) => f64::from(TIMELINE_WIDTH),
+        };
         self.session.set_rail_width(width.max(1.0));
     }
 

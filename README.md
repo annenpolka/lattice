@@ -170,7 +170,7 @@ DISPLAY=:1 ./scripts/studio-linux-smoke.sh --fixture timeline-basic
 DISPLAY=:1 ./scripts/studio-linux-smoke.sh --fixture drag-valid
 ```
 
-The Linux script forces `LATTICE_STUDIO_PREVIEW=0` and `LATTICE_STUDIO_AUDIO_MONITOR=0`, captures the identified Studio window (not the whole DISPLAY), writes `semantic_state` begin/update/commit lines, and is documented in [docs/studio-linux-smoke.md](docs/studio-linux-smoke.md). Xvfb is `--allow-xvfb` only. Windows `studio-smoke.ps1` / `studio-debug.ps1` still launch a single VEL path.
+The Linux script forces `LATTICE_STUDIO_PREVIEW=0` and `LATTICE_STUDIO_AUDIO_MONITOR=0`, captures the identified Studio window (not the whole DISPLAY), writes `semantic_state` begin/update/commit lines, and is documented in [docs/studio-linux-smoke.md](docs/studio-linux-smoke.md). `mesa-vulkan-drivers` is enough for lavapipe; the script does not set `VK_ICD_FILENAMES` and does not gate on `vulkaninfo`. When `cc` is clang it sets `RUSTFLAGS=-C linker=gcc` (not Cargo.toml). Missing `timeline-pointer-commit` fails. Xvfb is `--allow-xvfb` only. Windows `studio-smoke.ps1` / `studio-debug.ps1` still launch a single VEL path.
 
 ## Repository layout
 
