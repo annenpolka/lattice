@@ -69,7 +69,7 @@ cargo run -p lattice-cli -- --json render examples/gameplay-commentary/main.vel 
 
 `--fps` accepts an integer or a rational such as `30000/1001`. Width and height must be positive even values for the yuv420p encoder path. The JSON/text report records the effective width, height, rate, sample rate, and channel count.
 
-`resolve` writes `lattice.lock.json`, generated media under `.lattice/`, and may copy a face under the project's `fonts/` directory. The lock, generated media, and rendered MP4s are ignored; a copied project font is portable project input and may be committed. The Alpha provider produces a deterministic tone for `speech`; a production TTS provider is not included. CLI `render` also composes Resolve automatically when generated media is present, but the explicit step above makes the phase visible and prepares the same lock for Studio. Resolve reports missing user media as a warning and never substitutes a test source; Render and preview treat it as an error.
+`resolve` writes `lattice.lock.json`, generated media under `.lattice/`, and may copy a face under the project's `fonts/` directory. The lock, generated media, rendered MP4s, and copied project fonts are ignored. The licensed fixture under `fixtures/fonts/` stays in the repository. The Alpha provider produces a deterministic tone for `speech`; a production TTS provider is not included. CLI `render` also composes Resolve automatically when generated media is present, but the explicit step above makes the phase visible and prepares the same lock for Studio. Resolve reports missing user media as a warning and never substitutes a test source; Render and preview treat it as an error.
 
 On Windows with a working DX12 adapter, the same export can require the GPU backend:
 
