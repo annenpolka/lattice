@@ -1,0 +1,24 @@
+==== chi67-miss-commit harness 2026-08-21T11:35:21+00:00 DISPLAY=:1 exit=1 ====
+vulkan ICD present (8): /usr/share/vulkan/icd.d/asahi_icd.json /usr/share/vulkan/icd.d/gfxstream_vk_icd.json /usr/share/vulkan/icd.d/intel_hasvk_icd.json /usr/share/vulkan/icd.d/intel_icd.json /usr/share/vulkan/icd.d/lvp_icd.json /usr/share/vulkan/icd.d/nouveau_icd.json /usr/share/vulkan/icd.d/radeon_icd.json /usr/share/vulkan/icd.d/virtio_icd.json
+note: default cc is clang; setting RUSTFLAGS=-C linker=gcc so rustc can link libstdc++ (not Cargo.toml)
+building lattice-studio (debug)...
+   Compiling lattice-studio v0.1.0 (/workspace/crates/lattice-studio)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 20.94s
+warning: the following packages contain code that will be rejected by a future version of Rust: proc-macro-error2 v2.0.1
+note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 1`
+VK_ICD_FILENAMES unset; using ICD directory (mesa-vulkan-drivers / lavapipe)
+starting /workspace/target/debug/lattice-studio --ui-fixture timeline-basic
+  log    /workspace/target/studio-linux-smoke/studio-linux-smoke-20260821-113518.log
+  state  /workspace/target/studio-linux-smoke/studio-linux-smoke-20260821-113518.state.json
+  geom   /workspace/target/studio-linux-smoke/studio-linux-smoke-20260821-113518.geom.json
+  shot   /workspace/target/studio-linux-smoke/studio-linux-smoke-20260821-113518.png
+  display :1 (existing-x11)
+pid 83999
+window id=27262977 frame=2,85 1400x840 extents=1,1,28,1 client=1,57
+screenshot /workspace/target/studio-linux-smoke/studio-linux-smoke-20260821-113518.png (151930 bytes) window=1400x840+2+85
+nonblank /workspace/target/studio-linux-smoke/studio-linux-smoke-20260821-113518.png 1400x840 unique=195 dark=1058052 bright=99421
+CHI-67 negative miss: off-widget click at client 8,8; omit timeline-pointer-commit
+
+LINUX SMOKE FAIL: missing timeline-pointer-commit (CHI-67 negative miss; fail-closed)
+
+harness_exit=1

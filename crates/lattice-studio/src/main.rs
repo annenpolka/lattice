@@ -36,27 +36,113 @@ use lattice_studio::audio::{
 };
 use lattice_studio::{
     CanvasPoint, CanvasRect, CanvasSize, CursorKind, PLAYBACK_TICK, PreviewInbox, ResizeCorner,
-    StudioSession, playback_target, trace,
+    StudioSession, UiFixture, playback_target, trace, write_geom_file, write_state_file,
 };
 
 #[cfg(test)]
 mod ui_driver;
 
+#[cfg(test)]
+mod launch_tests {
+    use super::{LaunchSpec, UiFixture, parse_launch};
+    use std::ffi::OsString;
+
+    fn args(items: &[&str]) -> Vec<OsString> {
+        std::iter::once(OsString::from("lattice-studio"))
+            .chain(items.iter().map(|item| OsString::from(*item)))
+            .collect()
+    }
+
+    #[test]
+    fn help_and_fixture_parse() {
+        assert!(matches!(
+            parse_launch(args(&["--help"])).unwrap(),
+            LaunchSpec::Help
+        ));
+        assert!(matches!(
+            parse_launch(args(&["--ui-fixture", "timeline-basic"])).unwrap(),
+            LaunchSpec::Fixture(UiFixture::TimelineBasic)
+        ));
+        assert!(matches!(
+            parse_launch(args(&["--ui-fixture=drag-valid"])).unwrap(),
+            LaunchSpec::Fixture(UiFixture::DragValid)
+        ));
+        assert!(parse_launch(args(&["--ui-fixture", "timeline-basic", "main.vel"])).is_err());
+        assert!(parse_launch(args(&["--unknown"])).is_err());
+        assert!(matches!(
+            parse_launch(args(&["/tmp/demo.vel"])).unwrap(),
+            LaunchSpec::Vel(path) if path.ends_with("demo.vel")
+        ));
+    }
+
+    #[test]
+    fn windows_vel_path_launch_stays_a_single_path() {
+        let windows_vel = parse_launch(args(&[r"C:\work\project\main.vel"])).unwrap();
+        match windows_vel {
+            LaunchSpec::Vel(path) => {
+                let text = path.to_string_lossy();
+                assert!(
+                    text.contains("main.vel"),
+                    "Windows VEL path must be preserved, got {text}"
+                );
+            }
+            other => panic!("expected Vel, got {other:?}"),
+        }
+        assert!(matches!(
+            parse_launch(args(&[])).unwrap(),
+            LaunchSpec::DefaultDemo
+        ));
+        assert!(
+            parse_launch(args(&[
+                "--ui-fixture",
+                "timeline-basic",
+                r"C:\work\project\main.vel"
+            ]))
+            .is_err(),
+            "Windows dogfood still passes a VEL path alone; fixture+path must stay rejected"
+        );
+        assert!(
+            parse_launch(args(&["--ui-fixture", "timeline-basic"]))
+                .unwrap()
+                .vel_path()
+                .is_ok()
+        );
+    }
+}
+
 fn main() -> ExitCode {
     let log_path = trace::install();
-    let path = std::env::args_os().nth(1).map_or_else(
-        || PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../examples/warframe-cut/main.vel"),
-        PathBuf::from,
-    );
+    let launch = match parse_launch(std::env::args_os()) {
+        Ok(launch) => launch,
+        Err(err) => {
+            trace::log(format!("fatal: {err}"));
+            return ExitCode::from(2);
+        }
+    };
+    if matches!(launch, LaunchSpec::Help) {
+        print_help();
+        return ExitCode::SUCCESS;
+    }
+    let path = match launch.vel_path() {
+        Ok(path) => path,
+        Err(err) => {
+            trace::log(format!("fatal: {err}"));
+            return ExitCode::from(2);
+        }
+    };
+    let fixture = launch.fixture_name();
     trace::log(format!(
-        "start exe={} cwd={} vel={} log={} preview={} autoplay={} smoke={} rustc={}",
-        std::env::current_exe()
-            .map(|p| p.display().to_string())
-            .unwrap_or_else(|_| "?".into()),
-        std::env::current_dir()
-            .map(|p| p.display().to_string())
-            .unwrap_or_else(|_| "?".into()),
+        "start exe={} cwd={} vel={} fixture={} log={} preview={} autoplay={} smoke={} rustc={}",
+        match std::env::current_exe() {
+            Ok(p) => p.display().to_string(),
+            Err(_) => "?".into(),
+        },
+        match std::env::current_dir() {
+            Ok(p) => p.display().to_string(),
+            Err(_) => "?".into(),
+        },
         path.display(),
+        fixture.unwrap_or("none"),
         log_path.display(),
         if preview_extract_enabled() {
             "on"
@@ -67,7 +153,7 @@ fn main() -> ExitCode {
         smoke_timeout_ms().map_or_else(|| "off".into(), |ms| format!("{ms}ms")),
         option_env!("CARGO_PKG_VERSION").unwrap_or("dev"),
     ));
-    if let Err(err) = window_main(path) {
+    if let Err(err) = window_main(path, fixture.map(str::to_string)) {
         trace::log(format!("fatal: {err}"));
         return ExitCode::from(2);
     }
@@ -75,7 +161,133 @@ fn main() -> ExitCode {
     ExitCode::SUCCESS
 }
 
-fn window_main(path: PathBuf) -> Result<(), Box<dyn std::error::Error>> {
+#[derive(Debug)]
+enum LaunchSpec {
+    Help,
+    DefaultDemo,
+    Vel(PathBuf),
+    Fixture(UiFixture),
+}
+
+impl LaunchSpec {
+    fn fixture_name(&self) -> Option<&'static str> {
+        match self {
+            Self::Fixture(fixture) => Some(fixture.as_str()),
+            Self::Help | Self::DefaultDemo | Self::Vel(_) => None,
+        }
+    }
+
+    fn vel_path(&self) -> Result<PathBuf, String> {
+        match self {
+            Self::Help => Err("help does not open a project".into()),
+            Self::DefaultDemo => Ok(PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                .join("../../examples/warframe-cut/main.vel")),
+            Self::Vel(path) => Ok(path.clone()),
+            Self::Fixture(fixture) => fixture
+                .materialize()
+                .map_err(|err| format!("materialize --ui-fixture {fixture}: {err}")),
+        }
+    }
+}
+
+fn parse_launch(args: impl IntoIterator<Item = std::ffi::OsString>) -> Result<LaunchSpec, String> {
+    let mut args = args.into_iter().skip(1);
+    let mut fixture = None;
+    let mut vel = None;
+    let mut saw_help = false;
+    while let Some(arg) = args.next() {
+        let Some(text) = arg.to_str() else {
+            if vel.is_some() {
+                return Err("lattice-studio accepts one VEL path".into());
+            }
+            vel = Some(PathBuf::from(arg));
+            continue;
+        };
+        if text == "--help" || text == "-h" {
+            saw_help = true;
+            continue;
+        }
+        if let Some(name) = text.strip_prefix("--ui-fixture=") {
+            if fixture.is_some() {
+                return Err("lattice-studio accepts one --ui-fixture".into());
+            }
+            fixture = Some(parse_ui_fixture(name)?);
+            continue;
+        }
+        if text == "--ui-fixture" {
+            if fixture.is_some() {
+                return Err("lattice-studio accepts one --ui-fixture".into());
+            }
+            let name = args
+                .next()
+                .and_then(|value| value.into_string().ok())
+                .ok_or_else(|| "missing --ui-fixture name".to_string())?;
+            fixture = Some(parse_ui_fixture(&name)?);
+            continue;
+        }
+        if text.starts_with('-') {
+            return Err(format!(
+                "unknown option `{text}`; see lattice-studio --help"
+            ));
+        }
+        if vel.is_some() {
+            return Err("lattice-studio accepts one VEL path".into());
+        }
+        vel = Some(PathBuf::from(text));
+    }
+    if saw_help {
+        return Ok(LaunchSpec::Help);
+    }
+    match (fixture, vel) {
+        (Some(_), Some(_)) => Err(
+            "pass either a VEL path or --ui-fixture, not both (Windows dogfood still uses a path)"
+                .into(),
+        ),
+        (Some(fixture), None) => Ok(LaunchSpec::Fixture(fixture)),
+        (None, Some(path)) => Ok(LaunchSpec::Vel(path)),
+        (None, None) => {
+            if let Ok(name) = std::env::var("LATTICE_STUDIO_UI_FIXTURE")
+                && !name.trim().is_empty()
+            {
+                return Ok(LaunchSpec::Fixture(parse_ui_fixture(&name)?));
+            }
+            Ok(LaunchSpec::DefaultDemo)
+        }
+    }
+}
+
+fn parse_ui_fixture(name: &str) -> Result<UiFixture, String> {
+    UiFixture::parse(name).ok_or_else(|| {
+        format!(
+            "unknown --ui-fixture `{name}`; expected {}",
+            UiFixture::ALL
+                .iter()
+                .map(|fixture| fixture.as_str())
+                .collect::<Vec<_>>()
+                .join("|")
+        )
+    })
+}
+
+fn print_help() {
+    let names = UiFixture::ALL
+        .iter()
+        .map(|fixture| fixture.as_str())
+        .collect::<Vec<_>>()
+        .join("|");
+    trace::log(format!(
+        "usage: lattice-studio [VEL] | lattice-studio --ui-fixture <{names}>"
+    ));
+    trace::log(
+        "Windows dogfood still opens a VEL path. --ui-fixture materializes a deterministic Engine/Studio project.",
+    );
+    trace::log(
+        "LATTICE_STUDIO_PREVIEW=0 skips live frame extract; LATTICE_STUDIO_AUDIO_MONITOR=0 skips device output.",
+    );
+    trace::log("LATTICE_STUDIO_STATE writes the latest semantic_state JSON snapshot.");
+}
+
+fn window_main(path: PathBuf, fixture: Option<String>) -> Result<(), Box<dyn std::error::Error>> {
     let renderer = studio_renderer_request()?;
     trace::log(format!("renderer requested={renderer}"));
     trace::log(format!("compile/open {}", path.display()));
@@ -83,6 +295,16 @@ fn window_main(path: PathBuf) -> Result<(), Box<dyn std::error::Error>> {
         trace::log(format!("StudioSession::open failed: {err}"));
         err
     })?;
+    let mut initial = session.semantic_state();
+    if let Some(name) = &fixture {
+        initial["fixture"] = serde_json::Value::String(name.clone());
+        trace::log(format!("ui fixture={name}"));
+    }
+    initial["reason"] = serde_json::Value::String("open".into());
+    trace::log(format!("semantic_state {initial}"));
+    if let Err(err) = write_state_file(&initial) {
+        trace::log(format!("semantic_state write failed: {err}"));
+    }
     trace::log(format!(
         "open ok dirty={} playhead={:?} diagnostics={}",
         session.is_dirty(),
@@ -116,6 +338,7 @@ fn window_main(path: PathBuf) -> Result<(), Box<dyn std::error::Error>> {
                         cx.focus_handle(),
                         cx.focus_handle(),
                     );
+                    view.ui_fixture = fixture;
                     view.adopt_locus_label();
                     view.spawn_preview_worker();
                     if audio_monitor_enabled() {
@@ -215,6 +438,7 @@ fn spawn_smoke_watchdog() {
 
 struct StudioView {
     session: StudioSession,
+    ui_fixture: Option<String>,
     title_draft: String,
     title_selection_utf16: Range<usize>,
     title_marked_utf16: Option<Range<usize>>,
@@ -231,7 +455,13 @@ struct StudioView {
     preview_shown: bool,
     rail_geom: Arc<Mutex<(f32, f32)>>,
     track_geoms: Arc<Mutex<Vec<(String, f32, f32, f32, f32)>>>,
+    play_geom: Arc<Mutex<Option<(f32, f32, f32, f32)>>>,
+    ruler_geom: Arc<Mutex<Option<(f32, f32, f32, f32)>>>,
     canvas_geom: Arc<Mutex<Option<(f32, f32, f32, f32)>>>,
+    tree_geoms: Arc<Mutex<Vec<(String, String, String, f32, f32, f32, f32)>>>,
+    last_focused: Option<String>,
+    last_inflight_key: Option<String>,
+    last_geom_key: Option<String>,
     preview_dirty: bool,
     preview_slot: Arc<Mutex<PreviewSlot>>,
     preview_inbox: std::sync::Arc<PreviewInbox>,
@@ -667,6 +897,7 @@ impl StudioView {
         let source_draft = session.source().to_string();
         Self {
             session,
+            ui_fixture: None,
             title_draft: String::new(),
             title_selection_utf16: 0..0,
             title_marked_utf16: None,
@@ -683,7 +914,13 @@ impl StudioView {
             preview_shown: false,
             rail_geom: Arc::new(Mutex::new((0.0_f32, TIMELINE_WIDTH))),
             track_geoms: Arc::new(Mutex::new(Vec::new())),
+            play_geom: Arc::new(Mutex::new(None)),
+            ruler_geom: Arc::new(Mutex::new(None)),
             canvas_geom: Arc::new(Mutex::new(None)),
+            tree_geoms: Arc::new(Mutex::new(Vec::new())),
+            last_focused: None,
+            last_inflight_key: None,
+            last_geom_key: None,
             preview_dirty: true,
             preview_slot: Arc::new(Mutex::new(None)),
             preview_inbox: PreviewInbox::new(),
@@ -712,6 +949,145 @@ impl StudioView {
             audio_no_windows: false,
             audio_error: None,
             audio_last_sync: None,
+        }
+    }
+
+    fn focused_name(&self, window: &Window) -> Option<&'static str> {
+        if self.title_focus.is_focused(window) {
+            Some("inspector.title")
+        } else if self.source_focus.is_focused(window) {
+            Some("vel.editor")
+        } else if self.focus.is_focused(window) {
+            Some("studio")
+        } else {
+            None
+        }
+    }
+
+    fn refresh_focus(&mut self, window: &Window) {
+        if let Some(focused) = self.focused_name(window) {
+            self.last_focused = Some(focused.to_string());
+        }
+    }
+
+    fn log_semantic_state(&mut self, reason: &str, window: Option<&Window>) {
+        if let Some(window) = window {
+            self.refresh_focus(window);
+        }
+        let mut state = self.session.semantic_state();
+        if let Some(name) = &self.ui_fixture {
+            state["fixture"] = serde_json::Value::String(name.clone());
+        }
+        state["reason"] = serde_json::Value::String(reason.into());
+        if let Some(focused) = &self.last_focused {
+            state["focused"] = serde_json::Value::String(focused.clone());
+        }
+        trace::log(format!("semantic_state {state}"));
+        if let Err(err) = write_state_file(&state) {
+            trace::log(format!("semantic_state write failed: {err}"));
+        }
+    }
+
+    fn log_inflight_semantic_state(&mut self, reason: &str) {
+        let state = self.session.semantic_state();
+        let key = format!(
+            "{reason}:{}:{}:{}",
+            state["playhead"], state["interaction"], state["drag"]
+        );
+        if self.last_inflight_key.as_deref() == Some(key.as_str()) {
+            return;
+        }
+        self.last_inflight_key = Some(key);
+        self.log_semantic_state(reason, None);
+    }
+
+    fn maybe_log_smoke_geom(&mut self) {
+        let play = self.play_geom.lock().ok().and_then(|slot| *slot);
+        let ruler = self.ruler_geom.lock().ok().and_then(|slot| *slot);
+        let tracks = match self.track_geoms.lock() {
+            Ok(slots) => slots.clone(),
+            Err(_) => Vec::new(),
+        };
+        let rail = self.rail_geom.lock().ok().map(|slot| *slot);
+        let canvas = self.canvas_geom.lock().ok().and_then(|slot| *slot);
+        let tree = match self.tree_geoms.lock() {
+            Ok(slots) => slots.clone(),
+            Err(_) => Vec::new(),
+        };
+        let Some((play_x, play_y, play_w, play_h)) = play else {
+            return;
+        };
+        let Some((ruler_x, ruler_y, ruler_w, ruler_h)) = ruler else {
+            return;
+        };
+        if tracks.is_empty() {
+            return;
+        }
+        let Some((rail_x, rail_w)) = rail else {
+            return;
+        };
+        if rail_x <= 0.0 && rail_w <= 1.0 {
+            return;
+        }
+        let tracks_json: Vec<serde_json::Value> = tracks
+            .iter()
+            .map(|(name, x, y, w, h)| {
+                serde_json::json!({
+                    "name": name,
+                    "x": x,
+                    "y": y,
+                    "w": w,
+                    "h": h,
+                })
+            })
+            .collect();
+        let canvas_key = match canvas {
+            Some((x, y, w, h)) => format!("{x:.0}:{y:.0}:{w:.0}:{h:.0}"),
+            None => "-".into(),
+        };
+        let tree_json: Vec<serde_json::Value> = tree
+            .iter()
+            .map(|(id, kind, label, x, y, w, h)| {
+                serde_json::json!({
+                    "id": id,
+                    "kind": kind,
+                    "label": label,
+                    "x": x,
+                    "y": y,
+                    "w": w,
+                    "h": h,
+                })
+            })
+            .collect();
+        let tree_key = tree
+            .iter()
+            .map(|(id, _, _, x, y, _, _)| format!("{id}:{x:.0}:{y:.0}"))
+            .collect::<Vec<_>>()
+            .join(",");
+        let key =
+            format!("{play_x:.0}:{play_y:.0}:{ruler_y:.0}:{rail_w:.0}:{canvas_key}:{tree_key}");
+        if self.last_geom_key.as_deref() == Some(key.as_str()) {
+            return;
+        }
+        self.last_geom_key = Some(key);
+        let mut geom = serde_json::json!({
+            "play": { "x": play_x, "y": play_y, "w": play_w, "h": play_h },
+            "ruler": { "x": ruler_x, "y": ruler_y, "w": ruler_w, "h": ruler_h },
+            "rail": { "x": rail_x, "w": rail_w },
+            "tracks": tracks_json,
+            "tree": tree_json,
+        });
+        if let Some((canvas_x, canvas_y, canvas_w, canvas_h)) = canvas {
+            geom["canvas"] = serde_json::json!({
+                "x": canvas_x,
+                "y": canvas_y,
+                "w": canvas_w,
+                "h": canvas_h,
+            });
+        }
+        trace::log(format!("smoke_geom {geom}"));
+        if let Err(err) = write_geom_file(&geom) {
+            trace::log(format!("smoke_geom write failed: {err}"));
         }
     }
 
@@ -920,6 +1296,7 @@ impl StudioView {
             format_time(self.session.playhead()),
             self.audio_status()
         ));
+        self.log_semantic_state("play", None);
     }
 
     fn queue_audio_prepare(&mut self) {
@@ -1161,11 +1538,10 @@ impl StudioView {
     }
 
     fn pointer_x(&self, window_x: gpui::Pixels) -> f64 {
-        let (origin, width) = self
-            .rail_geom
-            .lock()
-            .map(|g| *g)
-            .unwrap_or((0.0, TIMELINE_WIDTH));
+        let (origin, width) = match self.rail_geom.lock() {
+            Ok(geom) => *geom,
+            Err(_) => (0.0, TIMELINE_WIDTH),
+        };
         let x = f32::from(window_x) - origin;
         let _ = width;
         f64::from(x)
@@ -1188,6 +1564,8 @@ impl StudioView {
         self.sync_audio_monitor("timeline-pointer");
         self.preview_inbox.clear_pending();
         self.preview_dirty = true;
+        self.last_inflight_key = None;
+        self.log_semantic_state("timeline-pointer-begin", None);
     }
 
     fn update_timeline_pointer(&mut self, window_x: gpui::Pixels, snap_off: bool) {
@@ -1205,6 +1583,7 @@ impl StudioView {
         }
         self.sync_audio_monitor("timeline-pointer-update");
         self.preview_dirty = true;
+        self.log_inflight_semantic_state("timeline-pointer-update");
     }
 
     fn commit_timeline_pointer(&mut self, window_x: gpui::Pixels, snap_off: bool) {
@@ -1230,6 +1609,8 @@ impl StudioView {
         }
         self.sync_audio_monitor("timeline-pointer-commit");
         self.adopt_locus_label();
+        self.last_inflight_key = None;
+        self.log_semantic_state("timeline-pointer-commit", None);
         self.preview_dirty = true;
     }
 
@@ -1240,11 +1621,10 @@ impl StudioView {
     }
 
     fn apply_rail_width(&mut self) {
-        let width = self
-            .rail_geom
-            .lock()
-            .map(|g| f64::from(g.1))
-            .unwrap_or(f64::from(TIMELINE_WIDTH));
+        let width = match self.rail_geom.lock() {
+            Ok(geom) => f64::from(geom.1),
+            Err(_) => f64::from(TIMELINE_WIDTH),
+        };
         self.session.set_rail_width(width.max(1.0));
     }
 
@@ -1292,6 +1672,8 @@ impl StudioView {
                     "canvas drag begin locus={locus_id} pointer={:.1},{:.1}",
                     pointer.x, pointer.y
                 ));
+                self.last_inflight_key = None;
+                self.log_semantic_state("canvas-drag-begin", None);
             }
             Err(err) => {
                 trace::log(format!("canvas drag begin: {err}"));
@@ -1327,6 +1709,8 @@ impl StudioView {
                     "canvas resize begin locus={locus_id} corner={corner:?} pointer={:.1},{:.1}",
                     pointer.x, pointer.y
                 ));
+                self.last_inflight_key = None;
+                self.log_semantic_state("canvas-resize-begin", None);
             }
             Err(err) => {
                 trace::log(format!("canvas resize begin: {err}"));
@@ -1347,6 +1731,7 @@ impl StudioView {
             {
                 trace::log(format!("canvas resize update: {err}"));
             }
+            self.log_inflight_semantic_state("canvas-resize-update");
             return true;
         }
         if !self.session.canvas_overlay_drag_active() {
@@ -1357,6 +1742,7 @@ impl StudioView {
         {
             trace::log(format!("canvas drag update: {err}"));
         }
+        self.log_inflight_semantic_state("canvas-drag-update");
         true
     }
 
@@ -1388,6 +1774,8 @@ impl StudioView {
                 }
             }
             self.adopt_locus_label();
+            self.last_inflight_key = None;
+            self.log_semantic_state("canvas-resize-commit", None);
             self.refresh_preview("canvas-resize");
             self.queue_preview();
             return true;
@@ -1416,6 +1804,8 @@ impl StudioView {
             }
         }
         self.adopt_locus_label();
+        self.last_inflight_key = None;
+        self.log_semantic_state("canvas-drag-commit", None);
         self.refresh_preview("canvas-drag");
         self.queue_preview();
         true
@@ -1832,7 +2222,7 @@ const TEAL: u32 = 0x3dd6c6;
 
 #[cfg(feature = "window")]
 impl Render for StudioView {
-    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let layout = match self.session.layout() {
             Ok(layout) => Some(layout),
             Err(err) => {
@@ -1847,7 +2237,10 @@ impl Render for StudioView {
                 .and_then(|item| item.canvas.preview_frame.as_ref())
                 .map_or_else(|| "none".into(), |path| path.display().to_string());
             trace::log(format!("first paint preview={preview}"));
+            self.log_semantic_state("first-paint", Some(window));
         }
+        self.refresh_focus(window);
+        self.maybe_log_smoke_geom();
         let file = layout
             .as_ref()
             .map(|item| item.file_label.clone())
@@ -2122,10 +2515,48 @@ impl StudioView {
                     cx.notify();
                 },
             ))
-            .child(action_button("Play", TEAL, cx, move |this, cx| {
-                this.start_play();
-                cx.notify();
-            }))
+            .child({
+                let geom = Arc::clone(&self.play_geom);
+                div()
+                    .id("Play")
+                    .debug_selector(|| "toolbar.play".into())
+                    .relative()
+                    .px_3()
+                    .py_1()
+                    .bg(rgb(TEAL))
+                    .text_color(rgb(TEXT))
+                    .cursor_pointer()
+                    .on_click(cx.listener(|this, _, _, cx| {
+                        this.start_play();
+                        cx.notify();
+                    }))
+                    .capture_any_mouse_down(cx.listener(|this, event: &MouseDownEvent, _, cx| {
+                        if event.button != MouseButton::Left {
+                            return;
+                        }
+                        this.start_play();
+                        cx.stop_propagation();
+                        cx.notify();
+                    }))
+                    .child("Play")
+                    .child(
+                        canvas(
+                            move |bounds, _, _| {
+                                if let Ok(mut slot) = geom.lock() {
+                                    *slot = Some((
+                                        f32::from(bounds.origin.x),
+                                        f32::from(bounds.origin.y),
+                                        f32::from(bounds.size.width),
+                                        f32::from(bounds.size.height),
+                                    ));
+                                }
+                            },
+                            |_, _, _, _| {},
+                        )
+                        .absolute()
+                        .size_full(),
+                    )
+            })
             .child(action_button("Pause", LINE, cx, move |this, cx| {
                 this.catch_up_play_clock();
                 this.audio_play_pending = false;
@@ -2432,7 +2863,11 @@ impl StudioView {
         layout: &lattice_studio::StudioLayout,
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
-        pane("SEQUENCE", px(200.0), tree_nodes(&layout.tree, cx))
+        pane(
+            "SEQUENCE",
+            px(200.0),
+            tree_nodes(&layout.tree, &self.tree_geoms, cx),
+        )
     }
 
     fn canvas_pane(
@@ -2970,13 +3405,34 @@ impl StudioView {
                         .debug_selector(|| "timeline.ruler".into())
                         // Match the ruler's test/interaction bounds to the track rail:
                         // the track row reserves 56 px for its label plus an 8 px gap.
+                        .relative()
                         .ml(px(64.0))
                         .w(px(TIMELINE_WIDTH))
                         .text_color(rgb(MUTED))
                         .cursor(CursorStyle::IBeam)
-                        .on_mouse_down(
-                            MouseButton::Left,
-                            cx.listener(|this, event: &MouseDownEvent, _, cx| {
+                        .child({
+                            let geom = Arc::clone(&self.ruler_geom);
+                            canvas(
+                                move |bounds, _, _| {
+                                    if let Ok(mut slot) = geom.lock() {
+                                        *slot = Some((
+                                            f32::from(bounds.origin.x),
+                                            f32::from(bounds.origin.y),
+                                            f32::from(bounds.size.width),
+                                            f32::from(bounds.size.height),
+                                        ));
+                                    }
+                                },
+                                |_, _, _, _| {},
+                            )
+                            .absolute()
+                            .size_full()
+                        })
+                        .capture_any_mouse_down(cx.listener(
+                            |this, event: &MouseDownEvent, _, cx| {
+                                if event.button != MouseButton::Left {
+                                    return;
+                                }
                                 let x = this.pointer_x(event.position.x);
                                 this.apply_rail_width();
                                 this.session.begin_timeline_scrub(x, event.modifiers.alt);
@@ -2988,11 +3444,13 @@ impl StudioView {
                                     "gesture begin-scrub x={x:.1} playhead={}",
                                     format_time(this.session.playhead())
                                 ));
+                                this.last_inflight_key = None;
+                                this.log_semantic_state("timeline-pointer-begin", None);
                                 this.refresh_preview("timeline-clip");
                                 this.queue_preview();
                                 cx.notify();
-                            }),
-                        )
+                            },
+                        ))
                         .child(format!("Timeline · {}", format_time(layout.playhead))),
                 ),
             )
@@ -3253,11 +3711,15 @@ fn pane_inner(title: &'static str, child: impl IntoElement) -> gpui::Div {
 #[cfg(feature = "window")]
 fn tree_nodes(
     nodes: &[lattice_studio::TreeNode],
+    geoms: &Arc<Mutex<Vec<(String, String, String, f32, f32, f32, f32)>>>,
     cx: &mut Context<StudioView>,
 ) -> impl IntoElement {
+    if let Ok(mut slots) = geoms.lock() {
+        slots.clear();
+    }
     let mut col = div().flex().flex_col().gap_1();
     for node in nodes {
-        col = col.child(tree_node(node, 0, cx));
+        col = col.child(tree_node(node, 0, geoms, cx));
     }
     col
 }
@@ -3266,15 +3728,22 @@ fn tree_nodes(
 fn tree_node(
     node: &lattice_studio::TreeNode,
     depth: u32,
+    geoms: &Arc<Mutex<Vec<(String, String, String, f32, f32, f32, f32)>>>,
     cx: &mut Context<StudioView>,
 ) -> impl IntoElement {
     let id = node.id.clone();
+    let click_id = id.clone();
+    let geom_id = id.clone();
+    let kind = node.kind.clone();
+    let node_label = node.label.clone();
     let selected = node.selected;
     let label = format!("{} {}", node.kind, node.label);
+    let geom_slots = Arc::clone(geoms);
     let mut block = div().flex().flex_col();
     block = block.child(
         div()
             .id(SharedString::from(format!("tree-{id}")))
+            .relative()
             .pr_1()
             .pl(px(8.0 + 14.0 * depth as f32))
             .bg(if selected { rgb(0x1c3d3a) } else { rgb(PANEL) })
@@ -3282,15 +3751,41 @@ fn tree_node(
             .cursor_pointer()
             .on_click(cx.listener(move |this, _, _, cx| {
                 this.session
-                    .point_at(lattice_engine::LocusId::new(id.clone()));
+                    .point_at(lattice_engine::LocusId::new(click_id.clone()));
                 this.adopt_locus_label();
                 this.refresh_preview("tree");
+                this.log_semantic_state("tree-select", None);
                 cx.notify();
             }))
+            .child(
+                canvas(
+                    move |bounds, _, _| {
+                        let x = f32::from(bounds.origin.x);
+                        let y = f32::from(bounds.origin.y);
+                        let w = f32::from(bounds.size.width);
+                        let h = f32::from(bounds.size.height);
+                        if let Ok(mut slots) = geom_slots.lock() {
+                            slots.retain(|(existing, _, _, _, _, _, _)| existing != &geom_id);
+                            slots.push((
+                                geom_id.clone(),
+                                kind.clone(),
+                                node_label.clone(),
+                                x,
+                                y,
+                                w,
+                                h,
+                            ));
+                        }
+                    },
+                    |_, _, _, _| {},
+                )
+                .absolute()
+                .size_full(),
+            )
             .child(label),
     );
     for child in &node.children {
-        block = block.child(tree_node(child, depth + 1, cx));
+        block = block.child(tree_node(child, depth + 1, geoms, cx));
     }
     block
 }

@@ -591,6 +591,20 @@ impl StudioSession {
         self.last_gesture_error.as_deref()
     }
 
+    /// Agent/log snapshot of the shared locus, playhead, and in-flight drag.
+    #[must_use]
+    pub fn semantic_state(&self) -> serde_json::Value {
+        crate::semantic_state::snapshot(self)
+    }
+
+    pub(crate) fn canvas_drag(&self) -> Option<&crate::canvas::CanvasDrag> {
+        self.canvas_drag.as_ref()
+    }
+
+    pub(crate) fn canvas_resize(&self) -> Option<&crate::canvas::CanvasResize> {
+        self.canvas_resize.as_ref()
+    }
+
     #[must_use]
     pub fn snap_indicator(&self) -> Option<Time> {
         self.snap_time

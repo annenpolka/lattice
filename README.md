@@ -117,6 +117,8 @@ Studio currently provides:
 
 The preview is a bounded sample-at-time pipeline rather than a continuous streaming decoder. Audio preparation runs on a worker; Studio MP4 export is currently synchronous and can block the UI while encoding.
 
+Linux is not a Studio dogfood or product target. Ubuntu agents (including Cursor Cloud) can use the UI-only smoke path in [docs/studio-linux-smoke.md](docs/studio-linux-smoke.md) to build, launch, screenshot, and click/drag a `--ui-fixture` window without preview or audio-device I/O. That path does not change the Windows 11 x64 dogfood commands above.
+
 ## CLI for agents
 
 The `lattice` executable exposes `check`, `compile`, `explain`, `render`/`preview`, `locus`, `inspect`, `propose`, `apply`, `reject`, `resolve`, `import`, and `new`. The global `--json` flag is available on every subcommand.
@@ -161,6 +163,15 @@ With no VEL argument the short smoke creates and resolves a temporary A/V projec
 
 See [docs/renderer-dogfood.md](docs/renderer-dogfood.md) for the debug/release commands, 30-minute thresholds, and vendor evidence matrix.
 
+Ubuntu agent verification of the GPUI window (not CI, not product Linux support):
+
+```bash
+DISPLAY=:1 ./scripts/studio-linux-smoke.sh --fixture timeline-basic
+DISPLAY=:1 ./scripts/studio-linux-smoke.sh --fixture drag-valid
+```
+
+The Linux script forces `LATTICE_STUDIO_PREVIEW=0` and `LATTICE_STUDIO_AUDIO_MONITOR=0`, captures the identified Studio window (not the whole DISPLAY), writes `semantic_state` begin/update/commit lines, and is documented in [docs/studio-linux-smoke.md](docs/studio-linux-smoke.md). `mesa-vulkan-drivers` is enough for lavapipe; the script does not set `VK_ICD_FILENAMES` and does not gate on `vulkaninfo`. When `cc` is clang it sets `RUSTFLAGS=-C linker=gcc` (not Cargo.toml). Missing `timeline-pointer-commit` fails. Xvfb is `--allow-xvfb` only. Windows `studio-smoke.ps1` / `studio-debug.ps1` still launch a single VEL path.
+
 ## Repository layout
 
 ```text
@@ -174,6 +185,7 @@ crates/lattice-studio        GPUI Studio, session transport, Windows audio outpu
 crates/lattice-stdlib-guest  separate wasm32-wasip2 WIT guest workspace
 stdlib/lattice-stdlib.wasm   vendored stdlib component
 fixtures/fonts               licensed M PLUS 1p fixture (OFL)
+fixtures/studio-ui           deterministic agent UI fixtures (no generated media)
 examples/gameplay-commentary reproducible Alpha VEL (generated MP4 is ignored)
 examples/warframe-cut        optional local dogfood cut; supply the ignored source MP4
 spec                         Quint build/resolve/review/rendering models

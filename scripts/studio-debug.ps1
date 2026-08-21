@@ -62,6 +62,7 @@ Write-Host "starting $exe"
 Write-Host "  vel  $Vel"
 Write-Host "  log  $log"
 
+# Windows dogfood launch remains a single VEL path (not --ui-fixture).
 $proc = Start-Process -FilePath $exe -ArgumentList @($Vel) -WorkingDirectory $Root -PassThru `
     -RedirectStandardOutput $stdout -RedirectStandardError $stderr
 $pidStudio = $proc.Id

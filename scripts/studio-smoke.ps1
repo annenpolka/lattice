@@ -259,6 +259,8 @@ if ($NoPreview) {
 "==== studio-smoke $(Get-Date -Format o) vel=$Vel smokeMs=$SmokeMs preview=$(if ($NoPreview) {'off'} else {'on'}) audio=$(if ($SoakMinutes -gt 0) {'off-soak'} else {'on'}) renderer=$Renderer adapter=$(if ($Adapter) {$Adapter} else {'auto-high-performance'}) ====" |
     Add-Content -Path $log -Encoding utf8
 
+# Windows dogfood launch is a single VEL path. Do not pass --ui-fixture here.
+# CHI-54 Linux fixtures must not change this ArgumentList contract.
 Write-Host "starting $exe"
 Write-Host "  vel   $Vel"
 Write-Host "  log   $log"

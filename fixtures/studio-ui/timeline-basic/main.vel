@@ -1,0 +1,21 @@
+project "timeline-basic"
+
+convention commentary
+
+media game "capture.mp4"
+
+sequence main {
+  demo
+}
+
+scene demo {
+  game[0s..4s] as clip
+
+  title "Hello" {
+    at 1s for 3s
+  }
+
+  callout "Hold" {
+    at 2s for 1s
+  }
+}
