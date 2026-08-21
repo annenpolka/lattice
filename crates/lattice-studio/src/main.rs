@@ -458,6 +458,7 @@ struct StudioView {
     play_geom: Arc<Mutex<Option<(f32, f32, f32, f32)>>>,
     ruler_geom: Arc<Mutex<Option<(f32, f32, f32, f32)>>>,
     canvas_geom: Arc<Mutex<Option<(f32, f32, f32, f32)>>>,
+    tree_geoms: Arc<Mutex<Vec<(String, String, String, f32, f32, f32, f32)>>>,
     last_focused: Option<String>,
     last_inflight_key: Option<String>,
     last_geom_key: Option<String>,
@@ -916,6 +917,7 @@ impl StudioView {
             play_geom: Arc::new(Mutex::new(None)),
             ruler_geom: Arc::new(Mutex::new(None)),
             canvas_geom: Arc::new(Mutex::new(None)),
+            tree_geoms: Arc::new(Mutex::new(Vec::new())),
             last_focused: None,
             last_inflight_key: None,
             last_geom_key: None,
@@ -1008,6 +1010,10 @@ impl StudioView {
         };
         let rail = self.rail_geom.lock().ok().map(|slot| *slot);
         let canvas = self.canvas_geom.lock().ok().and_then(|slot| *slot);
+        let tree = match self.tree_geoms.lock() {
+            Ok(slots) => slots.clone(),
+            Err(_) => Vec::new(),
+        };
         let Some((play_x, play_y, play_w, play_h)) = play else {
             return;
         };
@@ -1039,7 +1045,27 @@ impl StudioView {
             Some((x, y, w, h)) => format!("{x:.0}:{y:.0}:{w:.0}:{h:.0}"),
             None => "-".into(),
         };
-        let key = format!("{play_x:.0}:{play_y:.0}:{ruler_y:.0}:{rail_w:.0}:{canvas_key}");
+        let tree_json: Vec<serde_json::Value> = tree
+            .iter()
+            .map(|(id, kind, label, x, y, w, h)| {
+                serde_json::json!({
+                    "id": id,
+                    "kind": kind,
+                    "label": label,
+                    "x": x,
+                    "y": y,
+                    "w": w,
+                    "h": h,
+                })
+            })
+            .collect();
+        let tree_key = tree
+            .iter()
+            .map(|(id, _, _, x, y, _, _)| format!("{id}:{x:.0}:{y:.0}"))
+            .collect::<Vec<_>>()
+            .join(",");
+        let key =
+            format!("{play_x:.0}:{play_y:.0}:{ruler_y:.0}:{rail_w:.0}:{canvas_key}:{tree_key}");
         if self.last_geom_key.as_deref() == Some(key.as_str()) {
             return;
         }
@@ -1049,6 +1075,7 @@ impl StudioView {
             "ruler": { "x": ruler_x, "y": ruler_y, "w": ruler_w, "h": ruler_h },
             "rail": { "x": rail_x, "w": rail_w },
             "tracks": tracks_json,
+            "tree": tree_json,
         });
         if let Some((canvas_x, canvas_y, canvas_w, canvas_h)) = canvas {
             geom["canvas"] = serde_json::json!({
@@ -2836,7 +2863,11 @@ impl StudioView {
         layout: &lattice_studio::StudioLayout,
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
-        pane("SEQUENCE", px(200.0), tree_nodes(&layout.tree, cx))
+        pane(
+            "SEQUENCE",
+            px(200.0),
+            tree_nodes(&layout.tree, &self.tree_geoms, cx),
+        )
     }
 
     fn canvas_pane(
@@ -3680,11 +3711,15 @@ fn pane_inner(title: &'static str, child: impl IntoElement) -> gpui::Div {
 #[cfg(feature = "window")]
 fn tree_nodes(
     nodes: &[lattice_studio::TreeNode],
+    geoms: &Arc<Mutex<Vec<(String, String, String, f32, f32, f32, f32)>>>,
     cx: &mut Context<StudioView>,
 ) -> impl IntoElement {
+    if let Ok(mut slots) = geoms.lock() {
+        slots.clear();
+    }
     let mut col = div().flex().flex_col().gap_1();
     for node in nodes {
-        col = col.child(tree_node(node, 0, cx));
+        col = col.child(tree_node(node, 0, geoms, cx));
     }
     col
 }
@@ -3693,15 +3728,22 @@ fn tree_nodes(
 fn tree_node(
     node: &lattice_studio::TreeNode,
     depth: u32,
+    geoms: &Arc<Mutex<Vec<(String, String, String, f32, f32, f32, f32)>>>,
     cx: &mut Context<StudioView>,
 ) -> impl IntoElement {
     let id = node.id.clone();
+    let click_id = id.clone();
+    let geom_id = id.clone();
+    let kind = node.kind.clone();
+    let node_label = node.label.clone();
     let selected = node.selected;
     let label = format!("{} {}", node.kind, node.label);
+    let geom_slots = Arc::clone(geoms);
     let mut block = div().flex().flex_col();
     block = block.child(
         div()
             .id(SharedString::from(format!("tree-{id}")))
+            .relative()
             .pr_1()
             .pl(px(8.0 + 14.0 * depth as f32))
             .bg(if selected { rgb(0x1c3d3a) } else { rgb(PANEL) })
@@ -3709,15 +3751,41 @@ fn tree_node(
             .cursor_pointer()
             .on_click(cx.listener(move |this, _, _, cx| {
                 this.session
-                    .point_at(lattice_engine::LocusId::new(id.clone()));
+                    .point_at(lattice_engine::LocusId::new(click_id.clone()));
                 this.adopt_locus_label();
                 this.refresh_preview("tree");
+                this.log_semantic_state("tree-select", None);
                 cx.notify();
             }))
+            .child(
+                canvas(
+                    move |bounds, _, _| {
+                        let x = f32::from(bounds.origin.x);
+                        let y = f32::from(bounds.origin.y);
+                        let w = f32::from(bounds.size.width);
+                        let h = f32::from(bounds.size.height);
+                        if let Ok(mut slots) = geom_slots.lock() {
+                            slots.retain(|(existing, _, _, _, _, _, _)| existing != &geom_id);
+                            slots.push((
+                                geom_id.clone(),
+                                kind.clone(),
+                                node_label.clone(),
+                                x,
+                                y,
+                                w,
+                                h,
+                            ));
+                        }
+                    },
+                    |_, _, _, _| {},
+                )
+                .absolute()
+                .size_full(),
+            )
             .child(label),
     );
     for child in &node.children {
-        block = block.child(tree_node(child, depth + 1, cx));
+        block = block.child(tree_node(child, depth + 1, geoms, cx));
     }
     block
 }

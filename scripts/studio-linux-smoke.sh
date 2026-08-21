@@ -537,6 +537,46 @@ PY
   if [[ "$after_locus" == "$before_locus" ]]; then
     fail "locus did not transition after verified Video-track click ($after_locus)"
   fi
+
+  scene_deadline=$((SECONDS + 6))
+  while (( SECONDS < scene_deadline )); do
+    if python3 - "$geom" <<'PY'
+import json,sys
+g=json.load(open(sys.argv[1]))
+raise SystemExit(0 if any(n.get("kind")=="scene" for n in (g.get("tree") or [])) else 1)
+PY
+    then
+      break
+    fi
+    sleep 0.1
+  done
+  scene="$(python3 - "$geom" <<'PY'
+import json,sys
+g=json.load(open(sys.argv[1]))
+nodes=g.get("tree") or []
+scene=next((n for n in nodes if n.get("kind")=="scene"), None)
+if scene is None:
+    raise SystemExit("no SEQUENCE scene bounds in smoke_geom")
+print(int(scene["x"]+scene["w"]/2), int(scene["y"]+scene["h"]/2), scene.get("id",""), scene.get("label",""))
+PY
+)"
+  read -r scene_x scene_y scene_id scene_label <<<"$scene"
+  echo "click SEQUENCE scene $scene_id ($scene_label) at client ${scene_x},${scene_y}"
+  click_client "$scene_x" "$scene_y"
+  scene_deadline=$((SECONDS + 6))
+  while (( SECONDS < scene_deadline )); do
+    after_locus="$(python3 -c 'import json,sys; s=json.load(open(sys.argv[1])); print((s.get("locus") or {}).get("id",""))' "$state")"
+    if [[ "$after_locus" == "$scene_id" ]] && grep -q 'semantic_state .*\"reason\":\"tree-select\"' "$log"; then
+      break
+    fi
+    sleep 0.1
+  done
+  echo "after SEQUENCE scene click: locus=$after_locus (want $scene_id)"
+  if [[ "$after_locus" != "$scene_id" ]]; then
+    fail "SEQUENCE scene click did not select $scene_id (locus=$after_locus)"
+  fi
+  # Let SEQUENCE / VEL / Inspector paint the scene selection before capture.
+  sleep 0.6
   capture_window "$shot_after"
   assert_nonblank "$shot_after"
   echo "after-screenshot $shot_after"

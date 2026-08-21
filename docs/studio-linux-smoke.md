@@ -117,6 +117,7 @@ Other forms:
 DISPLAY=:1 ./scripts/studio-linux-smoke.sh --fixture drag-valid
 DISPLAY=:1 ./scripts/studio-linux-smoke.sh --no-interact
 DISPLAY=:1 ./scripts/studio-linux-smoke.sh --miss-commit   # CHI-67 negative; must FAIL
+DISPLAY=:1 ./scripts/studio-linux-smoke-miss.sh            # records docs/artifacts/chi67-miss-commit.log
 ./scripts/studio-linux-smoke.sh --allow-xvfb   # fallback only; not the demonstrated path
 ```
 
