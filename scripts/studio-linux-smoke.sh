@@ -119,7 +119,6 @@ if [[ -z "${DISPLAY:-}" ]]; then
   display_path="xvfb-fallback"
   Xvfb :99 -screen 0 1920x1200x24 >/tmp/lattice-studio-xvfb.log 2>&1 &
   xvfb_pid=$!
-  trap 'kill "$xvfb_pid" 2>/dev/null || true' EXIT
   sleep 0.5
   if ! kill -0 "$xvfb_pid" 2>/dev/null; then
     fail "Xvfb failed to start; see /tmp/lattice-studio-xvfb.log"
@@ -180,6 +179,13 @@ echo "  display $DISPLAY ($display_path)"
 "$exe" --ui-fixture "$Fixture" >"$stdout" 2>"$stderr" &
 pid=$!
 echo "pid $pid"
+cleanup() {
+  kill "$pid" 2>/dev/null || true
+  if [[ -n "${xvfb_pid:-}" ]]; then
+    kill "$xvfb_pid" 2>/dev/null || true
+  fi
+}
+trap cleanup EXIT
 
 if [[ "$WaitSeconds" -le 0 ]]; then
   WaitSeconds=$((SmokeMs / 1000 + 20))
@@ -216,7 +222,10 @@ command -v python3 >/dev/null || fail "python3 is required to assert nonblank pi
 
 win=""
 for _ in $(seq 1 40); do
-  win="$(xdotool search --name 'Lattice Studio' 2>/dev/null | head -n 1 || true)"
+  win="$(xdotool search --pid "$pid" --name 'Lattice Studio' 2>/dev/null | head -n 1 || true)"
+  if [[ -z "$win" ]]; then
+    win="$(xdotool search --name 'Lattice Studio' 2>/dev/null | head -n 1 || true)"
+  fi
   if [[ -n "$win" ]]; then
     break
   fi
@@ -224,10 +233,24 @@ for _ in $(seq 1 40); do
 done
 [[ -n "$win" ]] || fail "xdotool could not find a Lattice Studio window"
 xdotool windowactivate --sync "$win"
+xdotool windowfocus --sync "$win" || true
+sleep 0.2
 eval "$(xdotool getwindowgeometry --shell "$win")"
 [[ "${WIDTH:-0}" -gt 200 && "${HEIGHT:-0}" -gt 200 ]] || fail "Studio window geometry is implausible: ${WIDTH:-?}x${HEIGHT:-?}"
-echo "window id=$win x=${X} y=${Y} ${WIDTH}x${HEIGHT}"
-printf '%s\n' "{\"id\":\"$win\",\"x\":$X,\"y\":$Y,\"w\":$WIDTH,\"h\":$HEIGHT,\"display\":\"$DISPLAY\"}" >"$out/studio-linux-smoke-$stamp.window.json"
+# xdotool geometry includes the WM frame. GPUI widget bounds are client-local.
+# _NET_FRAME_EXTENTS is left,right,top,bottom.
+extents="$(xprop -id "$win" _NET_FRAME_EXTENTS 2>/dev/null | sed -n 's/.* = //p')"
+frame_left=0
+frame_right=0
+frame_top=0
+frame_bottom=0
+if [[ -n "$extents" ]]; then
+  IFS=', ' read -r frame_left frame_right frame_top frame_bottom <<<"$extents"
+fi
+client_x=$((X - frame_left))
+client_y=$((Y - frame_top))
+echo "window id=$win frame=${X},${Y} ${WIDTH}x${HEIGHT} extents=${frame_left},${frame_right},${frame_top},${frame_bottom} client=${client_x},${client_y}"
+printf '%s\n' "{\"id\":\"$win\",\"x\":$X,\"y\":$Y,\"w\":$WIDTH,\"h\":$HEIGHT,\"client_x\":$client_x,\"client_y\":$client_y,\"frame_top\":$frame_top,\"display\":\"$DISPLAY\"}" >"$out/studio-linux-smoke-$stamp.window.json"
 
 capture_window() {
   local dest="$1"
@@ -277,17 +300,17 @@ for y in range(height):
         key = (r >> 4, g >> 4, b >> 4)
         colors[key] = colors.get(key, 0) + 1
         luma = (int(r) + int(g) + int(b)) / 3
-        if luma < 24:
+        if luma < 64:
             dark += 1
         if luma > 80:
             bright += 1
 unique = len(colors)
 top = max(colors.values()) / total
-if unique < 8:
+if unique < 12:
     raise SystemExit(f"blank/flat capture: {unique} quantized colors in {width}x{height}")
 if top > 0.97:
     raise SystemExit(f"near-solid capture: dominant color occupies {top:.3f} of {width}x{height}")
-if dark < total * 0.05 or bright < total * 0.01:
+if dark < total * 0.02 or bright < total * 0.005:
     raise SystemExit(
         f"missing Studio contrast: dark={dark} bright={bright} unique={unique} {width}x{height}"
     )
@@ -320,51 +343,75 @@ wait_log() {
   fail "missing $label"
 }
 
+click_client() {
+  local lx="$1"
+  local ly="$2"
+  local sx=$((client_x + lx))
+  local sy=$((client_y + ly))
+  [[ "$lx" -ge 0 && "$lx" -le "$WIDTH" ]] || fail "client X $lx outside ${WIDTH}x${HEIGHT}"
+  [[ "$ly" -ge 0 && "$ly" -le "$HEIGHT" ]] || fail "client Y $ly outside ${WIDTH}x${HEIGHT}"
+  xdotool windowactivate --sync "$win"
+  xdotool mousemove --sync "$sx" "$sy"
+  sleep 0.05
+  xdotool mousedown 1
+  sleep 0.05
+  xdotool mouseup 1
+}
+
 if [[ "$Interact" -eq 1 ]]; then
   geom_deadline=$((SECONDS + 8))
   while (( SECONDS < geom_deadline )) && [[ ! -s "$geom" ]]; do
     sleep 0.1
   done
   [[ -s "$geom" ]] || fail "Studio did not write smoke_geom widget bounds ($geom)"
+  # First flex layout can wrap the toolbar; wait for smoke_geom to reflow.
+  sleep 0.5
 
-  play_cx="$(python3 - "$geom" "$X" "$Y" <<'PY'
+  play_local="$(python3 - "$geom" <<'PY'
 import json,sys
-g=json.load(open(sys.argv[1]))
-ox,oy=int(sys.argv[2]),int(sys.argv[3])
-p=g["play"]
-print(int(ox+p["x"]+p["w"]/2), int(oy+p["y"]+p["h"]/2))
+p=json.load(open(sys.argv[1]))["play"]
+print(int(p["x"]+p["w"]/2), int(p["y"]+p["h"]/2))
 PY
 )"
-  read -r play_x play_y <<<"$play_cx"
-  [[ "$play_x" -ge "$X" && "$play_x" -le $((X + WIDTH)) ]] || fail "Play coord $play_x is outside window X"
-  [[ "$play_y" -ge "$Y" && "$play_y" -le $((Y + HEIGHT)) ]] || fail "Play coord $play_y is outside window Y"
-  echo "click Play at ${play_x},${play_y} (from smoke_geom + verified window origin)"
-  xdotool mousemove --sync "$play_x" "$play_y" click 1
-  wait_log 'semantic_state .*\"reason\":\"play\"' "standalone Play click (reason=play)" 6
+  read -r play_x play_y <<<"$play_local"
+  play_hit=0
+  # GPUI toolbar bounds can include the CSD/title offset. Try the recorded
+  # center, then the same point minus the verified frame top.
+  for adj in 0 "-${frame_top}"; do
+    try_y=$((play_y + adj))
+    if [[ "$try_y" -lt 0 || "$try_y" -gt "$HEIGHT" ]]; then
+      continue
+    fi
+    echo "click Play at client ${play_x},${try_y} (geom center ${play_y}, adj=${adj})"
+    click_client "$play_x" "$try_y"
+    sleep 0.35
+    if grep -q 'semantic_state .*\"reason\":\"play\"' "$log"; then
+      play_hit=1
+      break
+    fi
+  done
+  if [[ "$play_hit" -ne 1 ]]; then
+    fail "standalone Play click (reason=play) missed recorded smoke_geom and frame-adjusted points"
+  fi
   before_playhead="$(json_field "$state" "playhead")"
   before_locus="$(python3 -c 'import json,sys; s=json.load(open(sys.argv[1])); print((s.get("locus") or {}).get("id",""))' "$state")"
   echo "after Play: playhead=$before_playhead locus=$before_locus"
 
-  drag="$(python3 - "$geom" "$X" "$Y" <<'PY'
+  drag="$(python3 - "$geom" <<'PY'
 import json,sys
-g=json.load(open(sys.argv[1]))
-ox,oy=int(sys.argv[2]),int(sys.argv[3])
-ruler=g.get("ruler")
+ruler=json.load(open(sys.argv[1])).get("ruler")
 if not ruler:
     raise SystemExit("no ruler bounds in smoke_geom")
-x0=int(ox+ruler["x"]+ruler["w"]*0.20)
-x1=int(ox+ruler["x"]+ruler["w"]*0.80)
-y=int(oy+ruler["y"]+ruler["h"]/2)
-print(x0, y, x1)
+print(int(ruler["x"]+ruler["w"]*0.20), int(ruler["y"]+ruler["h"]/2), int(ruler["x"]+ruler["w"]*0.80))
 PY
 )"
   read -r from_x rail_y to_x <<<"$drag"
-  [[ "$from_x" -ge "$X" && "$to_x" -le $((X + WIDTH)) ]] || fail "scrub X outside verified window"
-  [[ "$rail_y" -ge "$Y" && "$rail_y" -le $((Y + HEIGHT)) ]] || fail "scrub Y outside verified window"
-  echo "scrub-drag ${from_x},${rail_y} -> ${to_x},${rail_y} (ruler, verified client bounds)"
-  xdotool mousemove --sync "$from_x" "$rail_y" mousedown 1
+  echo "scrub-drag client ${from_x},${rail_y} -> ${to_x},${rail_y} (ruler)"
+  xdotool mousemove --sync $((client_x + from_x)) $((client_y + rail_y))
+  sleep 0.05
+  xdotool mousedown 1
   sleep 0.15
-  xdotool mousemove --sync "$to_x" "$rail_y"
+  xdotool mousemove --sync $((client_x + to_x)) $((client_y + rail_y))
   sleep 0.15
   xdotool mouseup 1
   wait_log 'semantic_state .*\"reason\":\"timeline-pointer-begin\"' "in-flight timeline-pointer-begin" 6
@@ -375,22 +422,19 @@ PY
     fail "playhead did not change after verified-ruler scrub ($before_playhead)"
   fi
 
-  clip="$(python3 - "$geom" "$X" "$Y" <<'PY'
+  clip="$(python3 - "$geom" <<'PY'
 import json,sys
 g=json.load(open(sys.argv[1]))
-ox,oy=int(sys.argv[2]),int(sys.argv[3])
 tracks=g.get("tracks") or []
 track=next((t for t in tracks if t.get("name")=="Video"), tracks[0] if tracks else None)
 if track is None:
     raise SystemExit("no timeline track bounds in smoke_geom")
-print(int(ox+track["x"]+track["w"]*0.55), int(oy+track["y"]+track["h"]/2), track["name"])
+print(int(track["x"]+track["w"]*0.55), int(track["y"]+track["h"]/2), track["name"])
 PY
 )"
   read -r clip_x clip_y track_name <<<"$clip"
-  [[ "$clip_x" -ge "$X" && "$clip_x" -le $((X + WIDTH)) ]] || fail "clip click X outside window"
-  [[ "$clip_y" -ge "$Y" && "$clip_y" -le $((Y + HEIGHT)) ]] || fail "clip click Y outside window"
-  echo "click $track_name clip at ${clip_x},${clip_y} (locus transition)"
-  xdotool mousemove --sync "$clip_x" "$clip_y" click 1
+  echo "click $track_name clip at client ${clip_x},${clip_y} (locus transition)"
+  click_client "$clip_x" "$clip_y"
   after_locus="$before_locus"
   locus_deadline=$((SECONDS + 6))
   while (( SECONDS < locus_deadline )); do

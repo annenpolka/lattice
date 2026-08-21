@@ -458,7 +458,7 @@ struct StudioView {
     canvas_geom: Arc<Mutex<Option<(f32, f32, f32, f32)>>>,
     last_focused: Option<String>,
     last_inflight_key: Option<String>,
-    geom_logged: bool,
+    last_geom_key: Option<String>,
     preview_dirty: bool,
     preview_slot: Arc<Mutex<PreviewSlot>>,
     preview_inbox: std::sync::Arc<PreviewInbox>,
@@ -916,7 +916,7 @@ impl StudioView {
             canvas_geom: Arc::new(Mutex::new(None)),
             last_focused: None,
             last_inflight_key: None,
-            geom_logged: false,
+            last_geom_key: None,
             preview_dirty: true,
             preview_slot: Arc::new(Mutex::new(None)),
             preview_inbox: PreviewInbox::new(),
@@ -998,9 +998,6 @@ impl StudioView {
     }
 
     fn maybe_log_smoke_geom(&mut self) {
-        if self.geom_logged {
-            return;
-        }
         let play = self.play_geom.lock().ok().and_then(|slot| *slot);
         let ruler = self.ruler_geom.lock().ok().and_then(|slot| *slot);
         let tracks = self
@@ -1037,6 +1034,11 @@ impl StudioView {
                 })
             })
             .collect();
+        let key = format!("{play_x:.0}:{play_y:.0}:{ruler_y:.0}:{rail_w:.0}");
+        if self.last_geom_key.as_deref() == Some(key.as_str()) {
+            return;
+        }
+        self.last_geom_key = Some(key);
         let geom = serde_json::json!({
             "play": { "x": play_x, "y": play_y, "w": play_w, "h": play_h },
             "ruler": { "x": ruler_x, "y": ruler_y, "w": ruler_w, "h": ruler_h },
@@ -1047,7 +1049,6 @@ impl StudioView {
         if let Err(err) = write_geom_file(&geom) {
             trace::log(format!("smoke_geom write failed: {err}"));
         }
-        self.geom_logged = true;
     }
 
     fn adopt_locus_label(&mut self) {
@@ -2491,6 +2492,14 @@ impl StudioView {
                         this.start_play();
                         cx.notify();
                     }))
+                    .capture_any_mouse_down(cx.listener(|this, event: &MouseDownEvent, _, cx| {
+                        if event.button != MouseButton::Left {
+                            return;
+                        }
+                        this.start_play();
+                        cx.stop_propagation();
+                        cx.notify();
+                    }))
                     .child("Play")
                     .child(
                         canvas(
@@ -3377,9 +3386,11 @@ impl StudioView {
                             .absolute()
                             .size_full()
                         })
-                        .on_mouse_down(
-                            MouseButton::Left,
-                            cx.listener(|this, event: &MouseDownEvent, _, cx| {
+                        .capture_any_mouse_down(cx.listener(
+                            |this, event: &MouseDownEvent, _, cx| {
+                                if event.button != MouseButton::Left {
+                                    return;
+                                }
                                 let x = this.pointer_x(event.position.x);
                                 this.apply_rail_width();
                                 this.session.begin_timeline_scrub(x, event.modifiers.alt);
@@ -3396,8 +3407,8 @@ impl StudioView {
                                 this.refresh_preview("timeline-clip");
                                 this.queue_preview();
                                 cx.notify();
-                            }),
-                        )
+                            },
+                        ))
                         .child(format!("Timeline · {}", format_time(layout.playhead))),
                 ),
             )
