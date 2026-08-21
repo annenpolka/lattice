@@ -5,14 +5,17 @@
 # DISPLAY=:1). Xvfb is an explicit fallback, not that path.
 #
 # Builds lattice-studio, launches --ui-fixture with preview/audio detached,
-# waits for open_window ok / first paint, identifies the Studio window by
-# PID / _NET_WM_PID (never title substring), captures that client area
-# (not ${DISPLAY}.0), asserts nonblank pixels, then optionally clicks
-# Play and scrub-drags using app-emitted smoke_geom
+# waits for open_window ok / first paint, identifies the unique viewable
+# top-level Studio client by PID / _NET_WM_PID (never title, WM_CLASS,
+# or largest-area), captures that XID with ffmpeg -window_id (not a
+# root-rectangle grab of ${DISPLAY}.0), asserts nonblank pixels, then
+# optionally clicks Play and scrub-drags using app-emitted smoke_geom
 # (play / ruler / rail / tracks / canvas) offset by verified client
-# bounds. debug_selector is a test-only no-op in the product binary and
-# is not used here.
+# bounds. Event checks read only bytes appended after each action.
+# debug_selector is a test-only no-op in the product binary and is not
+# used here.
 #
+#   ./scripts/studio-linux-smoke.sh --self-test
 #   DISPLAY=:1 ./scripts/studio-linux-smoke.sh
 #   DISPLAY=:1 ./scripts/studio-linux-smoke.sh --fixture drag-valid
 #   DISPLAY=:1 ./scripts/studio-linux-smoke.sh --no-interact
@@ -34,6 +37,7 @@ WaitSeconds=0
 AllowXvfb=0
 AllowWaylandX11=0
 MissCommit=0
+SelfTest=0
 
 usage() {
   cat <<'EOF'
@@ -47,6 +51,7 @@ Usage: ./scripts/studio-linux-smoke.sh [options]
   --release        cargo build --release
   --smoke-ms N     LATTICE_STUDIO_SMOKE_MS watchdog (default 25000)
   --wait-seconds N process wait budget (default smoke-ms/1000 + 20)
+  --self-test      run window-identity unit tests and exit
   -h, --help       show this help
 
 Environment:
@@ -85,6 +90,10 @@ while [[ $# -gt 0 ]]; do
       MissCommit=1
       shift
       ;;
+    --self-test)
+      SelfTest=1
+      shift
+      ;;
     --release)
       Release=1
       shift
@@ -119,6 +128,12 @@ json_field() {
   python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get(sys.argv[2],""))' "$1" "$2"
 }
 
+window_py="$Root/scripts/studio-linux-smoke-window.py"
+
+run_window_self_test() {
+  python3 "$window_py" --self-test
+}
+
 need_cmd() {
   local bin="$1"
   local packages="$2"
@@ -148,6 +163,7 @@ preflight_packages() {
   need_cmd xwininfo "x11-utils"
   need_cmd ffmpeg ffmpeg
   need_cmd python3 python3
+  run_window_self_test || fail "studio-linux-smoke-window.py --self-test failed"
   if [[ "$AllowXvfb" -eq 1 && -z "${DISPLAY:-}" ]]; then
     need_cmd Xvfb xvfb
   fi
@@ -171,6 +187,12 @@ maybe_set_gcc_linker() {
     echo "note: default cc is clang; setting RUSTFLAGS=-C linker=gcc so rustc can link libstdc++ (not Cargo.toml)"
   fi
 }
+
+if [[ "$SelfTest" -eq 1 ]]; then
+  need_cmd python3 python3
+  run_window_self_test
+  exit 0
+fi
 
 preflight_packages
 maybe_set_gcc_linker
@@ -231,16 +253,21 @@ else
   echo "VK_ICD_FILENAMES unset; using ICD directory (mesa-vulkan-drivers / lavapipe)"
 fi
 
-stamp="$(date +%Y%m%d-%H%M%S)"
-out="${LATTICE_STUDIO_SMOKE_DIR:-$target_root/studio-linux-smoke}"
-mkdir -p "$out"
-log="$out/studio-linux-smoke-$stamp.log"
-stdout="$out/studio-linux-smoke-$stamp.stdout.log"
-stderr="$out/studio-linux-smoke-$stamp.stderr.log"
-state="$out/studio-linux-smoke-$stamp.state.json"
-geom="$out/studio-linux-smoke-$stamp.geom.json"
-shot="$out/studio-linux-smoke-$stamp.png"
-shot_after="$out/studio-linux-smoke-$stamp-after.png"
+# One directory per process. Second-resolution names plus append-mode
+# LATTICE_STUDIO_LOG would let a sibling run's timeline-pointer-commit
+# greenwash a miss.
+smoke_root="${LATTICE_STUDIO_SMOKE_DIR:-$target_root/studio-linux-smoke}"
+mkdir -p "$smoke_root"
+out="$(mktemp -d "$smoke_root/run.XXXXXX")"
+log="$out/studio.log"
+stdout="$out/studio.stdout.log"
+stderr="$out/studio.stderr.log"
+state="$out/studio.state.json"
+geom="$out/studio.geom.json"
+shot="$out/studio.png"
+shot_after="$out/studio-after.png"
+window_json="$out/studio.window.json"
+: >"$log"
 
 export LATTICE_STUDIO_LOG="$log"
 export LATTICE_STUDIO_STATE="$state"
@@ -303,149 +330,53 @@ if [[ "$ready" -ne 1 ]]; then
   fail "timed out waiting for open_window ok / first paint on DISPLAY=$DISPLAY ($display_path)"
 fi
 
-window_json="$out/studio-linux-smoke-$stamp.window.json"
 win=""
-for _ in $(seq 1 40); do
-  if python3 - "$pid" "$window_json" "$DISPLAY" <<'PY' >/dev/null
-import json, re, subprocess, sys
-
-pid = int(sys.argv[1])
-out_path = sys.argv[2]
-display = sys.argv[3]
-
-
-def run(cmd):
-    try:
-        return subprocess.check_output(cmd, text=True, stderr=subprocess.DEVNULL)
-    except subprocess.CalledProcessError:
-        return ""
-
-
-def parse_ids(text):
-    ids = []
-    for tok in re.findall(r"0x[0-9a-fA-F]+|\b\d+\b", text):
-        try:
-            ids.append(int(tok, 0))
-        except ValueError:
-            continue
-    return ids
-
-
-def xprop(wid, prop):
-    return run(["xprop", "-id", str(wid), prop])
-
-
-def net_pid(wid):
-    match = re.search(r"=\s*(\d+)", xprop(wid, "_NET_WM_PID"))
-    return int(match.group(1)) if match else None
-
-
-def wm_class(wid):
-    match = re.search(r"=\s*(.*)", xprop(wid, "WM_CLASS"))
-    return match.group(1).strip() if match else ""
-
-
-# CHI-82: PID / _NET_WM_PID only. Title substring is never an identity.
-ids = parse_ids(run(["xdotool", "search", "--pid", str(pid)]))
-ids.extend(parse_ids(run(["xprop", "-root", "_NET_CLIENT_LIST"])))
-
-owned = []
-seen = set()
-for wid in ids:
-    if wid in seen:
-        continue
-    seen.add(wid)
-    if net_pid(wid) == pid:
-        owned.append(wid)
-
-if not owned:
-    raise SystemExit(f"no X11 window with _NET_WM_PID={pid}")
-
-
-def xwininfo(wid):
-    text = run(["xwininfo", "-id", str(wid)])
-
-    def num(label):
-        match = re.search(rf"{re.escape(label)}:\s*(-?\d+)", text)
-        return int(match.group(1)) if match else None
-
-    return {
-        "x": num("Absolute upper-left X"),
-        "y": num("Absolute upper-left Y"),
-        "w": num("Width"),
-        "h": num("Height"),
-        "mapped": "IsViewable" in text,
-    }
-
-
-best = None
-best_area = -1
-for wid in owned:
-    info = xwininfo(wid)
-    width, height = info["w"], info["h"]
-    if width is None or height is None or width < 200 or height < 200:
-        continue
-    area = width * height
-    if area > best_area:
-        best_area = area
-        best = (wid, info)
-
-if best is None:
-    raise SystemExit(f"pid {pid} has windows but none are a plausible Studio client")
-
-wid, info = best
-ext_text = xprop(wid, "_NET_FRAME_EXTENTS")
-extents = [int(n) for n in re.findall(r"-?\d+", ext_text.split("=", 1)[-1])] if "=" in ext_text else []
-while len(extents) < 4:
-    extents.append(0)
-left, right, top, bottom = extents[:4]
-payload = {
-    "id": str(wid),
-    "pid": pid,
-    "identity": "net_wm_pid",
-    "wm_class": wm_class(wid),
-    "client_x": info["x"],
-    "client_y": info["y"],
-    "w": info["w"],
-    "h": info["h"],
-    "frame_left": left,
-    "frame_right": right,
-    "frame_top": top,
-    "frame_bottom": bottom,
-    "frame_x": info["x"] - left,
-    "frame_y": info["y"] - top,
-    "display": display,
+identify_window() {
+  local extra=()
+  if [[ -n "${1:-}" ]]; then
+    extra=(--expect-id "$1")
+  fi
+  python3 "$window_py" identify --pid "$pid" --out "$window_json" --display "$DISPLAY" "${extra[@]}"
 }
-with open(out_path, "w", encoding="utf-8") as fh:
-    json.dump(payload, fh, indent=2)
-    fh.write("\n")
-print(wid)
-PY
-  then
-    win="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["id"])' "$window_json")"
+
+load_window_json() {
+  win="$(json_field "$window_json" "id")"
+  client_x="$(json_field "$window_json" "client_x")"
+  client_y="$(json_field "$window_json" "client_y")"
+  WIDTH="$(json_field "$window_json" "w")"
+  HEIGHT="$(json_field "$window_json" "h")"
+  frame_left="$(json_field "$window_json" "frame_left")"
+  frame_right="$(json_field "$window_json" "frame_right")"
+  frame_top="$(json_field "$window_json" "frame_top")"
+  frame_bottom="$(json_field "$window_json" "frame_bottom")"
+  frame_x="$(json_field "$window_json" "frame_x")"
+  frame_y="$(json_field "$window_json" "frame_y")"
+  wm_class="$(json_field "$window_json" "wm_class")"
+  X="$client_x"
+  Y="$client_y"
+}
+
+refresh_window() {
+  identify_window "${win:-}" || return 1
+  load_window_json
+  [[ "${WIDTH:-0}" -ge 200 && "${HEIGHT:-0}" -ge 200 ]] || return 1
+}
+
+found_window=0
+for _ in $(seq 1 40); do
+  if identify_window; then
+    load_window_json
+    found_window=1
     break
   fi
   sleep 0.25
 done
-[[ -n "$win" && -s "$window_json" ]] || fail "no process-owned Studio window (_NET_WM_PID=$pid); title substring is not an identity"
-client_x="$(json_field "$window_json" "client_x")"
-client_y="$(json_field "$window_json" "client_y")"
-WIDTH="$(json_field "$window_json" "w")"
-HEIGHT="$(json_field "$window_json" "h")"
-frame_left="$(json_field "$window_json" "frame_left")"
-frame_right="$(json_field "$window_json" "frame_right")"
-frame_top="$(json_field "$window_json" "frame_top")"
-frame_bottom="$(json_field "$window_json" "frame_bottom")"
-frame_x="$(json_field "$window_json" "frame_x")"
-frame_y="$(json_field "$window_json" "frame_y")"
-wm_class="$(json_field "$window_json" "wm_class")"
-[[ "${WIDTH:-0}" -gt 200 && "${HEIGHT:-0}" -gt 200 ]] || fail "Studio client geometry is implausible: ${WIDTH:-?}x${HEIGHT:-?}"
+[[ "$found_window" -eq 1 && -n "$win" && -s "$window_json" ]] || fail "no unique viewable Studio client (_NET_WM_PID=$pid); title / largest-area are not identities"
+[[ "${WIDTH:-0}" -ge 200 && "${HEIGHT:-0}" -ge 200 ]] || fail "Studio client geometry is implausible: ${WIDTH:-?}x${HEIGHT:-?}"
 # xdotool getwindowgeometry is decoration-inflated / origin-ambiguous.
 # Clicks use verified xwininfo client bounds + smoke_geom (GPUI pixels
 # are client-local). Do not treat a Play hit as license to switch later
 # clicks onto the WM frame origin — the ruler is too thin for that.
-X="$client_x"
-Y="$client_y"
 echo "window id=$win pid=$pid identity=net_wm_pid wm_class=${wm_class:-?} frame=${frame_x},${frame_y} extents=${frame_left},${frame_right},${frame_top},${frame_bottom} client=${client_x},${client_y} ${WIDTH}x${HEIGHT}"
 xdotool windowactivate --sync "$win"
 xdotool windowfocus --sync "$win" || true
@@ -453,9 +384,16 @@ sleep 0.2
 
 capture_window() {
   local dest="$1"
-  ffmpeg -y -hide_banner -loglevel error \
-    -f x11grab -video_size "${WIDTH}x${HEIGHT}" -i "${DISPLAY}+${X},${Y}" \
+  refresh_window || fail "Studio XID $win (_NET_WM_PID=$pid) is no longer the unique viewable client"
+  # Bind the grab to the identified XID. A root rectangle at a cached
+  # origin can capture another window or wallpaper after move/unmap.
+  if ! ffmpeg -y -hide_banner -loglevel error \
+    -f x11grab -window_id "$win" -video_size "${WIDTH}x${HEIGHT}" \
+    -i "$DISPLAY" \
     -frames:v 1 "$dest"
+  then
+    fail "ffmpeg -window_id $win capture failed; root-rectangle grab is not a fallback"
+  fi
   [[ -s "$dest" ]] || fail "screenshot was not written: $dest"
 }
 
@@ -518,16 +456,33 @@ PY
 }
 
 capture_window "$shot"
-echo "screenshot $shot ($(wc -c <"$shot") bytes) window=${WIDTH}x${HEIGHT}+${X}+${Y}"
+echo "screenshot $shot ($(wc -c <"$shot") bytes) window_id=$win ${WIDTH}x${HEIGHT}+${X}+${Y}"
 assert_nonblank "$shot"
 
-wait_log() {
-  local pattern="$1"
-  local label="$2"
-  local budget="${3:-8}"
+log_bytes() {
+  if [[ -f "$log" ]]; then
+    wc -c <"$log" | tr -d '[:space:]'
+  else
+    echo 0
+  fi
+}
+
+log_suffix_has() {
+  local offset="$1"
+  local pattern="$2"
+  local start=$((offset + 1))
+  [[ -f "$log" ]] || return 1
+  tail -c +"$start" "$log" | grep -q "$pattern"
+}
+
+wait_log_since() {
+  local offset="$1"
+  local pattern="$2"
+  local label="$3"
+  local budget="${4:-8}"
   local until=$((SECONDS + budget))
   while (( SECONDS < until )); do
-    if [[ -f "$log" ]] && grep -q "$pattern" "$log"; then
+    if log_suffix_has "$offset" "$pattern"; then
       return 0
     fi
     if ! kill -0 "$pid" 2>/dev/null; then
@@ -543,8 +498,8 @@ click_client() {
   local ly="$2"
   local sx=$((client_x + lx))
   local sy=$((client_y + ly))
-  [[ "$lx" -ge 0 && "$lx" -le "$WIDTH" ]] || fail "local X $lx outside ${WIDTH}x${HEIGHT}"
-  [[ "$ly" -ge 0 && "$ly" -le "$HEIGHT" ]] || fail "local Y $ly outside ${WIDTH}x${HEIGHT}"
+  [[ "$lx" -ge 0 && "$lx" -lt "$WIDTH" ]] || fail "local X $lx outside ${WIDTH}x${HEIGHT}"
+  [[ "$ly" -ge 0 && "$ly" -lt "$HEIGHT" ]] || fail "local Y $ly outside ${WIDTH}x${HEIGHT}"
   xdotool windowactivate --sync "$win"
   xdotool windowfocus --sync "$win" || true
   # Root = verified xwininfo client origin + smoke_geom. Do not use
@@ -558,9 +513,10 @@ click_client() {
 
 if [[ "$MissCommit" -eq 1 ]]; then
   echo "CHI-67 negative miss: off-widget click at client 8,8; omit timeline-pointer-commit"
+  miss_mark="$(log_bytes)"
   click_client 8 8
   sleep 0.5
-  if grep -q 'semantic_state .*\"reason\":\"timeline-pointer-commit\"' "$log"; then
+  if log_suffix_has "$miss_mark" 'semantic_state .*\"reason\":\"timeline-pointer-commit\"'; then
     fail "miss path unexpectedly produced timeline-pointer-commit (cannot prove fail-closed)"
   fi
   fail "missing timeline-pointer-commit (CHI-67 negative miss; fail-closed)"
@@ -583,19 +539,24 @@ PY
 )"
   read -r play_x play_y <<<"$play_local"
   play_hit=0
-  # Play's canvas bounds can sit ~frame_top below the pixels in the
-  # client capture (toolbar CSD). Ruler/tracks match smoke_geom as-is,
-  # so only Play retries the title-adjusted Y. Never switch later clicks
-  # onto the WM frame origin.
-  for adj in 0 "-${frame_top}"; do
+  # Demonstrated XFCE/Xfwm CSD only: Play's GPUI bounds can sit
+  # frame_top below the visible pixels. This is not a general WM
+  # transform. Ruler/tracks stay on raw smoke_geom. Skip the retry
+  # when extents top is 0 so the same pixel is not clicked twice.
+  play_adjs=(0)
+  if [[ "${frame_top:-0}" -gt 0 ]]; then
+    play_adjs+=("-$frame_top")
+  fi
+  for adj in "${play_adjs[@]}"; do
     try_y=$((play_y + adj))
-    if [[ "$try_y" -lt 0 || "$try_y" -gt "$HEIGHT" ]]; then
+    if [[ "$try_y" -lt 0 || "$try_y" -ge "$HEIGHT" ]]; then
       continue
     fi
+    play_mark="$(log_bytes)"
     echo "click Play at client ${client_x},${client_y} + smoke_geom ${play_x},${try_y} (geom center ${play_y}, adj=${adj})"
     click_client "$play_x" "$try_y"
     sleep 0.4
-    if grep -q 'semantic_state .*\"reason\":\"play\"' "$log"; then
+    if log_suffix_has "$play_mark" 'semantic_state .*\"reason\":\"play\"'; then
       play_hit=1
       echo "Play hit (reason=play) on verified client bounds adj=${adj}"
       break
@@ -617,7 +578,11 @@ print(int(ruler["x"]+ruler["w"]*0.20), int(ruler["y"]+ruler["h"]/2), int(ruler["
 PY
 )"
   read -r from_x rail_y to_x <<<"$drag"
+  [[ "$from_x" -ge 0 && "$from_x" -lt "$WIDTH" ]] || fail "ruler from-x $from_x outside ${WIDTH}x${HEIGHT}"
+  [[ "$to_x" -ge 0 && "$to_x" -lt "$WIDTH" ]] || fail "ruler to-x $to_x outside ${WIDTH}x${HEIGHT}"
+  [[ "$rail_y" -ge 0 && "$rail_y" -lt "$HEIGHT" ]] || fail "ruler y $rail_y outside ${WIDTH}x${HEIGHT}"
   echo "scrub-drag client ${client_x},${client_y} + ruler ${from_x},${rail_y} -> ${to_x},${rail_y}"
+  scrub_mark="$(log_bytes)"
   xdotool windowactivate --sync "$win"
   xdotool windowfocus --sync "$win" || true
   xdotool mousemove --sync $((client_x + from_x)) $((client_y + rail_y))
@@ -627,14 +592,17 @@ PY
   xdotool mousemove --sync $((client_x + to_x)) $((client_y + rail_y))
   sleep 0.15
   xdotool mouseup 1
-  wait_log 'semantic_state .*\"reason\":\"timeline-pointer-begin\"' "in-flight timeline-pointer-begin" 6
+  wait_log_since "$scrub_mark" 'semantic_state .*\"reason\":\"timeline-pointer-begin\"' "in-flight timeline-pointer-begin" 6
   # Fail-closed: a miss that never commits must not print LINUX SMOKE OK.
-  wait_log 'semantic_state .*\"reason\":\"timeline-pointer-commit\"' "timeline-pointer-commit" 6
+  wait_log_since "$scrub_mark" 'semantic_state .*\"reason\":\"timeline-pointer-commit\"' "timeline-pointer-commit" 6
   after_playhead="$(json_field "$state" "playhead")"
-  echo "after scrub: playhead=$after_playhead"
-  if [[ "$after_playhead" == "$before_playhead" ]]; then
-    fail "playhead did not change after verified-ruler scrub ($before_playhead)"
-  fi
+  commit_playhead="$(python3 "$window_py" playhead --log "$log" --offset "$scrub_mark" --reason timeline-pointer-commit)"
+  duration="$(json_field "$state" "duration")"
+  echo "after scrub: playhead=$after_playhead commit=$commit_playhead duration=$duration"
+  # Drag ends at 80% of the ruler. Playback after Play is not evidence:
+  # a missed drag still advances the playhead while playing.
+  python3 "$window_py" ruler-commit --playhead "$commit_playhead" --duration "$duration" \
+    || fail "timeline-pointer-commit playhead $commit_playhead is not a ruler-target commit (duration=$duration); playback drift is not evidence"
 
   clip="$(python3 - "$geom" <<'PY'
 import json,sys
@@ -690,11 +658,12 @@ PY
 )"
   read -r scene_x scene_y scene_id scene_label <<<"$scene"
   echo "click SEQUENCE scene $scene_id ($scene_label) at client ${scene_x},${scene_y}"
+  scene_mark="$(log_bytes)"
   click_client "$scene_x" "$scene_y"
   scene_deadline=$((SECONDS + 6))
   while (( SECONDS < scene_deadline )); do
     after_locus="$(python3 -c 'import json,sys; s=json.load(open(sys.argv[1])); print((s.get("locus") or {}).get("id",""))' "$state")"
-    if [[ "$after_locus" == "$scene_id" ]] && grep -q 'semantic_state .*\"reason\":\"tree-select\"' "$log"; then
+    if [[ "$after_locus" == "$scene_id" ]] && log_suffix_has "$scene_mark" 'semantic_state .*\"reason\":\"tree-select\"'; then
       break
     fi
     sleep 0.1
