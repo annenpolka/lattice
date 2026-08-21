@@ -64,16 +64,17 @@ This is **not** a CHI-64 Done criterion. Chief is filing a separate child. Do no
 
 ## Pinned agent packages
 
-`.cursor/environment.json` pins the packages the next Ubuntu agent must have so the smoke path does not regress:
+`.cursor/environment.json` *declares* the packages a **repo-managed Cloud Build** should install. That file does not apply on a Personal warm_fork (`environmentJsonPath=null`); CHI-81 is deferred. The smoke script still preflights the same set and prints the apt line when one is missing:
 
 - `mesa-vulkan-drivers`
 - `libxkbcommon-dev` / `libxkbcommon-x11-dev` (`libxkbcommon*`)
 - `g++` (pulls `gcc` / libstdc++)
 - `xvfb`
 - `xdotool`
+- `x11-utils` (`xprop` / `xwininfo` for PID window identity and client bounds)
 - `ffmpeg`
 
-`libxcb1-dev` is included next to `libxkbcommon*` because Linux CI already needs it to link GPUI. The smoke script preflights the same set and prints the apt line when one is missing.
+`libxcb1-dev` is included next to `libxkbcommon*` because Linux CI already needs it to link GPUI.
 
 UI-only smoke detaches media backends:
 
@@ -99,9 +100,15 @@ The snapshot is a hook over existing session fields:
 
 It is emitted on `open`, `first-paint`, Play, timeline pointer begin/update/commit, and canvas drag/resize begin/update/commit. Begin/update lines exist so source/target/validity is visible before commit resets `gesture` to `none`. It is not a permanent on-canvas debug HUD.
 
-Widget bounds used by the OS smoke are written to `LATTICE_STUDIO_GEOM` as `smoke_geom` JSON: `play`, `ruler`, `rail`, `tracks`, and `canvas` when CHI-66 has measured them. Those are window-local GPUI pixels; the script adds the verified X11 client origin (frame origin minus `_NET_FRAME_EXTENTS`).
+Widget bounds used by the OS smoke are written to `LATTICE_STUDIO_GEOM` as `smoke_geom` JSON: `play`, `ruler`, `rail`, `tracks`, and `canvas` when CHI-66 has measured them. Those are window-local GPUI pixels; the script adds the verified `xwininfo` client origin (not `xdotool getwindowgeometry`).
 
 `debug_selector` is a test-only no-op in the product binary. The OS smoke must not depend on it. Drive click/drag coordinates from the app-emitted geoms only.
+
+Window identity is the **unique viewable** top-level client whose `_NET_WM_PID` matches the Studio process (CHI-82). Candidates come from `_NET_CLIENT_LIST` only. Title, `WM_CLASS`, `xdotool search --name`, and largest-area are not identities; two plausible clients fail closed. `xdotool getwindowgeometry` is decoration-inflated and origin-ambiguous; clicks use verified `xwininfo` client bounds plus `smoke_geom`.
+
+Play may retry `Y - frame_top` **only** on the demonstrated XFCE/Xfwm CSD path when `_NET_FRAME_EXTENTS` top is nonzero. Ruler, tracks, and tree clicks stay on raw `smoke_geom`. That retry is not a general WM transform.
+
+`scripts/studio-linux-smoke-window.py --self-test` covers parser / uniqueness / unmapped / XID-change fixtures. The smoke script runs it during preflight.
 
 ## Reproducing the smoke
 
@@ -114,6 +121,7 @@ DISPLAY=:1 ./scripts/studio-linux-smoke.sh --fixture timeline-basic
 Other forms:
 
 ```bash
+./scripts/studio-linux-smoke.sh --self-test
 DISPLAY=:1 ./scripts/studio-linux-smoke.sh --fixture drag-valid
 DISPLAY=:1 ./scripts/studio-linux-smoke.sh --no-interact
 DISPLAY=:1 ./scripts/studio-linux-smoke.sh --miss-commit   # CHI-67 negative; must FAIL
@@ -125,17 +133,17 @@ A populated `WAYLAND_DISPLAY` is not a silent X11 path. The script fails unless 
 
 The script:
 
-1. Preflights `g++` / `gcc`, `libxkbcommon` headers, a Vulkan ICD directory, `xdotool`, `ffmpeg`, and `python3`.
+1. Preflights `g++` / `gcc`, `libxkbcommon` headers, a Vulkan ICD directory, `xdotool`, `xprop` / `xwininfo`, `ffmpeg`, and `python3`.
 2. If `cc` is clang, sets `RUSTFLAGS=-C linker=gcc` (not Cargo.toml).
 3. Builds `lattice-studio`.
 4. Requires an existing `DISPLAY` unless `--allow-xvfb` is passed.
 5. Launches `--ui-fixture` with preview/audio detached and a smoke watchdog.
 6. Waits for `open_window ok` and `first paint`.
-7. Identifies the Studio window with xdotool and captures **that window**, not `${DISPLAY}.0`.
+7. Identifies the unique viewable Studio client by process PID / `_NET_WM_PID` (never title substring / largest-area) and captures **that XID** with `ffmpeg -window_id` (not a root rectangle of `${DISPLAY}.0`). Capture re-checks the same XID is still the unique viewable client.
 8. Asserts the PNG is a nonblank Studio frame (color diversity / contrast), not merely a non-empty file.
-9. With interact: clicks Play from `smoke_geom` (must emit `reason=play`), scrub-drags the ruler (must emit begin + **commit** and move the playhead), then clicks the Video clip (must change locus). Percent positions are fractions of verified widget bounds, then offset by the verified client origin. Missing `timeline-pointer-commit` **fails** the script. `--miss-commit` deliberately clicks off-widget and must exit nonzero with no `LINUX SMOKE OK`. Missing `smoke quit` also fails.
+9. With interact: clicks Play from `smoke_geom` (must emit `reason=play` in the bytes appended after that click), scrub-drags the ruler (must emit begin + **commit** in those new bytes, and the commit playhead must be at least half the duration — playback drift after Play is not evidence), then clicks the Video clip (must change locus). Percent positions are fractions of verified widget bounds, then offset by the verified `xwininfo` client origin. Missing `timeline-pointer-commit` **fails** the script. `--miss-commit` deliberately clicks off-widget and must exit nonzero with no `LINUX SMOKE OK`. Missing `smoke quit` also fails.
 
-Artifacts stay under `target/studio-linux-smoke/` (gitignored with the rest of `target/`). PR-visible evidence is copied to `docs/screenshots/`.
+Each run uses `mktemp -d` under `target/studio-linux-smoke/` (gitignored with the rest of `target/`). Screenshots stay there; they are not copied into `docs/screenshots/`.
 
 ## Spike results (Cursor Cloud Ubuntu)
 
@@ -146,7 +154,7 @@ Recorded on the CHI-54 implementing agent (`DISPLAY=:1`, XFCE/Xfwm 1920×1200, M
 | build | pass | `cargo build -p lattice-studio --features window`. Clang `cc` needs `RUSTFLAGS=-C linker=gcc` (script, not CHI-64). |
 | launch | pass | `open_window ok`; `LATTICE_STUDIO_PREVIEW=0` and `LATTICE_STUDIO_AUDIO_MONITOR=0` |
 | visible | pass | Window title `Lattice Studio · CPU`; sequence / Canvas / VEL / Inspector / Timeline all draw |
-| screenshot | pass | Window-cropped `ffmpeg -f x11grab` of the identified Studio window; nonblank-pixel check |
+| screenshot | pass | `ffmpeg -f x11grab -window_id` of the identified Studio XID; nonblank-pixel check |
 | input | in script | Fail-closed xdotool using `smoke_geom` + verified client bounds. Manual Computer Use is supporting evidence only |
 
 Classification notes:
