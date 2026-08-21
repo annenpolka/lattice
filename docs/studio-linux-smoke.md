@@ -116,8 +116,11 @@ Other forms:
 ```bash
 DISPLAY=:1 ./scripts/studio-linux-smoke.sh --fixture drag-valid
 DISPLAY=:1 ./scripts/studio-linux-smoke.sh --no-interact
+DISPLAY=:1 ./scripts/studio-linux-smoke.sh --miss-commit   # CHI-67 negative; must FAIL
 ./scripts/studio-linux-smoke.sh --allow-xvfb   # fallback only; not the demonstrated path
 ```
+
+A populated `WAYLAND_DISPLAY` is not a silent X11 path. The script fails unless `WAYLAND_DISPLAY` is unset or `--allow-wayland-x11` is passed (labeled X11-under-Wayland). Missing `smoke quit` fails; it is not a WARN that can greenwash a miss.
 
 The script:
 
@@ -129,7 +132,7 @@ The script:
 6. Waits for `open_window ok` and `first paint`.
 7. Identifies the Studio window with xdotool and captures **that window**, not `${DISPLAY}.0`.
 8. Asserts the PNG is a nonblank Studio frame (color diversity / contrast), not merely a non-empty file.
-9. With interact: clicks Play from `smoke_geom` (must emit `reason=play`), scrub-drags the ruler (must emit begin + **commit** and move the playhead), then clicks the Video clip (must change locus). Percent positions are fractions of verified widget bounds, then offset by the verified client origin. Missing `timeline-pointer-commit` **fails** the script. A miss must not print `LINUX SMOKE OK`.
+9. With interact: clicks Play from `smoke_geom` (must emit `reason=play`), scrub-drags the ruler (must emit begin + **commit** and move the playhead), then clicks the Video clip (must change locus). Percent positions are fractions of verified widget bounds, then offset by the verified client origin. Missing `timeline-pointer-commit` **fails** the script. `--miss-commit` deliberately clicks off-widget and must exit nonzero with no `LINUX SMOKE OK`. Missing `smoke quit` also fails.
 
 Artifacts stay under `target/studio-linux-smoke/` (gitignored with the rest of `target/`). PR-visible evidence is copied to `docs/screenshots/`.
 
@@ -150,7 +153,7 @@ Classification notes:
 - **Environment:** `vulkaninfo --summary` can fail with `X_CreateWindow BadMatch`. That is a WSI probe issue, not Studio. Do not gate on it. GPUI still opened a window through lavapipe after `mesa-vulkan-drivers`.
 - **App platform-coupling (fixed in this path):** a title-only VEL cannot flatten (`timeline has no video clip`), so fixtures include a `media` + video clip in Core IR. The media file itself is not required for UI-only smoke.
 - **CHI-64 remainder:** a human still needs to look at the committed Studio-window PNGs. Process start + PNG byte count is not enough. Lavapipe is proven for window init; it is not a product GPU path.
-- **CHI-67 remainder:** a green percent-xdotool script without `timeline-pointer-commit` / playhead / locus assertions is not Done. Missing commit is fail-closed. CHI-63 UiDriver is not reimplemented here.
+- **CHI-67 remainder:** this-head rerun and the `--miss-commit` negative path are the remaining Linux-agent evidence. Missing commit / missing `smoke quit` are fail-closed. CHI-63 UiDriver is not reimplemented here. Not a Windows closer.
 
 Initial fixture semantic state (stable across opens; see `UiFixture::expected_initial`):
 

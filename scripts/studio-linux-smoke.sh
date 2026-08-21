@@ -14,6 +14,7 @@
 #   DISPLAY=:1 ./scripts/studio-linux-smoke.sh
 #   DISPLAY=:1 ./scripts/studio-linux-smoke.sh --fixture drag-valid
 #   DISPLAY=:1 ./scripts/studio-linux-smoke.sh --no-interact
+#   DISPLAY=:1 ./scripts/studio-linux-smoke.sh --miss-commit  # CHI-67 negative
 #   ./scripts/studio-linux-smoke.sh --allow-xvfb   # labeled fallback only
 #
 # Windows dogfood remains scripts/studio-smoke.ps1 / studio-debug.ps1.
@@ -29,14 +30,18 @@ Release=0
 SmokeMs=25000
 WaitSeconds=0
 AllowXvfb=0
+AllowWaylandX11=0
+MissCommit=0
 
 usage() {
   cat <<'EOF'
 Usage: ./scripts/studio-linux-smoke.sh [options]
 
   --fixture NAME   timeline-basic | drag-valid | drag-invalid | dense-project
-  --no-interact    skip OS click/drag (still requires a visible nonblank window)
-  --allow-xvfb     start Xvfb if DISPLAY is unset (not the CHI-64 demonstrated path)
+  --no-interact         skip OS click/drag (still requires a visible nonblank window)
+  --miss-commit         CHI-67 negative: off-widget click, omit timeline-pointer-commit, expect FAIL
+  --allow-xvfb          start Xvfb if DISPLAY is unset (not the CHI-64 demonstrated path)
+  --allow-wayland-x11   labeled X11-under-Wayland path when WAYLAND_DISPLAY is set
   --release        cargo build --release
   --smoke-ms N     LATTICE_STUDIO_SMOKE_MS watchdog (default 25000)
   --wait-seconds N process wait budget (default smoke-ms/1000 + 20)
@@ -51,6 +56,8 @@ Environment:
   If default cc is clang, RUSTFLAGS=-C linker=gcc is set so rustc can link
   libstdc++. That is not baked into Cargo.toml / .cargo/config.toml.
   NoSupportedDeviceFound is fatal. Missing timeline-pointer-commit fails.
+  Missing smoke quit fails (not WARN). Populated WAYLAND_DISPLAY fails unless
+  --allow-wayland-x11 is passed.
 EOF
 }
 
@@ -66,6 +73,14 @@ while [[ $# -gt 0 ]]; do
       ;;
     --allow-xvfb)
       AllowXvfb=1
+      shift
+      ;;
+    --allow-wayland-x11)
+      AllowWaylandX11=1
+      shift
+      ;;
+    --miss-commit)
+      MissCommit=1
       shift
       ;;
     --release)
@@ -152,6 +167,10 @@ maybe_set_gcc_linker() {
 preflight_packages
 maybe_set_gcc_linker
 
+if [[ -n "${WAYLAND_DISPLAY:-}" && "$AllowWaylandX11" -ne 1 ]]; then
+  fail "WAYLAND_DISPLAY is set (${WAYLAND_DISPLAY}). Demonstrated CHI-64 path is X11 DISPLAY=:1 without Wayland. Unset WAYLAND_DISPLAY or pass --allow-wayland-x11 for a labeled X11-under-Wayland path."
+fi
+
 profile=debug
 cargo_args=(build -p lattice-studio --features window)
 if [[ "$Release" -eq 1 ]]; then
@@ -185,7 +204,13 @@ if [[ -z "${DISPLAY:-}" ]]; then
   fi
 fi
 
-if [[ -z "${WAYLAND_DISPLAY:-}" ]]; then
+if [[ -n "${WAYLAND_DISPLAY:-}" ]]; then
+  if [[ "$AllowWaylandX11" -ne 1 ]]; then
+    fail "WAYLAND_DISPLAY is set (${WAYLAND_DISPLAY}). Demonstrated CHI-64 path is X11 DISPLAY=:1 without Wayland. Unset WAYLAND_DISPLAY or pass --allow-wayland-x11 for a labeled X11-under-Wayland path."
+  fi
+  display_path="x11-under-wayland"
+  echo "WAYLAND_DISPLAY=${WAYLAND_DISPLAY}; taking labeled X11-under-Wayland path"
+elif [[ -z "${WAYLAND_DISPLAY:-}" ]]; then
   unset WAYLAND_DISPLAY || true
 fi
 
@@ -408,6 +433,16 @@ click_client() {
   xdotool mouseup 1
 }
 
+if [[ "$MissCommit" -eq 1 ]]; then
+  echo "CHI-67 negative miss: off-widget click at client 8,8; omit timeline-pointer-commit"
+  click_client 8 8
+  sleep 0.5
+  if grep -q 'semantic_state .*\"reason\":\"timeline-pointer-commit\"' "$log"; then
+    fail "miss path unexpectedly produced timeline-pointer-commit (cannot prove fail-closed)"
+  fi
+  fail "missing timeline-pointer-commit (CHI-67 negative miss; fail-closed)"
+fi
+
 if [[ "$Interact" -eq 1 ]]; then
   geom_deadline=$((SECONDS + 8))
   while (( SECONDS < geom_deadline )) && [[ ! -s "$geom" ]]; do
@@ -555,7 +590,7 @@ if [[ "$Interact" -eq 1 ]]; then
   fi
 fi
 if ! grep -q "smoke quit" <<<"$log_text"; then
-  echo "WARN: missing smoke quit (process was stopped by the script after the window was observed)"
+  fail "missing smoke quit (fail-closed; a killed process must not greenwash a miss)"
 fi
 
 echo ""
