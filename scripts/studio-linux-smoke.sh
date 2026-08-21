@@ -209,14 +209,17 @@ if [[ "$Interact" -eq 1 ]]; then
   xdotool windowactivate --sync "$win"
   eval "$(xdotool getwindowgeometry --shell "$win")"
   echo "window id=$win x=${X} y=${Y} ${WIDTH}x${HEIGHT}"
-  click_x=$((X + WIDTH * 12 / 100))
-  click_y=$((Y + HEIGHT * 6 / 100))
-  echo "click toolbar-ish ${click_x},${click_y}"
+  # Toolbar Play sits on the first row, right of the CPU/DX12 toggles.
+  click_x=$((X + WIDTH * 72 / 100))
+  click_y=$((Y + HEIGHT * 8 / 100))
+  echo "click play-ish ${click_x},${click_y}"
   xdotool mousemove --sync "$click_x" "$click_y" click 1
   sleep 0.3
-  from_x=$((X + WIDTH * 25 / 100))
-  to_x=$((X + WIDTH * 70 / 100))
-  rail_y=$((Y + HEIGHT * 78 / 100))
+  # Timeline rail is TIMELINE_WIDTH (640) plus a 64px label, left-aligned
+  # in the bottom bar — not the full 1400px window.
+  from_x=$((X + 120))
+  to_x=$((X + 520))
+  rail_y=$((Y + HEIGHT * 92 / 100))
   echo "scrub-drag ${from_x},${rail_y} -> ${to_x},${rail_y}"
   xdotool mousemove --sync "$from_x" "$rail_y" mousedown 1
   xdotool mousemove --sync "$to_x" "$rail_y"

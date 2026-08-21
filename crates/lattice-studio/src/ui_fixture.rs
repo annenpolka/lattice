@@ -59,9 +59,10 @@ impl UiFixture {
 
     /// Write the fixture VEL to a stable directory and return `main.vel`.
     pub fn materialize(self) -> std::io::Result<PathBuf> {
-        let root = std::env::var_os("LATTICE_STUDIO_FIXTURE_DIR")
-            .map(PathBuf::from)
-            .unwrap_or_else(|| std::env::temp_dir().join("lattice-studio-ui-fixtures"));
+        let root = std::env::var_os("LATTICE_STUDIO_FIXTURE_DIR").map_or_else(
+            || std::env::temp_dir().join("lattice-studio-ui-fixtures"),
+            PathBuf::from,
+        );
         self.materialize_in(&root)
     }
 

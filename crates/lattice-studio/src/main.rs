@@ -81,7 +81,7 @@ fn main() -> ExitCode {
     let launch = match parse_launch(std::env::args_os()) {
         Ok(launch) => launch,
         Err(err) => {
-            eprintln!("{err}");
+            trace::log(format!("fatal: {err}"));
             return ExitCode::from(2);
         }
     };
@@ -92,7 +92,6 @@ fn main() -> ExitCode {
     let path = match launch.vel_path() {
         Ok(path) => path,
         Err(err) => {
-            eprintln!("{err}");
             trace::log(format!("fatal: {err}"));
             return ExitCode::from(2);
         }
@@ -234,21 +233,21 @@ fn parse_ui_fixture(name: &str) -> Result<UiFixture, String> {
 }
 
 fn print_help() {
-    eprintln!(
-        "\
-lattice-studio [VEL]
-lattice-studio --ui-fixture <{}>
-
-Windows dogfood still opens a VEL path. --ui-fixture is the agent smoke entry
-and materializes a deterministic Engine/Studio project. LATTICE_STUDIO_PREVIEW=0
-skips live frame extract; LATTICE_STUDIO_AUDIO_MONITOR=0 skips device output.
-LATTICE_STUDIO_STATE writes the latest semantic_state JSON snapshot.",
-        UiFixture::ALL
-            .iter()
-            .map(|fixture| fixture.as_str())
-            .collect::<Vec<_>>()
-            .join("|")
+    let names = UiFixture::ALL
+        .iter()
+        .map(|fixture| fixture.as_str())
+        .collect::<Vec<_>>()
+        .join("|");
+    trace::log(format!(
+        "usage: lattice-studio [VEL] | lattice-studio --ui-fixture <{names}>"
+    ));
+    trace::log(
+        "Windows dogfood still opens a VEL path. --ui-fixture materializes a deterministic Engine/Studio project.",
     );
+    trace::log(
+        "LATTICE_STUDIO_PREVIEW=0 skips live frame extract; LATTICE_STUDIO_AUDIO_MONITOR=0 skips device output.",
+    );
+    trace::log("LATTICE_STUDIO_STATE writes the latest semantic_state JSON snapshot.");
 }
 
 fn window_main(path: PathBuf, fixture: Option<String>) -> Result<(), Box<dyn std::error::Error>> {
@@ -1131,6 +1130,7 @@ impl StudioView {
             format_time(self.session.playhead()),
             self.audio_status()
         ));
+        self.log_semantic_state("play", None);
     }
 
     fn queue_audio_prepare(&mut self) {

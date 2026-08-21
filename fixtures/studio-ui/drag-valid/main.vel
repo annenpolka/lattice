@@ -2,18 +2,24 @@ project "drag-valid"
 
 convention commentary
 
+media game "capture.mp4"
+
 sequence main {
   left
   right
 }
 
 scene left {
+  game[0s..2s] as clip-a
+
   title "Alpha" {
     at 0s for 2s
   }
 }
 
 scene right {
+  game[0s..2s] as clip-b
+
   title "Beta" {
     at 0s for 2s
   }

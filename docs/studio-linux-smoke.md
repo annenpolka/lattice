@@ -28,7 +28,7 @@ The agent VM needs an X11 `DISPLAY`. A running XFCE/Xfwm session is enough. If `
 
 GPUI 0.2 opens a real window and expects Vulkan. On a machine without a hardware ICD, install Mesa's software implementation (`mesa-vulkan-drivers`) and point `VK_ICD_FILENAMES` at `lvp_icd.x86_64.json`. The smoke script does this when the file exists and also sets `LIBGL_ALWAYS_SOFTWARE=1`.
 
-Link-time packages already required by Linux CI remain: `libxcb1-dev`, `libxkbcommon-dev`, `libxkbcommon-x11-dev`.
+Link-time packages already required by Linux CI remain: `libxcb1-dev`, `libxkbcommon-dev`, `libxkbcommon-x11-dev`. A C++ linker (`g++` / `libstdc++`) is also required to link GPUI.
 
 UI-only smoke detaches media backends:
 
@@ -75,17 +75,33 @@ Artifacts stay under `target/studio-linux-smoke/` (gitignored with the rest of `
 
 ## Spike results (Cursor Cloud Ubuntu)
 
-Recorded on the CHI-54 implementing agent (`DISPLAY=:1`, XFCE/Xfwm, 1920×1200, Mesa lavapipe). Fill-in after the closed loop below.
+Recorded on the CHI-54 implementing agent (`DISPLAY=:1`, XFCE/Xfwm 1920×1200, Mesa lavapipe ICD `/usr/share/vulkan/icd.d/lvp_icd.json`).
 
 | Gate | Result | Notes |
 |---|---|---|
-| build | pending | `cargo build -p lattice-studio --features window` |
-| launch | pending | `open_window ok` in the durable log |
-| visible | pending | window title `Lattice Studio · CPU` |
-| screenshot | pending | `ffmpeg -f x11grab` artifact |
-| input | pending | one click + one scrub-style drag |
+| build | pass | `cargo build -p lattice-studio --features window` after `libxkbcommon*-dev` + `g++`/`libstdc++` |
+| launch | pass | `open_window ok`; `LATTICE_STUDIO_PREVIEW=0` and `LATTICE_STUDIO_AUDIO_MONITOR=0` |
+| visible | pass | Window title `Lattice Studio · CPU`; sequence / Canvas / VEL / Inspector / Timeline all draw |
+| screenshot | pass | `ffmpeg -f x11grab` artifact under `target/studio-linux-smoke/` |
+| input | pass | Computer-use click on Play (`play samples` at 0s) then a timeline clip drag; playhead ended at `4s` and locus moved `demo:title:1` → `scene:demo` |
 
-Failure classification, when needed: **app platform-coupling** (Studio/GPUI code path) vs **environment** (missing display, Wayland-only, no Vulkan ICD, software renderer).
+Classification notes:
+
+- **Environment:** `vulkaninfo --summary` failed with `X_CreateWindow BadMatch`. That is a WSI probe issue, not Studio. GPUI still opened a window through lavapipe.
+- **App platform-coupling (fixed in this path):** a title-only VEL cannot flatten (`timeline has no video clip`), so fixtures include a `media` + video clip in Core IR. The media file itself is not required for UI-only smoke.
+- **Environment / input tool:** `xdotool` can miss the 640px timeline rail. Computer-use is the reliable agent input path; the script still tries one click + one scrub-style drag.
+
+Initial fixture semantic state (stable across opens):
+
+```json
+{"locus":{"id":"demo:title:1","kind":"title","label":"Hello"},"playhead":"0s","playing":false,"interaction":"idle","drag":null}
+```
+
+After the agent Play click + timeline drag:
+
+```json
+{"locus":{"id":"scene:demo","kind":"scene","label":"demo"},"playhead":"4s","playing":false,"interaction":"idle","reason":"timeline-pointer-commit"}
+```
 
 ## Non-goals
 

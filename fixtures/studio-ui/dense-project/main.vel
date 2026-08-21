@@ -2,6 +2,8 @@ project "dense-project"
 
 convention commentary
 
+media game "capture.mp4"
+
 sequence main {
   one
   two
@@ -10,6 +12,8 @@ sequence main {
 }
 
 scene one {
+  game[0s..1s] as clip-one
+
   title "One" {
     at 0s for 1s
   }
@@ -20,6 +24,8 @@ scene one {
 }
 
 scene two {
+  game[0s..1s] as clip-two
+
   title "Two" {
     at 0s for 1s
   }
@@ -30,6 +36,8 @@ scene two {
 }
 
 scene three {
+  game[0s..1s] as clip-three
+
   title "Three" {
     at 0s for 1s
   }
@@ -40,6 +48,8 @@ scene three {
 }
 
 scene four {
+  game[0s..1s] as clip-four
+
   title "Four" {
     at 0s for 1s
   }
