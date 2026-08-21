@@ -136,7 +136,7 @@ The script:
 6. Waits for `open_window ok` and `first paint`.
 7. Identifies the Studio window by process PID / `_NET_WM_PID` (never title substring) and captures **that client area**, not `${DISPLAY}.0`.
 8. Asserts the PNG is a nonblank Studio frame (color diversity / contrast), not merely a non-empty file.
-9. With interact: clicks Play from `smoke_geom` (must emit `reason=play`), scrub-drags the ruler (must emit begin + **commit** and move the playhead), then clicks the Video clip (must change locus). Percent positions are fractions of verified widget bounds, then offset by the verified xwininfo client origin (frame origin is only a Play fallback when GPUI coords include the WM/CSD title). Missing `timeline-pointer-commit` **fails** the script. `--miss-commit` deliberately clicks off-widget and must exit nonzero with no `LINUX SMOKE OK`. Missing `smoke quit` also fails.
+9. With interact: clicks Play from `smoke_geom` (must emit `reason=play`), scrub-drags the ruler (must emit begin + **commit** and move the playhead), then clicks the Video clip (must change locus). Percent positions are fractions of verified widget bounds, then offset by the verified `xwininfo` client origin. Missing `timeline-pointer-commit` **fails** the script. `--miss-commit` deliberately clicks off-widget and must exit nonzero with no `LINUX SMOKE OK`. Missing `smoke quit` also fails.
 
 Artifacts stay under `target/studio-linux-smoke/` (gitignored with the rest of `target/`). PR-visible evidence is copied to `docs/screenshots/`.
 

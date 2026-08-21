@@ -441,13 +441,11 @@ frame_y="$(json_field "$window_json" "frame_y")"
 wm_class="$(json_field "$window_json" "wm_class")"
 [[ "${WIDTH:-0}" -gt 200 && "${HEIGHT:-0}" -gt 200 ]] || fail "Studio client geometry is implausible: ${WIDTH:-?}x${HEIGHT:-?}"
 # xdotool getwindowgeometry is decoration-inflated / origin-ambiguous.
-# Clicks use verified xwininfo client bounds + smoke_geom. GPUI widget
-# origins are sometimes frame-local (CSD/title), so Play may fall back
-# to the frame origin after the client origin miss.
+# Clicks use verified xwininfo client bounds + smoke_geom (GPUI pixels
+# are client-local). Do not treat a Play hit as license to switch later
+# clicks onto the WM frame origin — the ruler is too thin for that.
 X="$client_x"
 Y="$client_y"
-click_origin_x="$client_x"
-click_origin_y="$client_y"
 echo "window id=$win pid=$pid identity=net_wm_pid wm_class=${wm_class:-?} frame=${frame_x},${frame_y} extents=${frame_left},${frame_right},${frame_top},${frame_bottom} client=${client_x},${client_y} ${WIDTH}x${HEIGHT}"
 xdotool windowactivate --sync "$win"
 xdotool windowfocus --sync "$win" || true
@@ -540,15 +538,25 @@ wait_log() {
   fail "missing $label"
 }
 
+# Window-local GPUI pixels → root via verified xwininfo client origin.
+root_xy() {
+  echo $((client_x + $1)) $((client_y + $2))
+}
+
 click_client() {
   local lx="$1"
   local ly="$2"
-  local sx=$((click_origin_x + lx))
-  local sy=$((click_origin_y + ly))
+  local sx sy
+  read -r sx sy <<<"$(root_xy "$lx" "$ly")"
   [[ "$lx" -ge 0 && "$lx" -le "$WIDTH" ]] || fail "local X $lx outside ${WIDTH}x${HEIGHT}"
   [[ "$ly" -ge 0 && "$ly" -le "$HEIGHT" ]] || fail "local Y $ly outside ${WIDTH}x${HEIGHT}"
   xdotool windowactivate --sync "$win"
-  xdotool mousemove --sync "$sx" "$sy"
+  xdotool windowfocus --sync "$win" || true
+  # --window is client-local for the _NET_WM_PID window we identified.
+  # Root coords stay as a fallback when the WM ignores --window.
+  if ! xdotool mousemove --window "$win" --sync "$lx" "$ly" 2>/dev/null; then
+    xdotool mousemove --sync "$sx" "$sy"
+  fi
   sleep 0.05
   xdotool mousedown 1
   sleep 0.05
@@ -582,27 +590,18 @@ PY
 )"
   read -r play_x play_y <<<"$play_local"
   play_hit=0
-  # Verified xwininfo client origin first. If GPUI widget Y includes the
-  # WM/CSD title, the same smoke_geom point on the frame origin hits Play.
-  for origin in client frame; do
-    if [[ "$origin" == "client" ]]; then
-      click_origin_x="$client_x"
-      click_origin_y="$client_y"
-    else
-      click_origin_x="$frame_x"
-      click_origin_y="$frame_y"
-    fi
-    echo "click Play at ${origin} origin ${click_origin_x},${click_origin_y} + smoke_geom ${play_x},${play_y}"
+  for attempt in 1 2 3; do
+    echo "click Play at client ${client_x},${client_y} + smoke_geom ${play_x},${play_y} (attempt ${attempt})"
     click_client "$play_x" "$play_y"
-    sleep 0.35
+    sleep 0.4
     if grep -q 'semantic_state .*\"reason\":\"play\"' "$log"; then
       play_hit=1
-      echo "Play hit using ${origin} origin (reason=play); later clicks keep this origin"
+      echo "Play hit (reason=play) on verified client bounds"
       break
     fi
   done
   if [[ "$play_hit" -ne 1 ]]; then
-    fail "standalone Play click (reason=play) missed smoke_geom on verified client and frame origins"
+    fail "standalone Play click (reason=play) missed smoke_geom on verified xwininfo client bounds"
   fi
   before_playhead="$(json_field "$state" "playhead")"
   before_locus="$(python3 -c 'import json,sys; s=json.load(open(sys.argv[1])); print((s.get("locus") or {}).get("id",""))' "$state")"
@@ -617,12 +616,18 @@ print(int(ruler["x"]+ruler["w"]*0.20), int(ruler["y"]+ruler["h"]/2), int(ruler["
 PY
 )"
   read -r from_x rail_y to_x <<<"$drag"
-  echo "scrub-drag ${click_origin_x},${click_origin_y} + ruler ${from_x},${rail_y} -> ${to_x},${rail_y}"
-  xdotool mousemove --sync $((click_origin_x + from_x)) $((click_origin_y + rail_y))
+  echo "scrub-drag client ${client_x},${client_y} + ruler ${from_x},${rail_y} -> ${to_x},${rail_y}"
+  xdotool windowactivate --sync "$win"
+  xdotool windowfocus --sync "$win" || true
+  if ! xdotool mousemove --window "$win" --sync "$from_x" "$rail_y" 2>/dev/null; then
+    xdotool mousemove --sync $((client_x + from_x)) $((client_y + rail_y))
+  fi
   sleep 0.05
   xdotool mousedown 1
   sleep 0.15
-  xdotool mousemove --sync $((click_origin_x + to_x)) $((click_origin_y + rail_y))
+  if ! xdotool mousemove --window "$win" --sync "$to_x" "$rail_y" 2>/dev/null; then
+    xdotool mousemove --sync $((client_x + to_x)) $((client_y + rail_y))
+  fi
   sleep 0.15
   xdotool mouseup 1
   wait_log 'semantic_state .*\"reason\":\"timeline-pointer-begin\"' "in-flight timeline-pointer-begin" 6
