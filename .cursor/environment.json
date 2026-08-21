@@ -1,4 +1,4 @@
 {
   "name": "lattice-linux-agent",
-  "install": "sudo apt-get update\nsudo DEBIAN_FRONTEND=noninteractive apt-get install -y mesa-vulkan-drivers libxkbcommon-dev libxkbcommon-x11-dev libxcb1-dev g++ xvfb xdotool ffmpeg"
+  "install": "sudo apt-get update\nsudo DEBIAN_FRONTEND=noninteractive apt-get install -y mesa-vulkan-drivers libxkbcommon-dev libxkbcommon-x11-dev libxcb1-dev g++ xvfb xdotool x11-utils ffmpeg"
 }

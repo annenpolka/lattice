@@ -5,11 +5,13 @@
 # DISPLAY=:1). Xvfb is an explicit fallback, not that path.
 #
 # Builds lattice-studio, launches --ui-fixture with preview/audio detached,
-# waits for open_window ok / first paint, captures the identified Studio
-# window (not ${DISPLAY}.0), asserts nonblank pixels, then optionally
-# clicks Play and scrub-drags using app-emitted smoke_geom
-# (play / ruler / rail / tracks / canvas). debug_selector is a test-only
-# no-op in the product binary and is not used here.
+# waits for open_window ok / first paint, identifies the Studio window by
+# PID / _NET_WM_PID (never title substring), captures that client area
+# (not ${DISPLAY}.0), asserts nonblank pixels, then optionally clicks
+# Play and scrub-drags using app-emitted smoke_geom
+# (play / ruler / rail / tracks / canvas) offset by verified client
+# bounds. debug_selector is a test-only no-op in the product binary and
+# is not used here.
 #
 #   DISPLAY=:1 ./scripts/studio-linux-smoke.sh
 #   DISPLAY=:1 ./scripts/studio-linux-smoke.sh --fixture drag-valid
@@ -113,6 +115,10 @@ fail() {
   exit 1
 }
 
+json_field() {
+  python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get(sys.argv[2],""))' "$1" "$2"
+}
+
 need_cmd() {
   local bin="$1"
   local packages="$2"
@@ -138,6 +144,8 @@ preflight_packages() {
   fi
   echo "vulkan ICD present (${#icds[@]}): ${icds[*]}"
   need_cmd xdotool xdotool
+  need_cmd xprop "x11-utils"
+  need_cmd xwininfo "x11-utils"
   need_cmd ffmpeg ffmpeg
   need_cmd python3 python3
   if [[ "$AllowXvfb" -eq 1 && -z "${DISPLAY:-}" ]]; then
@@ -295,37 +303,155 @@ if [[ "$ready" -ne 1 ]]; then
   fail "timed out waiting for open_window ok / first paint on DISPLAY=$DISPLAY ($display_path)"
 fi
 
+window_json="$out/studio-linux-smoke-$stamp.window.json"
 win=""
 for _ in $(seq 1 40); do
-  win="$(xdotool search --pid "$pid" --name 'Lattice Studio' 2>/dev/null | head -n 1 || true)"
-  if [[ -z "$win" ]]; then
-    win="$(xdotool search --name 'Lattice Studio' 2>/dev/null | head -n 1 || true)"
-  fi
-  if [[ -n "$win" ]]; then
+  if python3 - "$pid" "$window_json" "$DISPLAY" <<'PY' >/dev/null
+import json, re, subprocess, sys
+
+pid = int(sys.argv[1])
+out_path = sys.argv[2]
+display = sys.argv[3]
+
+
+def run(cmd):
+    try:
+        return subprocess.check_output(cmd, text=True, stderr=subprocess.DEVNULL)
+    except subprocess.CalledProcessError:
+        return ""
+
+
+def parse_ids(text):
+    ids = []
+    for tok in re.findall(r"0x[0-9a-fA-F]+|\b\d+\b", text):
+        try:
+            ids.append(int(tok, 0))
+        except ValueError:
+            continue
+    return ids
+
+
+def xprop(wid, prop):
+    return run(["xprop", "-id", str(wid), prop])
+
+
+def net_pid(wid):
+    match = re.search(r"=\s*(\d+)", xprop(wid, "_NET_WM_PID"))
+    return int(match.group(1)) if match else None
+
+
+def wm_class(wid):
+    match = re.search(r"=\s*(.*)", xprop(wid, "WM_CLASS"))
+    return match.group(1).strip() if match else ""
+
+
+# CHI-82: PID / _NET_WM_PID only. Title substring is never an identity.
+ids = parse_ids(run(["xdotool", "search", "--pid", str(pid)]))
+ids.extend(parse_ids(run(["xprop", "-root", "_NET_CLIENT_LIST"])))
+
+owned = []
+seen = set()
+for wid in ids:
+    if wid in seen:
+        continue
+    seen.add(wid)
+    if net_pid(wid) == pid:
+        owned.append(wid)
+
+if not owned:
+    raise SystemExit(f"no X11 window with _NET_WM_PID={pid}")
+
+
+def xwininfo(wid):
+    text = run(["xwininfo", "-id", str(wid)])
+
+    def num(label):
+        match = re.search(rf"{re.escape(label)}:\s*(-?\d+)", text)
+        return int(match.group(1)) if match else None
+
+    return {
+        "x": num("Absolute upper-left X"),
+        "y": num("Absolute upper-left Y"),
+        "w": num("Width"),
+        "h": num("Height"),
+        "mapped": "IsViewable" in text,
+    }
+
+
+best = None
+best_area = -1
+for wid in owned:
+    info = xwininfo(wid)
+    width, height = info["w"], info["h"]
+    if width is None or height is None or width < 200 or height < 200:
+        continue
+    area = width * height
+    if area > best_area:
+        best_area = area
+        best = (wid, info)
+
+if best is None:
+    raise SystemExit(f"pid {pid} has windows but none are a plausible Studio client")
+
+wid, info = best
+ext_text = xprop(wid, "_NET_FRAME_EXTENTS")
+extents = [int(n) for n in re.findall(r"-?\d+", ext_text.split("=", 1)[-1])] if "=" in ext_text else []
+while len(extents) < 4:
+    extents.append(0)
+left, right, top, bottom = extents[:4]
+payload = {
+    "id": str(wid),
+    "pid": pid,
+    "identity": "net_wm_pid",
+    "wm_class": wm_class(wid),
+    "client_x": info["x"],
+    "client_y": info["y"],
+    "w": info["w"],
+    "h": info["h"],
+    "frame_left": left,
+    "frame_right": right,
+    "frame_top": top,
+    "frame_bottom": bottom,
+    "frame_x": info["x"] - left,
+    "frame_y": info["y"] - top,
+    "display": display,
+}
+with open(out_path, "w", encoding="utf-8") as fh:
+    json.dump(payload, fh, indent=2)
+    fh.write("\n")
+print(wid)
+PY
+  then
+    win="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["id"])' "$window_json")"
     break
   fi
   sleep 0.25
 done
-[[ -n "$win" ]] || fail "xdotool could not find a Lattice Studio window"
+[[ -n "$win" && -s "$window_json" ]] || fail "no process-owned Studio window (_NET_WM_PID=$pid); title substring is not an identity"
+client_x="$(json_field "$window_json" "client_x")"
+client_y="$(json_field "$window_json" "client_y")"
+WIDTH="$(json_field "$window_json" "w")"
+HEIGHT="$(json_field "$window_json" "h")"
+frame_left="$(json_field "$window_json" "frame_left")"
+frame_right="$(json_field "$window_json" "frame_right")"
+frame_top="$(json_field "$window_json" "frame_top")"
+frame_bottom="$(json_field "$window_json" "frame_bottom")"
+frame_x="$(json_field "$window_json" "frame_x")"
+frame_y="$(json_field "$window_json" "frame_y")"
+wm_class="$(json_field "$window_json" "wm_class")"
+[[ "${WIDTH:-0}" -gt 200 && "${HEIGHT:-0}" -gt 200 ]] || fail "Studio client geometry is implausible: ${WIDTH:-?}x${HEIGHT:-?}"
+# xdotool getwindowgeometry is decoration-inflated / origin-ambiguous.
+# Clicks use verified xwininfo client bounds + smoke_geom. GPUI widget
+# origins are sometimes frame-local (CSD/title), so Play may fall back
+# to the frame origin after the client origin miss.
+X="$client_x"
+Y="$client_y"
+click_origin_x="$client_x"
+click_origin_y="$client_y"
+echo "window id=$win pid=$pid identity=net_wm_pid wm_class=${wm_class:-?} frame=${frame_x},${frame_y} extents=${frame_left},${frame_right},${frame_top},${frame_bottom} client=${client_x},${client_y} ${WIDTH}x${HEIGHT}"
 xdotool windowactivate --sync "$win"
 xdotool windowfocus --sync "$win" || true
 sleep 0.2
-eval "$(xdotool getwindowgeometry --shell "$win")"
-[[ "${WIDTH:-0}" -gt 200 && "${HEIGHT:-0}" -gt 200 ]] || fail "Studio window geometry is implausible: ${WIDTH:-?}x${HEIGHT:-?}"
-# xdotool geometry includes the WM frame. GPUI widget bounds are client-local.
-# _NET_FRAME_EXTENTS is left,right,top,bottom.
-extents="$(xprop -id "$win" _NET_FRAME_EXTENTS 2>/dev/null | sed -n 's/.* = //p')"
-frame_left=0
-frame_right=0
-frame_top=0
-frame_bottom=0
-if [[ -n "$extents" ]]; then
-  IFS=', ' read -r frame_left frame_right frame_top frame_bottom <<<"$extents"
-fi
-client_x=$((X - frame_left))
-client_y=$((Y - frame_top))
-echo "window id=$win frame=${X},${Y} ${WIDTH}x${HEIGHT} extents=${frame_left},${frame_right},${frame_top},${frame_bottom} client=${client_x},${client_y}"
-printf '%s\n' "{\"id\":\"$win\",\"x\":$X,\"y\":$Y,\"w\":$WIDTH,\"h\":$HEIGHT,\"client_x\":$client_x,\"client_y\":$client_y,\"frame_top\":$frame_top,\"display\":\"$DISPLAY\"}" >"$out/studio-linux-smoke-$stamp.window.json"
 
 capture_window() {
   local dest="$1"
@@ -397,10 +523,6 @@ capture_window "$shot"
 echo "screenshot $shot ($(wc -c <"$shot") bytes) window=${WIDTH}x${HEIGHT}+${X}+${Y}"
 assert_nonblank "$shot"
 
-json_field() {
-  python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get(sys.argv[2],""))' "$1" "$2"
-}
-
 wait_log() {
   local pattern="$1"
   local label="$2"
@@ -421,10 +543,10 @@ wait_log() {
 click_client() {
   local lx="$1"
   local ly="$2"
-  local sx=$((client_x + lx))
-  local sy=$((client_y + ly))
-  [[ "$lx" -ge 0 && "$lx" -le "$WIDTH" ]] || fail "client X $lx outside ${WIDTH}x${HEIGHT}"
-  [[ "$ly" -ge 0 && "$ly" -le "$HEIGHT" ]] || fail "client Y $ly outside ${WIDTH}x${HEIGHT}"
+  local sx=$((click_origin_x + lx))
+  local sy=$((click_origin_y + ly))
+  [[ "$lx" -ge 0 && "$lx" -le "$WIDTH" ]] || fail "local X $lx outside ${WIDTH}x${HEIGHT}"
+  [[ "$ly" -ge 0 && "$ly" -le "$HEIGHT" ]] || fail "local Y $ly outside ${WIDTH}x${HEIGHT}"
   xdotool windowactivate --sync "$win"
   xdotool mousemove --sync "$sx" "$sy"
   sleep 0.05
@@ -460,23 +582,27 @@ PY
 )"
   read -r play_x play_y <<<"$play_local"
   play_hit=0
-  # GPUI toolbar bounds can include the CSD/title offset. Try the recorded
-  # center, then the same point minus the verified frame top.
-  for adj in 0 "-${frame_top}"; do
-    try_y=$((play_y + adj))
-    if [[ "$try_y" -lt 0 || "$try_y" -gt "$HEIGHT" ]]; then
-      continue
+  # Verified xwininfo client origin first. If GPUI widget Y includes the
+  # WM/CSD title, the same smoke_geom point on the frame origin hits Play.
+  for origin in client frame; do
+    if [[ "$origin" == "client" ]]; then
+      click_origin_x="$client_x"
+      click_origin_y="$client_y"
+    else
+      click_origin_x="$frame_x"
+      click_origin_y="$frame_y"
     fi
-    echo "click Play at client ${play_x},${try_y} (geom center ${play_y}, adj=${adj})"
-    click_client "$play_x" "$try_y"
+    echo "click Play at ${origin} origin ${click_origin_x},${click_origin_y} + smoke_geom ${play_x},${play_y}"
+    click_client "$play_x" "$play_y"
     sleep 0.35
     if grep -q 'semantic_state .*\"reason\":\"play\"' "$log"; then
       play_hit=1
+      echo "Play hit using ${origin} origin (reason=play); later clicks keep this origin"
       break
     fi
   done
   if [[ "$play_hit" -ne 1 ]]; then
-    fail "standalone Play click (reason=play) missed recorded smoke_geom and frame-adjusted points"
+    fail "standalone Play click (reason=play) missed smoke_geom on verified client and frame origins"
   fi
   before_playhead="$(json_field "$state" "playhead")"
   before_locus="$(python3 -c 'import json,sys; s=json.load(open(sys.argv[1])); print((s.get("locus") or {}).get("id",""))' "$state")"
@@ -491,12 +617,12 @@ print(int(ruler["x"]+ruler["w"]*0.20), int(ruler["y"]+ruler["h"]/2), int(ruler["
 PY
 )"
   read -r from_x rail_y to_x <<<"$drag"
-  echo "scrub-drag client ${from_x},${rail_y} -> ${to_x},${rail_y} (ruler)"
-  xdotool mousemove --sync $((client_x + from_x)) $((client_y + rail_y))
+  echo "scrub-drag ${click_origin_x},${click_origin_y} + ruler ${from_x},${rail_y} -> ${to_x},${rail_y}"
+  xdotool mousemove --sync $((click_origin_x + from_x)) $((click_origin_y + rail_y))
   sleep 0.05
   xdotool mousedown 1
   sleep 0.15
-  xdotool mousemove --sync $((client_x + to_x)) $((client_y + rail_y))
+  xdotool mousemove --sync $((click_origin_x + to_x)) $((click_origin_y + rail_y))
   sleep 0.15
   xdotool mouseup 1
   wait_log 'semantic_state .*\"reason\":\"timeline-pointer-begin\"' "in-flight timeline-pointer-begin" 6

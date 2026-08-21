@@ -71,6 +71,7 @@ This is **not** a CHI-64 Done criterion. Chief is filing a separate child. Do no
 - `g++` (pulls `gcc` / libstdc++)
 - `xvfb`
 - `xdotool`
+- `x11-utils` (`xprop` / `xwininfo` for PID window identity and client bounds)
 - `ffmpeg`
 
 `libxcb1-dev` is included next to `libxkbcommon*` because Linux CI already needs it to link GPUI. The smoke script preflights the same set and prints the apt line when one is missing.
@@ -99,9 +100,11 @@ The snapshot is a hook over existing session fields:
 
 It is emitted on `open`, `first-paint`, Play, timeline pointer begin/update/commit, and canvas drag/resize begin/update/commit. Begin/update lines exist so source/target/validity is visible before commit resets `gesture` to `none`. It is not a permanent on-canvas debug HUD.
 
-Widget bounds used by the OS smoke are written to `LATTICE_STUDIO_GEOM` as `smoke_geom` JSON: `play`, `ruler`, `rail`, `tracks`, and `canvas` when CHI-66 has measured them. Those are window-local GPUI pixels; the script adds the verified X11 client origin (frame origin minus `_NET_FRAME_EXTENTS`).
+Widget bounds used by the OS smoke are written to `LATTICE_STUDIO_GEOM` as `smoke_geom` JSON: `play`, `ruler`, `rail`, `tracks`, and `canvas` when CHI-66 has measured them. Those are window-local GPUI pixels; the script adds the verified `xwininfo` client origin (not `xdotool getwindowgeometry`).
 
 `debug_selector` is a test-only no-op in the product binary. The OS smoke must not depend on it. Drive click/drag coordinates from the app-emitted geoms only.
+
+Window identity is PID / `_NET_WM_PID` (CHI-82). `xdotool search --name` is not a fallback. `xdotool getwindowgeometry` is decoration-inflated and origin-ambiguous; the script records verified `xwininfo` client bounds plus `_NET_FRAME_EXTENTS` and uses those with `smoke_geom`.
 
 ## Reproducing the smoke
 
@@ -125,15 +128,15 @@ A populated `WAYLAND_DISPLAY` is not a silent X11 path. The script fails unless 
 
 The script:
 
-1. Preflights `g++` / `gcc`, `libxkbcommon` headers, a Vulkan ICD directory, `xdotool`, `ffmpeg`, and `python3`.
+1. Preflights `g++` / `gcc`, `libxkbcommon` headers, a Vulkan ICD directory, `xdotool`, `xprop` / `xwininfo`, `ffmpeg`, and `python3`.
 2. If `cc` is clang, sets `RUSTFLAGS=-C linker=gcc` (not Cargo.toml).
 3. Builds `lattice-studio`.
 4. Requires an existing `DISPLAY` unless `--allow-xvfb` is passed.
 5. Launches `--ui-fixture` with preview/audio detached and a smoke watchdog.
 6. Waits for `open_window ok` and `first paint`.
-7. Identifies the Studio window with xdotool and captures **that window**, not `${DISPLAY}.0`.
+7. Identifies the Studio window by process PID / `_NET_WM_PID` (never title substring) and captures **that client area**, not `${DISPLAY}.0`.
 8. Asserts the PNG is a nonblank Studio frame (color diversity / contrast), not merely a non-empty file.
-9. With interact: clicks Play from `smoke_geom` (must emit `reason=play`), scrub-drags the ruler (must emit begin + **commit** and move the playhead), then clicks the Video clip (must change locus). Percent positions are fractions of verified widget bounds, then offset by the verified client origin. Missing `timeline-pointer-commit` **fails** the script. `--miss-commit` deliberately clicks off-widget and must exit nonzero with no `LINUX SMOKE OK`. Missing `smoke quit` also fails.
+9. With interact: clicks Play from `smoke_geom` (must emit `reason=play`), scrub-drags the ruler (must emit begin + **commit** and move the playhead), then clicks the Video clip (must change locus). Percent positions are fractions of verified widget bounds, then offset by the verified xwininfo client origin (frame origin is only a Play fallback when GPUI coords include the WM/CSD title). Missing `timeline-pointer-commit` **fails** the script. `--miss-commit` deliberately clicks off-widget and must exit nonzero with no `LINUX SMOKE OK`. Missing `smoke quit` also fails.
 
 Artifacts stay under `target/studio-linux-smoke/` (gitignored with the rest of `target/`). PR-visible evidence is copied to `docs/screenshots/`.
 
