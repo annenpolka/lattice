@@ -1,0 +1,20 @@
+project "drag-valid"
+
+convention commentary
+
+sequence main {
+  left
+  right
+}
+
+scene left {
+  title "Alpha" {
+    at 0s for 2s
+  }
+}
+
+scene right {
+  title "Beta" {
+    at 0s for 2s
+  }
+}

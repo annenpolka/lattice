@@ -96,8 +96,14 @@ Studio interaction correctness is split deliberately:
    to rendered bounds, then real mouse/key/scroll input is dispatched through GPUI. Tests use
    bounds-relative points and assert the resulting Session/source state; screenshots are not the
    primary oracle.
-4. Computer Use and `studio-smoke.ps1` remain the final OS boundary for native windows, file
-   pickers, clipboard/IME, GPU/DPI appearance, audio devices, and other platform integration.
+4. Computer Use, Windows `studio-smoke.ps1`, and the Ubuntu agent path
+   `scripts/studio-linux-smoke.sh` remain the final OS boundary for native windows,
+   file pickers, clipboard/IME, GPU/DPI appearance, audio devices, and other
+   platform integration. CHI-63 (`VisualTestContext` / `UiDriver`) is the later
+   reduction of computer-use for ordinary button/drag correctness; do not
+   duplicate that driver here. Linux is an enabling smoke target only — see
+   [studio-linux-smoke.md](studio-linux-smoke.md). It is not a product Studio
+   platform.
 
 Interactive selectors are semantic and do not depend on visible labels or widget nesting. The
 namespace uses names such as `toolbar.play`, `inspector.title`, `canvas.overlay.<locus>`,

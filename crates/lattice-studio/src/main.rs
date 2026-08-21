@@ -36,20 +36,70 @@ use lattice_studio::audio::{
 };
 use lattice_studio::{
     CanvasPoint, CanvasRect, CanvasSize, CursorKind, PLAYBACK_TICK, PreviewInbox, ResizeCorner,
-    StudioSession, playback_target, trace,
+    StudioSession, UiFixture, playback_target, trace, write_state_file,
 };
 
 #[cfg(test)]
 mod ui_driver;
 
+#[cfg(test)]
+mod launch_tests {
+    use super::{LaunchSpec, UiFixture, parse_launch};
+    use std::ffi::OsString;
+
+    fn args(items: &[&str]) -> Vec<OsString> {
+        std::iter::once(OsString::from("lattice-studio"))
+            .chain(items.iter().map(|item| OsString::from(*item)))
+            .collect()
+    }
+
+    #[test]
+    fn help_and_fixture_parse() {
+        assert!(matches!(
+            parse_launch(args(&["--help"])).unwrap(),
+            LaunchSpec::Help
+        ));
+        assert!(matches!(
+            parse_launch(args(&["--ui-fixture", "timeline-basic"])).unwrap(),
+            LaunchSpec::Fixture(UiFixture::TimelineBasic)
+        ));
+        assert!(matches!(
+            parse_launch(args(&["--ui-fixture=drag-valid"])).unwrap(),
+            LaunchSpec::Fixture(UiFixture::DragValid)
+        ));
+        assert!(parse_launch(args(&["--ui-fixture", "timeline-basic", "main.vel"])).is_err());
+        assert!(parse_launch(args(&["--unknown"])).is_err());
+        assert!(matches!(
+            parse_launch(args(&["/tmp/demo.vel"])).unwrap(),
+            LaunchSpec::Vel(path) if path.ends_with("demo.vel")
+        ));
+    }
+}
+
 fn main() -> ExitCode {
     let log_path = trace::install();
-    let path = std::env::args_os().nth(1).map_or_else(
-        || PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../examples/warframe-cut/main.vel"),
-        PathBuf::from,
-    );
+    let launch = match parse_launch(std::env::args_os()) {
+        Ok(launch) => launch,
+        Err(err) => {
+            eprintln!("{err}");
+            return ExitCode::from(2);
+        }
+    };
+    if matches!(launch, LaunchSpec::Help) {
+        print_help();
+        return ExitCode::SUCCESS;
+    }
+    let path = match launch.vel_path() {
+        Ok(path) => path,
+        Err(err) => {
+            eprintln!("{err}");
+            trace::log(format!("fatal: {err}"));
+            return ExitCode::from(2);
+        }
+    };
+    let fixture = launch.fixture_name();
     trace::log(format!(
-        "start exe={} cwd={} vel={} log={} preview={} autoplay={} smoke={} rustc={}",
+        "start exe={} cwd={} vel={} fixture={} log={} preview={} autoplay={} smoke={} rustc={}",
         std::env::current_exe()
             .map(|p| p.display().to_string())
             .unwrap_or_else(|_| "?".into()),
@@ -57,6 +107,7 @@ fn main() -> ExitCode {
             .map(|p| p.display().to_string())
             .unwrap_or_else(|_| "?".into()),
         path.display(),
+        fixture.unwrap_or("none"),
         log_path.display(),
         if preview_extract_enabled() {
             "on"
@@ -67,7 +118,7 @@ fn main() -> ExitCode {
         smoke_timeout_ms().map_or_else(|| "off".into(), |ms| format!("{ms}ms")),
         option_env!("CARGO_PKG_VERSION").unwrap_or("dev"),
     ));
-    if let Err(err) = window_main(path) {
+    if let Err(err) = window_main(path, fixture.map(str::to_string)) {
         trace::log(format!("fatal: {err}"));
         return ExitCode::from(2);
     }
@@ -75,7 +126,132 @@ fn main() -> ExitCode {
     ExitCode::SUCCESS
 }
 
-fn window_main(path: PathBuf) -> Result<(), Box<dyn std::error::Error>> {
+enum LaunchSpec {
+    Help,
+    DefaultDemo,
+    Vel(PathBuf),
+    Fixture(UiFixture),
+}
+
+impl LaunchSpec {
+    fn fixture_name(&self) -> Option<&'static str> {
+        match self {
+            Self::Fixture(fixture) => Some(fixture.as_str()),
+            Self::Help | Self::DefaultDemo | Self::Vel(_) => None,
+        }
+    }
+
+    fn vel_path(&self) -> Result<PathBuf, String> {
+        match self {
+            Self::Help => Err("help does not open a project".into()),
+            Self::DefaultDemo => Ok(PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                .join("../../examples/warframe-cut/main.vel")),
+            Self::Vel(path) => Ok(path.clone()),
+            Self::Fixture(fixture) => fixture
+                .materialize()
+                .map_err(|err| format!("materialize --ui-fixture {fixture}: {err}")),
+        }
+    }
+}
+
+fn parse_launch(args: impl IntoIterator<Item = std::ffi::OsString>) -> Result<LaunchSpec, String> {
+    let mut args = args.into_iter().skip(1);
+    let mut fixture = None;
+    let mut vel = None;
+    let mut saw_help = false;
+    while let Some(arg) = args.next() {
+        let Some(text) = arg.to_str() else {
+            if vel.is_some() {
+                return Err("lattice-studio accepts one VEL path".into());
+            }
+            vel = Some(PathBuf::from(arg));
+            continue;
+        };
+        if text == "--help" || text == "-h" {
+            saw_help = true;
+            continue;
+        }
+        if let Some(name) = text.strip_prefix("--ui-fixture=") {
+            if fixture.is_some() {
+                return Err("lattice-studio accepts one --ui-fixture".into());
+            }
+            fixture = Some(parse_ui_fixture(name)?);
+            continue;
+        }
+        if text == "--ui-fixture" {
+            if fixture.is_some() {
+                return Err("lattice-studio accepts one --ui-fixture".into());
+            }
+            let name = args
+                .next()
+                .and_then(|value| value.into_string().ok())
+                .ok_or_else(|| "missing --ui-fixture name".to_string())?;
+            fixture = Some(parse_ui_fixture(&name)?);
+            continue;
+        }
+        if text.starts_with('-') {
+            return Err(format!(
+                "unknown option `{text}`; see lattice-studio --help"
+            ));
+        }
+        if vel.is_some() {
+            return Err("lattice-studio accepts one VEL path".into());
+        }
+        vel = Some(PathBuf::from(text));
+    }
+    if saw_help {
+        return Ok(LaunchSpec::Help);
+    }
+    match (fixture, vel) {
+        (Some(_), Some(_)) => Err(
+            "pass either a VEL path or --ui-fixture, not both (Windows dogfood still uses a path)"
+                .into(),
+        ),
+        (Some(fixture), None) => Ok(LaunchSpec::Fixture(fixture)),
+        (None, Some(path)) => Ok(LaunchSpec::Vel(path)),
+        (None, None) => {
+            if let Ok(name) = std::env::var("LATTICE_STUDIO_UI_FIXTURE")
+                && !name.trim().is_empty()
+            {
+                return Ok(LaunchSpec::Fixture(parse_ui_fixture(&name)?));
+            }
+            Ok(LaunchSpec::DefaultDemo)
+        }
+    }
+}
+
+fn parse_ui_fixture(name: &str) -> Result<UiFixture, String> {
+    UiFixture::parse(name).ok_or_else(|| {
+        format!(
+            "unknown --ui-fixture `{name}`; expected {}",
+            UiFixture::ALL
+                .iter()
+                .map(|fixture| fixture.as_str())
+                .collect::<Vec<_>>()
+                .join("|")
+        )
+    })
+}
+
+fn print_help() {
+    eprintln!(
+        "\
+lattice-studio [VEL]
+lattice-studio --ui-fixture <{}>
+
+Windows dogfood still opens a VEL path. --ui-fixture is the agent smoke entry
+and materializes a deterministic Engine/Studio project. LATTICE_STUDIO_PREVIEW=0
+skips live frame extract; LATTICE_STUDIO_AUDIO_MONITOR=0 skips device output.
+LATTICE_STUDIO_STATE writes the latest semantic_state JSON snapshot.",
+        UiFixture::ALL
+            .iter()
+            .map(|fixture| fixture.as_str())
+            .collect::<Vec<_>>()
+            .join("|")
+    );
+}
+
+fn window_main(path: PathBuf, fixture: Option<String>) -> Result<(), Box<dyn std::error::Error>> {
     let renderer = studio_renderer_request()?;
     trace::log(format!("renderer requested={renderer}"));
     trace::log(format!("compile/open {}", path.display()));
@@ -83,6 +259,14 @@ fn window_main(path: PathBuf) -> Result<(), Box<dyn std::error::Error>> {
         trace::log(format!("StudioSession::open failed: {err}"));
         err
     })?;
+    let mut initial = session.semantic_state();
+    if let Some(name) = &fixture {
+        initial["fixture"] = serde_json::Value::String(name.clone());
+        trace::log(format!("ui fixture={name}"));
+    }
+    initial["reason"] = serde_json::Value::String("open".into());
+    trace::log(format!("semantic_state {initial}"));
+    write_state_file(&initial);
     trace::log(format!(
         "open ok dirty={} playhead={:?} diagnostics={}",
         session.is_dirty(),
@@ -116,6 +300,7 @@ fn window_main(path: PathBuf) -> Result<(), Box<dyn std::error::Error>> {
                         cx.focus_handle(),
                         cx.focus_handle(),
                     );
+                    view.ui_fixture = fixture;
                     view.adopt_locus_label();
                     view.spawn_preview_worker();
                     if audio_monitor_enabled() {
@@ -215,6 +400,7 @@ fn spawn_smoke_watchdog() {
 
 struct StudioView {
     session: StudioSession,
+    ui_fixture: Option<String>,
     title_draft: String,
     title_selection_utf16: Range<usize>,
     title_marked_utf16: Option<Range<usize>>,
@@ -667,6 +853,7 @@ impl StudioView {
         let source_draft = session.source().to_string();
         Self {
             session,
+            ui_fixture: None,
             title_draft: String::new(),
             title_selection_utf16: 0..0,
             title_marked_utf16: None,
@@ -713,6 +900,30 @@ impl StudioView {
             audio_error: None,
             audio_last_sync: None,
         }
+    }
+
+    fn log_semantic_state(&self, reason: &str, window: Option<&Window>) {
+        let mut state = self.session.semantic_state();
+        if let Some(name) = &self.ui_fixture {
+            state["fixture"] = serde_json::Value::String(name.clone());
+        }
+        state["reason"] = serde_json::Value::String(reason.into());
+        if let Some(window) = window {
+            let focused = if self.title_focus.is_focused(window) {
+                Some("inspector.title")
+            } else if self.source_focus.is_focused(window) {
+                Some("vel.editor")
+            } else if self.focus.is_focused(window) {
+                Some("studio")
+            } else {
+                None
+            };
+            if let Some(focused) = focused {
+                state["focused"] = serde_json::Value::String(focused.into());
+            }
+        }
+        trace::log(format!("semantic_state {state}"));
+        write_state_file(&state);
     }
 
     fn adopt_locus_label(&mut self) {
@@ -1230,6 +1441,7 @@ impl StudioView {
         }
         self.sync_audio_monitor("timeline-pointer-commit");
         self.adopt_locus_label();
+        self.log_semantic_state("timeline-pointer-commit", None);
         self.preview_dirty = true;
     }
 
@@ -1388,6 +1600,7 @@ impl StudioView {
                 }
             }
             self.adopt_locus_label();
+            self.log_semantic_state("canvas-resize-commit", None);
             self.refresh_preview("canvas-resize");
             self.queue_preview();
             return true;
@@ -1416,6 +1629,7 @@ impl StudioView {
             }
         }
         self.adopt_locus_label();
+        self.log_semantic_state("canvas-drag-commit", None);
         self.refresh_preview("canvas-drag");
         self.queue_preview();
         true
@@ -1832,7 +2046,7 @@ const TEAL: u32 = 0x3dd6c6;
 
 #[cfg(feature = "window")]
 impl Render for StudioView {
-    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let layout = match self.session.layout() {
             Ok(layout) => Some(layout),
             Err(err) => {
@@ -1847,6 +2061,7 @@ impl Render for StudioView {
                 .and_then(|item| item.canvas.preview_frame.as_ref())
                 .map_or_else(|| "none".into(), |path| path.display().to_string());
             trace::log(format!("first paint preview={preview}"));
+            self.log_semantic_state("first-paint", Some(window));
         }
         let file = layout
             .as_ref()

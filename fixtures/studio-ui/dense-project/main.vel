@@ -1,0 +1,50 @@
+project "dense-project"
+
+convention commentary
+
+sequence main {
+  one
+  two
+  three
+  four
+}
+
+scene one {
+  title "One" {
+    at 0s for 1s
+  }
+
+  callout "Cue 1" {
+    at 0s for 1s
+  }
+}
+
+scene two {
+  title "Two" {
+    at 0s for 1s
+  }
+
+  callout "Cue 2" {
+    at 0s for 1s
+  }
+}
+
+scene three {
+  title "Three" {
+    at 0s for 1s
+  }
+
+  callout "Cue 3" {
+    at 0s for 1s
+  }
+}
+
+scene four {
+  title "Four" {
+    at 0s for 1s
+  }
+
+  callout "Cue 4" {
+    at 0s for 1s
+  }
+}

@@ -1,0 +1,17 @@
+project "timeline-basic"
+
+convention commentary
+
+sequence main {
+  demo
+}
+
+scene demo {
+  title "Hello" {
+    at 1s for 3s
+  }
+
+  callout "Hold" {
+    at 2s for 1s
+  }
+}

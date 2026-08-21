@@ -1,0 +1,13 @@
+project "drag-invalid"
+
+convention commentary
+
+sequence main {
+  pinned
+}
+
+scene pinned {
+  title "Pinned" {
+    at 0s for 500ms
+  }
+}
