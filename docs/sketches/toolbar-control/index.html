@@ -1,0 +1,880 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Lattice Studio · control</title>
+  <style>
+    :root {
+      --bg: #0c0e12;
+      --panel: #141821;
+      --line: #2a3140;
+      --text: #e8edf5;
+      --muted: #8b95a8;
+      --teal: #3dd6c6;
+      --stage: #1a2330;
+      --rail: #1a1f28;
+      --select: #1c3d3a;
+      --video: #4a3a6a;
+      --audio: #5a7a9a;
+      --err: #ff8f8f;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      background: var(--bg);
+      color: var(--text);
+      font: 13px/1.35 "Segoe UI", "IBM Plex Sans", system-ui, sans-serif;
+      height: 100%;
+    }
+    body {
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+    }
+
+    .sketch-key {
+      flex: 0 0 auto;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: baseline;
+      gap: 8px 16px;
+      padding: 8px 12px;
+      background: #0a0c10;
+      border-bottom: 1px solid var(--line);
+    }
+    .sketch-key .label {
+      color: var(--teal);
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+    .sketch-key a {
+      color: var(--muted);
+      text-decoration: none;
+      padding: 3px 8px;
+      border: 1px solid var(--line);
+      background: var(--panel);
+    }
+    .sketch-key a[aria-current="true"] {
+      color: var(--bg);
+      background: var(--teal);
+      border-color: var(--teal);
+    }
+    .sketch-key .note {
+      flex: 1 1 280px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .studio {
+      flex: 1 1 auto;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+    }
+
+    .header {
+      display: flex;
+      align-items: center;
+      height: 36px;
+      padding: 0 12px;
+      background: var(--panel);
+      border-bottom: 1px solid var(--line);
+    }
+    .brand { color: var(--teal); }
+    .file { margin-left: 12px; color: var(--muted); }
+
+    .strip {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 4px;
+      padding: 4px 8px;
+      background: var(--panel);
+      border-bottom: 1px solid var(--line);
+    }
+    .btn {
+      appearance: none;
+      border: 0;
+      padding: 4px 12px;
+      background: var(--line);
+      color: var(--text);
+      cursor: pointer;
+      font: inherit;
+    }
+    .btn.teal { background: var(--teal); color: var(--text); }
+    .btn.teal-ink { background: var(--teal); color: var(--bg); }
+    .btn:focus-visible { outline: 1px solid var(--teal); }
+    .status {
+      padding: 4px 8px;
+      color: var(--muted);
+    }
+
+    .body {
+      flex: 1 1 auto;
+      display: flex;
+      min-height: 0;
+    }
+    .pane {
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      background: var(--panel);
+      border-right: 1px solid var(--line);
+    }
+    .pane.sequence { width: 200px; flex: 0 0 200px; }
+    .pane.canvas { flex: 1 1 auto; }
+    .pane.vel { width: 280px; flex: 0 0 280px; }
+    .pane.inspector { width: 240px; flex: 0 0 240px; border-right: 0; }
+    .pane h2 {
+      padding: 4px 8px;
+      border-bottom: 1px solid var(--line);
+      color: var(--teal);
+      font-size: 13px;
+      font-weight: 400;
+    }
+    .pane .content {
+      flex: 1 1 auto;
+      min-height: 0;
+      overflow: auto;
+      padding: 8px;
+    }
+
+    .tree { display: flex; flex-direction: column; gap: 4px; }
+    .tree button {
+      display: block;
+      width: 100%;
+      text-align: left;
+      border: 0;
+      background: transparent;
+      color: var(--text);
+      font: inherit;
+      cursor: pointer;
+      padding: 2px 4px;
+    }
+    .tree button[data-depth="0"] { padding-left: 8px; }
+    .tree button[data-depth="1"] { padding-left: 22px; }
+    .tree button[data-depth="2"] { padding-left: 36px; }
+    .tree button[aria-current="true"] {
+      background: var(--select);
+      color: var(--teal);
+    }
+
+    .stage {
+      flex: 1;
+      margin: 12px;
+      min-height: 220px;
+      background: var(--stage);
+      border: 1px solid var(--line);
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .frame {
+      position: relative;
+      width: min(100%, 480px);
+      aspect-ratio: 16 / 9;
+      background:
+        linear-gradient(180deg, #243044 0%, #1a2838 40%, #121820 100%);
+      overflow: hidden;
+      cursor: default;
+    }
+    .frame .gameplay {
+      position: absolute;
+      inset: 0;
+      background:
+        radial-gradient(circle at 30% 40%, #3a4a2a 0 12px, transparent 13px),
+        radial-gradient(circle at 62% 48%, #6b3a2a 0 18px, transparent 19px),
+        linear-gradient(90deg, #1c2a20 0%, #243044 50%, #1a222c 100%);
+    }
+    .frame .hud {
+      position: absolute;
+      left: 10px;
+      top: 10px;
+      font-size: 10px;
+      color: #c8d2c0;
+      letter-spacing: 0.06em;
+    }
+    .overlay {
+      position: absolute;
+      left: 0;
+      border: 2px solid transparent;
+      color: var(--text);
+      font-size: 16px;
+      font-weight: 600;
+      padding: 6px 10px;
+      cursor: grab;
+      background: rgba(12, 14, 18, 0.35);
+    }
+    .overlay.callout { top: 0; }
+    .overlay.title { bottom: 0; }
+    .overlay[aria-current="true"] { border-color: var(--teal); }
+    .handle {
+      position: absolute;
+      width: 12px;
+      height: 12px;
+      background: var(--teal);
+      border: 1px solid var(--bg);
+    }
+    .handle.tl { left: -6px; top: -6px; }
+    .handle.tr { right: -6px; top: -6px; }
+    .handle.bl { left: -6px; bottom: -6px; }
+    .handle.br { right: -6px; bottom: -6px; }
+
+    .vel-status { padding: 4px 8px; color: var(--muted); }
+    .vel-editor {
+      font: 12px/20px ui-monospace, "Cascadia Mono", "SF Mono", monospace;
+      white-space: pre;
+    }
+    .vel-line {
+      min-height: 20px;
+      padding: 0 4px;
+      cursor: text;
+    }
+    .vel-line.locus { background: var(--select); }
+
+    .inspector .heading { font-size: 16px; }
+    .inspector .origin { color: var(--muted); margin-top: 4px; }
+    .inspector .defined { color: var(--teal); margin-top: 4px; }
+    .inspector .field-label { color: var(--muted); margin-top: 8px; }
+    .inspector .title-field {
+      margin-top: 4px;
+      padding: 4px 8px;
+      border: 1px solid var(--teal);
+      background: var(--bg);
+    }
+    .inspector .row { display: flex; gap: 8px; margin-top: 8px; }
+    .utterance { margin-top: 12px; display: flex; flex-direction: column; gap: 4px; }
+    .utterance .here { color: var(--teal); }
+    .utterance .meta { color: var(--muted); }
+    .preview-btn {
+      margin-top: 8px;
+      padding: 4px 12px;
+      border: 1px solid var(--teal);
+      background: transparent;
+      color: var(--text);
+      cursor: pointer;
+      font: inherit;
+    }
+
+    .timeline {
+      height: 168px;
+      background: var(--panel);
+      border-top: 1px solid var(--line);
+      display: flex;
+      flex-direction: column;
+    }
+    .ruler {
+      padding: 4px 8px 4px 72px;
+      color: var(--muted);
+      cursor: text;
+    }
+    .candidates {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      padding: 4px 8px;
+    }
+    .candidates .prompt { color: var(--teal); }
+    .card {
+      text-align: left;
+      padding: 4px 8px;
+      background: var(--rail);
+      border: 1px solid var(--teal);
+      color: var(--text);
+      cursor: pointer;
+      font: inherit;
+    }
+    .tracks {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      padding: 8px;
+    }
+    .track {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      height: 28px;
+    }
+    .track .name { width: 56px; color: var(--muted); flex: 0 0 56px; }
+    .rail {
+      position: relative;
+      flex: 1 1 auto;
+      height: 22px;
+      background: var(--rail);
+    }
+    .clip {
+      position: absolute;
+      top: 0;
+      height: 100%;
+      padding: 0 4px;
+      overflow: hidden;
+      white-space: nowrap;
+      border: 1px solid transparent;
+      color: var(--text);
+      font-size: 12px;
+      cursor: pointer;
+    }
+    .clip.video { background: var(--video); border-color: var(--video); }
+    .clip.audio { background: var(--audio); border-color: var(--audio); }
+    .clip.text { background: var(--teal); border-color: var(--teal); color: var(--bg); }
+    .clip[aria-current="true"] { border-color: #fff; }
+    .edge {
+      position: absolute;
+      top: 0;
+      width: 8px;
+      height: 100%;
+      background: #fff;
+      cursor: ew-resize;
+    }
+    .edge.in { left: 0; }
+    .edge.out { right: 0; }
+    .playhead {
+      position: absolute;
+      top: 0;
+      width: 2px;
+      height: 100%;
+      background: var(--teal);
+      pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+  <nav class="sketch-key" aria-label="Sketch scenes">
+    <span class="label">Scenes</span>
+    <a href="#session-strip" id="nav-session-strip">Session strip</a>
+    <a href="#source-here" id="nav-source-here">Source here</a>
+    <a href="#scene-here" id="nav-scene-here">Scene here</a>
+    <a href="#video-click" id="nav-video-click">Video click</a>
+    <a href="#overlap" id="nav-overlap">Overlap</a>
+    <p class="note" id="scene-note"></p>
+  </nav>
+
+  <div class="studio">
+    <header class="header">
+      <div class="brand">Lattice</div>
+      <div class="file">main.vel · Scene demo</div>
+    </header>
+
+    <div class="strip" data-selector="toolbar.strip">
+      <button type="button" class="btn" data-selector="toolbar.import">Open Video…</button>
+      <div class="status" data-selector="toolbar.renderer-status">Renderer · CPU</div>
+      <div class="status" data-selector="toolbar.audio-status">Audio · 48000 Hz / 2 ch · drift +0.0 ms · peak 0.00</div>
+      <button type="button" class="btn teal" data-selector="toolbar.renderer.cpu">CPU</button>
+      <button type="button" class="btn" data-selector="toolbar.renderer.gpu-dx12">GPU DX12</button>
+      <button type="button" class="btn teal" data-selector="toolbar.play">Play</button>
+      <button type="button" class="btn" data-selector="toolbar.pause">Pause</button>
+      <button type="button" class="btn" data-selector="toolbar.seek-start">Seek</button>
+      <button type="button" class="btn" data-selector="toolbar.scrub">Scrub</button>
+      <button type="button" class="btn teal" data-selector="toolbar.save">Save</button>
+      <button type="button" class="btn" data-selector="toolbar.undo">Undo</button>
+      <button type="button" class="btn" data-selector="toolbar.redo">Redo</button>
+      <button type="button" class="btn teal" data-selector="toolbar.resolve">Resolve</button>
+      <button type="button" class="btn" data-selector="toolbar.copy-locus">Copy locus JSON</button>
+      <button type="button" class="btn" data-selector="toolbar.zoom-in">Zoom In</button>
+      <button type="button" class="btn" data-selector="toolbar.zoom-out">Zoom Out</button>
+    </div>
+
+    <div class="body">
+      <section class="pane sequence">
+        <h2>SEQUENCE</h2>
+        <div class="content tree" id="tree"></div>
+      </section>
+
+      <section class="pane canvas">
+        <h2>Canvas</h2>
+        <div class="stage">
+          <div class="frame" id="canvas-frame" data-selector="canvas.frame">
+            <div class="gameplay"></div>
+            <div class="hud">capture.mp4 · fight</div>
+            <button type="button" class="overlay callout" id="overlay-hold" hidden data-selector="canvas.overlay.callout:hold">Hold</button>
+            <button type="button" class="overlay title" id="overlay-hello" hidden data-selector="canvas.overlay.title:hello">Hello</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="pane vel">
+        <h2>VEL</h2>
+        <div class="vel-status" id="vel-status" data-selector="vel.status"></div>
+        <div class="content vel-editor" id="vel-editor" data-selector="vel.editor"></div>
+      </section>
+
+      <section class="pane inspector">
+        <h2>Inspector</h2>
+        <div class="content inspector" id="inspector"></div>
+      </section>
+    </div>
+
+    <footer class="timeline">
+      <div class="ruler" id="ruler" data-selector="timeline.ruler">Timeline · 3.50s</div>
+      <div class="candidates" id="candidates" data-selector="timeline.candidates"></div>
+      <div class="tracks" id="tracks"></div>
+    </footer>
+  </div>
+
+  <script>
+    const VEL = [
+      'project "demo"',
+      "",
+      "convention commentary",
+      "",
+      'media game "capture.mp4"',
+      "",
+      "sequence main {",
+      "  demo",
+      "}",
+      "",
+      "scene demo {",
+      "  game[10s..20s] as fight",
+      "",
+      "  freeze fight at 5.2s for 1.5s",
+      "",
+      "  fade fight {",
+      "    at 0s for 0.5s",
+      "  }",
+      "",
+      '  title "Hello" {',
+      "    at 2s for 3s",
+      "    opacity 90",
+      "  }",
+      "",
+      '  callout "Hold" {',
+      "    at 5.2s for 1.5s",
+      "  }",
+      "",
+      "  gain fight by -3",
+      "",
+      '  speech "Nice freeze" {',
+      "    at 5.2s for 1.5s",
+      "  }",
+      "}",
+    ];
+
+    const LOCI = {
+      main: { id: "sequence:main", kind: "sequence", label: "main", line: 7, origin: "source" },
+      demo: { id: "scene:demo", kind: "scene", label: "demo", line: 11, origin: "source" },
+      fight: {
+        id: "source:fight",
+        kind: "source",
+        label: "fight",
+        line: 12,
+        origin: "source",
+        span: "0s–10s",
+      },
+      hello: {
+        id: "title:hello",
+        kind: "title",
+        label: "Hello",
+        line: 20,
+        origin: "invocation `title`",
+        span: "2s–5s",
+      },
+      hold: {
+        id: "callout:hold",
+        kind: "callout",
+        label: "Hold",
+        line: 25,
+        origin: "invocation `callout`",
+        span: "5.2s–6.7s",
+      },
+      speech: {
+        id: "speech:nice-freeze",
+        kind: "speech",
+        label: "Nice freeze",
+        line: 31,
+        origin: "invocation `speech`",
+        span: "5.2s–6.7s",
+      },
+    };
+
+    const LEGAL = {
+      source: [
+        { verb: "trim", target: "source:fight", scope: "source-range", effect: "set in/out on this source binding" },
+        { verb: "set-gain", target: "source:fight", scope: "source-binding", effect: "set gain on this source" },
+        { verb: "set-fade", target: "source:fight", scope: "source-binding", effect: "set fade on this source" },
+      ],
+      scene: [
+        { verb: "split", target: "scene:demo", scope: "scene", effect: "split this scene at a source time" },
+        { verb: "delete", target: "scene:demo", scope: "scene", effect: "delete this scene" },
+        { verb: "reorder-scene", target: "scene:demo", scope: "sequence", effect: "reorder this scene in the sequence" },
+      ],
+      title: [
+        { verb: "title", target: "title:hello", scope: "definition", effect: "rewrite title text, time, or opacity" },
+        { verb: "set-position", target: "title:hello", scope: "placement", effect: "move the title in normalized Canvas Space" },
+        { verb: "resize-overlay", target: "title:hello", scope: "placement", effect: "resize the title while keeping the opposite corner" },
+      ],
+      callout: [
+        { verb: "callout", target: "callout:hold", scope: "definition", effect: "rewrite callout time" },
+        { verb: "set-position", target: "callout:hold", scope: "placement", effect: "move the callout in normalized Canvas Space" },
+        { verb: "resize-overlay", target: "callout:hold", scope: "placement", effect: "resize the callout while keeping the opposite corner" },
+      ],
+      speech: [],
+      sequence: [],
+    };
+
+    const ROUTED = {
+      Timeline: {
+        source: ["trim"],
+        title: ["title"],
+        callout: ["callout"],
+        scene: ["reorder-scene"],
+      },
+      Canvas: {
+        title: ["set-position", "resize-overlay"],
+        callout: ["set-position", "resize-overlay"],
+      },
+      Inspector: { title: ["title"] },
+      Tree: {},
+      Toolbar: {},
+    };
+
+    const COMMIT = {
+      trim: "Timeline",
+      title: "Timeline",
+      callout: "Timeline",
+      "reorder-scene": "Timeline",
+      "set-position": "Canvas",
+      "resize-overlay": "Canvas",
+    };
+
+    const NOTES = {
+      "session-strip": "Remaining session row after the six locus-taking buttons are gone. No Set In, Set Out, Split at Playhead, Delete Selected Clip, Gain -3 dB, or Fade.",
+      "source-here": "Here is source \"fight\". trim stays on the Timeline clip edges. set-gain and set-fade are legal and unrouted.",
+      "scene-here": "Here is scene \"demo\". reorder-scene stays on the Timeline scene body. split and delete are legal and unrouted.",
+      "video-click": "A video clip click keeps the source clip. Here is not promoted to the containing scene.",
+      overlap: "A failed Timeline point lists candidates on that Timeline only. Pick one card; one LocusId follows.",
+    };
+
+    const TREE = [
+      { key: "main", depth: 0 },
+      { key: "demo", depth: 1 },
+      { key: "fight", depth: 2 },
+      { key: "hello", depth: 2 },
+      { key: "hold", depth: 2 },
+      { key: "speech", depth: 2 },
+    ];
+
+    const CLIPS = [
+      { key: "fight", track: "Video", cls: "video", start: 0, end: 10, label: "fight" },
+      { key: "speech", track: "Audio", cls: "audio", start: 5.2, end: 6.7, label: "Nice freeze" },
+      { key: "hello", track: "Text", cls: "text", start: 2, end: 5, label: "Hello" },
+      { key: "hold", track: "Text", cls: "text", start: 5.2, end: 6.7, label: "Hold" },
+    ];
+
+    const state = {
+      scene: "session-strip",
+      here: null,
+      projection: "Timeline",
+      pointing: "none",
+      playhead: 0,
+      candidates: [],
+    };
+
+    function disclosure(edit) {
+      return edit.verb + " → " + edit.target + " (" + edit.scope + ": " + edit.effect + ")";
+    }
+
+    function legalFor(kind) {
+      return LEGAL[kind] || [];
+    }
+
+    function routedFor(projection, kind) {
+      return (ROUTED[projection] && ROUTED[projection][kind]) || [];
+    }
+
+    function speak(locus, projection) {
+      const legal = legalFor(locus.kind);
+      const routed = routedFor(projection, locus.kind);
+      const spoken = legal.map(function (edit) {
+        const line = disclosure(edit);
+        if (routed.indexOf(edit.verb) !== -1) {
+          return line + " is legal for this " + locus.kind + " and this " + projection + " gesture commits it.";
+        }
+        if (COMMIT[edit.verb]) {
+          return line + " is legal for this " + locus.kind + ", committed on " + COMMIT[edit.verb] + " — not implied absent here.";
+        }
+        return line + " is legal for this " + locus.kind + "; no remaining chrome commits it.";
+      });
+      if (locus.kind === "source") {
+        spoken.push(
+          "scene \"demo\" is a relation, not here. split → scene:demo (scene: split this scene at a source time); delete → scene:demo (scene: delete this scene); reorder-scene → scene:demo (sequence: reorder this scene in the sequence) — Navigate, do not retarget."
+        );
+      }
+      if (locus.kind === "scene") {
+        spoken.push("trim, set-gain, set-fade need a source binding. Point the video clip — do not retarget.");
+      }
+      return { legal: legal, routed: routed, spoken: spoken };
+    }
+
+    function setScene(name) {
+      state.scene = name;
+      state.candidates = [];
+      if (name === "session-strip") {
+        state.here = null;
+        state.projection = "Toolbar";
+        state.pointing = "none";
+        state.playhead = 0;
+      } else if (name === "source-here") {
+        state.here = "fight";
+        state.projection = "Timeline";
+        state.pointing = "committed";
+        state.playhead = 3.5;
+      } else if (name === "scene-here") {
+        state.here = "demo";
+        state.projection = "Tree";
+        state.pointing = "committed";
+        state.playhead = 3.5;
+      } else if (name === "video-click") {
+        state.here = "fight";
+        state.projection = "Timeline";
+        state.pointing = "committed";
+        state.playhead = 4.2;
+      } else if (name === "overlap") {
+        state.here = null;
+        state.projection = "Timeline";
+        state.pointing = "unresolved-pointing";
+        state.playhead = 3.5;
+        state.candidates = ["fight", "hello"];
+      }
+      render();
+    }
+
+    function point(key, projection) {
+      if (!LOCI[key]) return;
+      state.here = key;
+      state.projection = projection;
+      state.pointing = "committed";
+      state.candidates = [];
+      if (key === "hello") state.playhead = 3.5;
+      if (key === "hold" || key === "speech") state.playhead = 5.6;
+      if (key === "fight") state.playhead = state.scene === "video-click" ? 4.2 : 3.5;
+      render();
+    }
+
+    function failPoint() {
+      state.here = null;
+      state.projection = "Timeline";
+      state.pointing = "unresolved-pointing";
+      state.candidates = ["fight", "hello"];
+      state.playhead = 3.5;
+      render();
+    }
+
+    function pick(key) {
+      point(key, "Timeline");
+    }
+
+    function px(t) {
+      return (t / 12) * 100;
+    }
+
+    function renderTree() {
+      document.getElementById("tree").innerHTML = TREE.map(function (row) {
+        const locus = LOCI[row.key];
+        const current = state.here === row.key ? "true" : "false";
+        return (
+          '<button type="button" data-depth="' + row.depth + '" data-key="' + row.key +
+          '" data-selector="tree.node.' + locus.id + '" aria-current="' + current + '">' +
+          locus.kind + " " + locus.label + "</button>"
+        );
+      }).join("");
+    }
+
+    function renderVel() {
+      const locus = state.here ? LOCI[state.here] : null;
+      document.getElementById("vel-status").textContent = locus && locus.line
+        ? "locus at line " + locus.line
+        : "click source to point the shared locus";
+      document.getElementById("vel-editor").innerHTML = VEL.map(function (line, i) {
+        const n = i + 1;
+        const on = locus && locus.line === n;
+        return '<div class="vel-line' + (on ? " locus" : "") + '" data-selector="vel.line.' + n + '">' +
+          (line || " ") + "</div>";
+      }).join("");
+    }
+
+    function renderCanvas() {
+      const t = state.playhead;
+      const hello = document.getElementById("overlay-hello");
+      const hold = document.getElementById("overlay-hold");
+      const showHello = t >= 2 && t < 5;
+      const showHold = t >= 5.2 && t < 6.7;
+      hello.hidden = !showHello;
+      hold.hidden = !showHold;
+      hello.setAttribute("aria-current", state.here === "hello" ? "true" : "false");
+      hold.setAttribute("aria-current", state.here === "hold" ? "true" : "false");
+      hello.innerHTML = "Hello" + (state.here === "hello"
+        ? '<span class="handle tl"></span><span class="handle tr"></span><span class="handle bl"></span><span class="handle br"></span>'
+        : "");
+      hold.innerHTML = "Hold" + (state.here === "hold"
+        ? '<span class="handle tl"></span><span class="handle tr"></span><span class="handle bl"></span><span class="handle br"></span>'
+        : "");
+    }
+
+    function renderInspector() {
+      const root = document.getElementById("inspector");
+      if (state.pointing === "unresolved-pointing") {
+        root.innerHTML =
+          '<div class="heading">unresolved pointing</div>' +
+          '<div class="utterance" data-selector="inspector.utterance">' +
+          '<div class="here">Here · (none)</div>' +
+          '<div class="meta">pointing unresolved-pointing</div>' +
+          "<div>This Timeline point named 2 loci. Pick one card. Here is unset.</div>" +
+          "</div>" +
+          '<button type="button" class="preview-btn" data-selector="inspector.render-preview">Render preview.mp4</button>';
+        return;
+      }
+      if (!state.here) {
+        root.innerHTML =
+          '<div class="heading">(no locus)</div>' +
+          '<div class="utterance" data-selector="inspector.utterance">' +
+          '<div class="here">Here · (none)</div>' +
+          '<div class="meta">pointing none</div>' +
+          "<div>No here. Point a locus.</div>" +
+          "</div>" +
+          '<button type="button" class="preview-btn" data-selector="inspector.render-preview">Render preview.mp4</button>';
+        return;
+      }
+      const locus = LOCI[state.here];
+      const u = speak(locus, state.projection);
+      const titleFields = locus.kind === "title"
+        ? '<div class="field-label">Title text</div>' +
+          '<div class="title-field" data-selector="inspector.title">' + locus.label + "</div>" +
+          '<div class="row">' +
+          '<button type="button" class="btn teal" data-selector="inspector.apply">Apply edit</button>' +
+          '<button type="button" class="btn" data-selector="inspector.review">Review</button>' +
+          "</div>"
+        : "";
+      const go = locus.line
+        ? '<button type="button" class="btn teal-ink" data-selector="vel.go-to-definition" style="margin-top:8px">Go to definition</button>'
+        : "";
+      const legal = u.legal.length
+        ? '<div class="meta">legal ' + u.legal.map(disclosure).join(" · ") + "</div>"
+        : "";
+      const routed = u.routed.length
+        ? '<div class="meta">this gesture commits ' + u.routed.join(", ") + "</div>"
+        : "";
+      root.innerHTML =
+        '<div class="heading">' + locus.kind + ' "' + locus.label + '"</div>' +
+        '<div class="origin">' + locus.origin + "</div>" +
+        '<div class="defined">Defined in main.vel:' + locus.line + "</div>" +
+        go + titleFields +
+        '<div class="utterance" data-selector="inspector.utterance">' +
+        '<div class="here">Here · ' + locus.kind + ' "' + locus.label + '"</div>' +
+        '<div class="meta">pointing ' + state.pointing + "</div>" +
+        legal + routed +
+        u.spoken.map(function (line) { return "<div>" + line + "</div>"; }).join("") +
+        "</div>" +
+        '<button type="button" class="preview-btn" data-selector="inspector.render-preview">Render preview.mp4</button>';
+    }
+
+    function renderTimeline() {
+      document.getElementById("ruler").textContent = "Timeline · " + state.playhead.toFixed(2) + "s";
+      const box = document.getElementById("candidates");
+      if (state.candidates.length) {
+        box.innerHTML =
+          '<div class="prompt">This Timeline point named several loci. Pick one. Here is unset.</div>' +
+          state.candidates.map(function (key) {
+            const locus = LOCI[key];
+            const verbs = routedFor("Timeline", locus.kind);
+            const route = verbs.length ? verbs.join(", ") : "no Timeline commit";
+            return (
+              '<button type="button" class="card" data-pick="' + key +
+              '" data-selector="timeline.candidate.' + locus.id + '">' +
+              locus.kind + ' "' + locus.label + '" · ' + locus.span + " · " + route +
+              "</button>"
+            );
+          }).join("");
+      } else {
+        box.innerHTML = "";
+      }
+
+      const tracks = ["Video", "Audio", "Text"];
+      document.getElementById("tracks").innerHTML = tracks.map(function (name) {
+        const clips = CLIPS.filter(function (clip) { return clip.track === name; }).map(function (clip) {
+          const current = state.here === clip.key;
+          const handles = current && (clip.key === "fight" || clip.key === "hello" || clip.key === "hold");
+          const left = px(clip.start);
+          const width = Math.max(px(clip.end - clip.start), 3);
+          return (
+            '<button type="button" class="clip ' + clip.cls + '" data-key="' + clip.key +
+            '" data-selector="timeline.clip.' + clip.key + '" aria-current="' + (current ? "true" : "false") +
+            '" style="left:' + left + "%;width:" + width + '%">' +
+            clip.label +
+            (handles ? '<span class="edge in" data-selector="timeline.trim.' + clip.key + '.in"></span>' +
+              '<span class="edge out" data-selector="timeline.trim.' + clip.key + '.out"></span>' : "") +
+            "</button>"
+          );
+        }).join("");
+        return (
+          '<div class="track"><div class="name">' + name + "</div>" +
+          '<div class="rail" data-selector="timeline.track.' + name.toLowerCase() + '" data-track="' + name + '">' +
+          clips +
+          '<div class="playhead" data-selector="timeline.playhead.' + name.toLowerCase() +
+          '" style="left:' + px(state.playhead) + '%"></div>' +
+          "</div></div>"
+        );
+      }).join("");
+    }
+
+    function renderNav() {
+      document.querySelectorAll(".sketch-key a").forEach(function (link) {
+        const id = link.getAttribute("href").slice(1);
+        link.setAttribute("aria-current", id === state.scene ? "true" : "false");
+      });
+      document.getElementById("scene-note").textContent = NOTES[state.scene] || "";
+    }
+
+    function render() {
+      renderNav();
+      renderTree();
+      renderVel();
+      renderCanvas();
+      renderInspector();
+      renderTimeline();
+    }
+
+    document.getElementById("tree").addEventListener("click", function (event) {
+      const button = event.target.closest("button[data-key]");
+      if (button) point(button.getAttribute("data-key"), "Tree");
+    });
+
+    document.getElementById("tracks").addEventListener("click", function (event) {
+      if (event.target.closest(".edge")) return;
+      const clip = event.target.closest(".clip[data-key]");
+      if (clip) {
+        point(clip.getAttribute("data-key"), "Timeline");
+        return;
+      }
+      const rail = event.target.closest(".rail");
+      if (rail) failPoint();
+    });
+
+    document.getElementById("candidates").addEventListener("click", function (event) {
+      const card = event.target.closest("[data-pick]");
+      if (card) pick(card.getAttribute("data-pick"));
+    });
+
+    document.getElementById("overlay-hello").addEventListener("click", function () {
+      point("hello", "Canvas");
+    });
+    document.getElementById("overlay-hold").addEventListener("click", function () {
+      point("hold", "Canvas");
+    });
+
+    document.querySelector(".sketch-key").addEventListener("click", function (event) {
+      const link = event.target.closest("a[href^='#']");
+      if (!link) return;
+      event.preventDefault();
+      const name = link.getAttribute("href").slice(1);
+      history.replaceState(null, "", "#" + name);
+      setScene(name);
+    });
+
+    const initial = (location.hash || "#session-strip").slice(1);
+    setScene(NOTES[initial] ? initial : "session-strip");
+  </script>
+</body>
+</html>
