@@ -453,12 +453,46 @@ fn window_source_composes_documented_panes() {
         "Delete Selected Clip",
         "Gain -3 dB",
         "Fade",
+        "Fade Out",
+        "Split Scene",
+        "In Point",
+        "Out Point",
     ] {
         assert!(
             !main.contains(&format!("\"{evicted}\"")),
             "session strip must not keep locus-taking button {evicted}"
         );
     }
+    for cluster in [
+        "toolbar.cluster.file",
+        "toolbar.cluster.clock",
+        "toolbar.cluster.engine",
+        "toolbar.cluster.telemetry",
+    ] {
+        assert!(
+            main.contains(cluster),
+            "session strip must group existing actions as {cluster}"
+        );
+    }
+    assert!(
+        main.contains("inspector.gain") && main.contains("inspector.fade"),
+        "Inspector must draw typed gain/fade fields"
+    );
+    assert!(
+        main.contains("inspector.invoked") && main.contains("Invoked this session"),
+        "Inspector must read back invoked rows"
+    );
+    assert!(
+        main.contains("utterance.eye"),
+        "utterance may navigate by eye"
+    );
+    assert!(
+        !main.contains("inspector.split")
+            && !main.contains("inspector.fade-out")
+            && !main.contains("inspector.in-point")
+            && !main.contains("inspector.out-point"),
+        "deleted Flash furniture must stay gone"
+    );
     assert!(
         main.contains("timeline.fade.") && main.contains("timeline.gain."),
         "drawn gain/fade routes must exist"

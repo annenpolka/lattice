@@ -200,7 +200,7 @@ fn overlap_candidates_appear_on_timeline_not_modal() {
             .utterance
             .spoken
             .iter()
-            .any(|line| line.contains("Timeline") && line.contains("loci")),
+            .any(|line| line.text.contains("Timeline") && line.text.contains("loci")),
         "{:?}",
         layout.inspector.utterance.spoken
     );
@@ -258,6 +258,8 @@ fn inspector_hides_title_fields_when_here_is_scene() {
     point_scene_via_band(&mut session);
     let layout = session.layout().unwrap();
     assert!(!layout.inspector.title_fields);
+    assert!(layout.inspector.gain_db.is_none());
+    assert!(layout.inspector.fade_in.is_none());
     assert!(!layout.inspector.heading.contains("title"));
     assert!(layout.inspector.heading.contains("scene"));
     assert!(
@@ -793,4 +795,94 @@ fn toolbar_routes_nothing() {
     assert!(lattice_studio::routed_verbs(Projection::Toolbar, LocusKind::Source).is_empty());
     assert!(lattice_studio::routed_verbs(Projection::Toolbar, LocusKind::Scene).is_empty());
     assert!(lattice_studio::routed_verbs(Projection::Toolbar, LocusKind::Title).is_empty());
+}
+
+#[test]
+fn inspector_property_fields_bind_exact_source_locus_id() {
+    let mut session = overlap_session();
+    session.point_at_title().unwrap();
+    let title_layout = session.layout().unwrap();
+    assert!(title_layout.inspector.title_fields);
+    assert!(title_layout.inspector.gain_db.is_none());
+    assert!(title_layout.inspector.fade_in.is_none());
+
+    point_source_via_video(&mut session);
+    let source_id = session.current_locus().unwrap().unwrap().id;
+    let layout = session.layout().unwrap();
+    assert_eq!(
+        layout.inspector.locus_id.as_deref(),
+        Some(source_id.as_str())
+    );
+    assert!(!layout.inspector.title_fields);
+    assert_eq!(layout.inspector.gain_db, Some(0));
+    assert_eq!(layout.inspector.fade_in, Some(Time::ZERO));
+}
+
+#[test]
+fn inspector_apply_gain_records_invoked_this_session() {
+    let mut session = overlap_session();
+    point_source_via_video(&mut session);
+    let source_id = session.current_locus().unwrap().unwrap().id;
+    let original = session.source().to_string();
+    session.apply_inspector_gain(-6).unwrap();
+    let after = session.source().to_string();
+    assert_ne!(after, original);
+    assert!(!after.contains("by --"));
+    let invoked = session.invoked_this_session();
+    assert_eq!(invoked.len(), 1);
+    assert_eq!(invoked[0].verb, "set-gain");
+    assert_eq!(invoked[0].target, source_id.as_str());
+    assert_eq!(invoked[0].scope, "source-binding");
+    session
+        .apply_inspector_fade(Time::from_decimal_seconds(0, 5, 1).unwrap())
+        .unwrap();
+    let invoked = session.invoked_this_session();
+    assert_eq!(invoked.len(), 2);
+    assert_eq!(invoked[1].verb, "set-fade");
+    assert_eq!(invoked[1].target, source_id.as_str());
+    session.undo().unwrap();
+    assert_eq!(session.invoked_this_session().len(), 1);
+    session.redo().unwrap();
+    assert_eq!(session.invoked_this_session().len(), 2);
+}
+
+#[test]
+fn utterance_eye_seeks_without_retarget_or_edit() {
+    let mut session = overlap_session();
+    point_source_via_video(&mut session);
+    let here = session.current_locus().unwrap().unwrap().id;
+    let original = session.source().to_string();
+    session.seek(Time::seconds(5));
+    let eye = session
+        .utterance()
+        .spoken
+        .iter()
+        .find_map(|clause| clause.eye_target.clone())
+        .expect("relation names a navigate target");
+    assert!(session.seek_eye(&eye).unwrap());
+    assert_eq!(session.current_locus().unwrap().unwrap().id, here);
+    assert_eq!(session.source(), original);
+    assert_ne!(session.playhead(), Time::seconds(5));
+}
+
+#[test]
+fn source_utterance_does_not_borrow_structurally_absent_for_layout() {
+    let mut session = overlap_session();
+    point_source_via_video(&mut session);
+    session.touch_projection(Projection::Canvas);
+    let utterance = session.utterance();
+    for clause in &utterance.spoken {
+        if clause.status == "layout-unrouted" {
+            assert_eq!(clause.reason.as_deref(), Some("no-drawn-target"));
+            assert!(
+                !clause.text.contains("structurally-absent"),
+                "{}",
+                clause.text
+            );
+        }
+        assert!(
+            utterance.legal.is_empty() || clause.status != "structurally-absent",
+            "legal source must not reuse Engine absence for routing: {clause:?}"
+        );
+    }
 }

@@ -246,6 +246,8 @@ scene intro {
                 cx.focus_handle(),
                 cx.focus_handle(),
                 cx.focus_handle(),
+                cx.focus_handle(),
+                cx.focus_handle(),
             );
             view.adopt_locus_label();
             view.preview_current = Some(
@@ -895,6 +897,144 @@ scene demo {
                 "{gone} must not be drawn"
             );
         }
+        let _ = ui.bounds("toolbar.cluster.file");
+        let _ = ui.bounds("toolbar.cluster.clock");
+        let _ = ui.bounds("toolbar.cluster.engine");
+        let _ = ui.bounds("toolbar.cluster.telemetry");
+        for gone in [
+            "inspector.split",
+            "inspector.fade-out",
+            "inspector.in-point",
+            "inspector.out-point",
+            "inspector.fade-out-field",
+        ] {
+            assert!(
+                ui.context().debug_bounds(gone).is_none(),
+                "{gone} must not be drawn"
+            );
+        }
+        let _ = view;
+    }
+
+    #[gpui::test]
+    fn inspector_typed_fields_and_invoked_record(cx: &mut TestAppContext) {
+        let session = overlap_session();
+        let video_id = session
+            .layout()
+            .unwrap()
+            .timeline
+            .tracks
+            .iter()
+            .find(|track| track.name == "Video")
+            .unwrap()
+            .clips[0]
+            .id
+            .clone();
+        let (view, cx) = add_studio(cx, session);
+        let mut ui = UiDriver::new(cx);
+        ui.click(format!("timeline.clip.{video_id}"));
+        assert_eq!(
+            ui.read(&view, |view, _| {
+                view.session.current_locus().unwrap().unwrap().kind
+            }),
+            lattice_engine::LocusKind::Source
+        );
+        let _ = ui.bounds("inspector.gain");
+        let _ = ui.bounds("inspector.fade");
+        assert!(
+            !ui.read(&view, |view, _| {
+                view.session.layout().unwrap().inspector.title_fields
+            }),
+            "Title fields stay Title-only"
+        );
+        let original = ui.read(&view, |view, _| view.session.source().to_string());
+        view.update(ui.context(), |view, cx| {
+            view.gain_draft = "-6".into();
+            view.commit_inspector_gain();
+            cx.notify();
+        });
+        let after = ui.read(&view, |view, _| view.session.source().to_string());
+        assert_ne!(after, original, "typed gain field must commit SetGain");
+        assert!(!after.contains("by --"));
+        let _ = ui.bounds("inspector.invoked");
+        let invoked = ui.read(&view, |view, _| view.session.invoked_this_session());
+        assert_eq!(invoked.len(), 1);
+        assert_eq!(invoked[0].verb, "set-gain");
+        view.update(ui.context(), |view, _| {
+            view.gain_draft = "99".into();
+        });
+        let scene_id = ui.read(&view, |view, _| {
+            view.session
+                .layout()
+                .unwrap()
+                .timeline
+                .tracks
+                .iter()
+                .find(|track| track.name == "Scene")
+                .unwrap()
+                .clips[0]
+                .id
+                .clone()
+        });
+        ui.click(format!("timeline.scene.{scene_id}"));
+        let (kind, draft, fields) = ui.read(&view, |view, _| {
+            (
+                view.session.current_locus().unwrap().unwrap().kind,
+                view.gain_draft.clone(),
+                view.session.layout().unwrap().inspector.gain_db,
+            )
+        });
+        assert_eq!(kind, lattice_engine::LocusKind::Scene);
+        assert!(
+            fields.is_none(),
+            "gain field is bound to the source LocusId"
+        );
+        assert_ne!(
+            draft, "99",
+            "locus change must invalidate the in-flight draft"
+        );
+        let _ = view;
+    }
+
+    #[gpui::test]
+    fn utterance_eye_does_not_apply_edit(cx: &mut TestAppContext) {
+        let session = overlap_session();
+        let video_id = session
+            .layout()
+            .unwrap()
+            .timeline
+            .tracks
+            .iter()
+            .find(|track| track.name == "Video")
+            .unwrap()
+            .clips[0]
+            .id
+            .clone();
+        let (view, cx) = add_studio(cx, session);
+        let mut ui = UiDriver::new(cx);
+        ui.click(format!("timeline.clip.{video_id}"));
+        view.update(ui.context(), |view, cx| {
+            view.session.seek(lattice_engine::Time::seconds(5));
+            cx.notify();
+        });
+        let (here, source) = ui.read(&view, |view, _| {
+            (
+                view.session.current_locus().unwrap().unwrap().id,
+                view.session.source().to_string(),
+            )
+        });
+        let _ = ui.bounds("utterance.eye");
+        ui.click("utterance.eye");
+        let (after_here, after_source, invoked) = ui.read(&view, |view, _| {
+            (
+                view.session.current_locus().unwrap().unwrap().id,
+                view.session.source().to_string(),
+                view.session.invoked_this_session(),
+            )
+        });
+        assert_eq!(after_here, here, "eye must not retarget");
+        assert_eq!(after_source, source, "eye must not apply_edit");
+        assert!(invoked.is_empty(), "utterance never apply_edit");
         let _ = view;
     }
 
