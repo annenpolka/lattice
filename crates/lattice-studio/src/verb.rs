@@ -131,11 +131,9 @@ pub fn commit_projection(verb: &str, kind: LocusKind) -> Option<Projection> {
         Projection::Review,
         Projection::Tree,
     ];
-    SURFACES.into_iter().find(|&surface| {
-        routed_verbs(surface, kind)
-            .iter()
-            .any(|routed| *routed == verb)
-    })
+    SURFACES
+        .into_iter()
+        .find(|&surface| routed_verbs(surface, kind).contains(&verb))
 }
 
 #[must_use]
