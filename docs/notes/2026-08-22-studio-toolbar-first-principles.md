@@ -194,9 +194,10 @@ pairwise differing subpixels in rows 0..109: 0
 ```
 
 The same hash appears in a separate earlier process run, so it is stable across
-launches, not an artefact of one frame. The first differing row anywhere in the
-window is 151, inside the Inspector column — where the utterance lives. This is
-§3.2 measured rather than argued.
+launches, not an artefact of one frame. Everything that does react sits below:
+the first differing row anywhere in the window is 151, in the VEL pane's locus
+hint line, and the Inspector — where the utterance lives — first differs at row
+157. This is §3.2 measured rather than argued.
 
 ### 5.2 The Engine says "committed on Toolbar", which is not a place
 
@@ -227,10 +228,11 @@ verb is `wrote edit: set-gain is not legal for title "Hello"
 (needs-source-binding).` — a legality refusal wearing a file-write prefix.
 
 Live, clicking `Gain -3 dB` at `here = title "Hello"` logged exactly that
-refusal and changed **three rows of pixels** (677–679): glyph tops at the
-Inspector's clip boundary. Every other differing pixel in the frame is the mouse
-cursor. `Split at Playhead` behaved the same way. The Engine spoke correctly and
-fail-closed; `here` did not move; and the screen did not say so.
+refusal and changed **three rows of pixels** — 677–679, inside the Inspector pane
+(x 1169–1331): glyph tops at its clip boundary. Every other differing pixel in
+the frame is the mouse cursor. `Split at Playhead` behaved the same way. The
+Engine spoke correctly and fail-closed; `here` did not move; and the screen did
+not say so.
 
 ### 5.4 Smaller facts the argument leans on
 
@@ -396,13 +398,96 @@ answer must satisfy.
 
 ## Evidence
 
+Pane bounds, for reading the crops: SEQUENCE `x 0–199`, Canvas `200–879`, VEL
+`880–1159`, Inspector `1160–1400`.
+
 - `docs/screenshots/toolbar-rethink-one-row-three-legal-sets.png` — the argument
-  in one frame: the identical top chrome above the Inspector at
+  in one frame: the identical top chrome above the VEL and Inspector panes at
   `here = title "Hello"`, `source "clip"`, `scene "demo"`. Three legal sets, one
   row, zero differing pixels in the row.
 - `docs/screenshots/toolbar-observe-top-row.png` — the object itself, rows 0–109.
 - `docs/screenshots/toolbar-observe-here-title.png`,
   `docs/screenshots/toolbar-observe-here-scene.png` — full window at two loci.
-- `docs/screenshots/toolbar-observe-refusal-invisible.png` — Inspector column
-  before (left) and after (right) a refused top-row verb click; the red gutter
-  marks rows 677–679, the entire visible response.
+- `docs/screenshots/toolbar-observe-refusal-invisible.png` — the VEL and Inspector
+  panes before (left) and after (right) a refused top-row verb click; the red
+  gutter marks rows 677–679, the entire visible response.
+- `docs/screenshots/toolbar-vote-labels-vs-engine-fields.png` — §12 test 2: the
+  row's labels above the Engine's own words for the same `here`.
+
+---
+
+## 12. Phase III vote
+
+**Concurrence with the narrow claim.** The current fixed, always-visible bank of
+locus-taking `SemanticEdit` buttons is not a coherent global verb surface; a
+session strip may remain global. §4 reached the same split independently, from
+the `SemanticEdit` criterion rather than from the frame: six buttons commit a
+`SemanticEdit` and must be local, fourteen take no locus and are legitimately
+global.
+
+### Scoring the bank against the six tests
+
+| # | Test | Bank | Why |
+|---|---|---|---|
+| 1 | standing invitation for a locus-taking edit? | **fail** | Six buttons render live and `cursor_pointer` regardless of `here`. 42 of 48 (button, locus-kind) pairs are false invitations (§3.1). |
+| 2 | target / scope / effect / parameter / committing projection disclosed before commit? | **fail ×5** | Labels keep at most the verb. `LegalEdit` supplies target, scope, effect; all three are dropped. Parameters are not disclosed but decided (`-3` dB, `500ms`, playhead, `Time::ZERO`). The route is never shown. |
+| 3 | Engine only legality authority? | **pass** | `target_locus_for` calls `is_legal_verb`; `refuse_edit` reads `legal_edits_for`. Studio computes no second legal set. The bank consults the authority too *late*, which is test 1's failure, not this one's. |
+| 4 | uses the one `here`, fail-closed, no target search / promotion? | **pass** | Verified live: refused clicks left `here` unchanged, and there is no `target_source_locus` / `target_scene_locus` fallthrough. |
+| 5 | every legal edit has a named route or is spoken unrouted? | **fail (qualified)** | Nothing is silently absent — the utterance speaks all ten union verbs. But four verbs' named route is `Toolbar`, which is not a surface you can point in, and `trim` is double-routed with only Timeline nameable, so the bank's own Set In / Set Out are unspeakable (§5.2, §3.1). |
+| 6 | non-verb global controls grouped by actual authority? | **fail** | Five control layers plus a display channel at one visual rank; teal means selected-mode, emphasis, and transport; the renderer/audio typed-error channel is a label between two buttons in a wrapping row. |
+
+**The scoring partitions cleanly, and that is the finding.** The bank passes
+exactly the two tests the spine already disciplined — Engine authority and
+fail-closed pointing — and fails exactly the four that are properties of *being a
+fixed global bank*: standing invitation, non-disclosure, unnameable routes, and
+undifferentiated rank. No further spine work reaches tests 1, 2, or 6, because
+they are consequences of fixedness, globality, and rank rather than of legality
+plumbing.
+
+One caveat on the test-4 pass, since it is the regression surface: the bank
+satisfies "no target search" only because search was explicitly forbidden. A
+button arrives without a target, so the *pressure* toward searching for one is
+intrinsic to the object. Any future change that makes these buttons "work more
+often" reintroduces it.
+
+### Vote: DELETE the object, STEAL the verbs
+
+One motion seen from two ends. The bank ceases to exist as a verb surface
+(DELETE), and each verb lands on the projection that already renders its target
+(STEAL).
+
+- **KEEP is unreachable, not merely unattractive.** Repairing tests 1 and 2
+  forces the surface to render `legal_edits_for(here)` with the Engine's target,
+  scope, and effect; membership then varies with `here` and it is the utterance,
+  whose fixed point is the Inspector (§6). Every step toward passing the tests
+  moves the object somewhere else.
+- **DELETE alone is admissible but leaves debt.** It clears tests 1 and 2 at a
+  stroke and does not fail test 5, since "spoken unrouted" is permitted. It does
+  cost reachability for the four verbs whose only route is `Toolbar` (§7).
+- **STEAL dominates DELETE** on tests 5 and 6: routes become nameable places, and
+  what remains is non-verb, so it *can* be grouped by authority.
+
+### The object I name for the residue
+
+Not "the current row minus six buttons." **A session strip whose membership is a
+predicate, not a list** — `commits_semantic_edit == false`. Test 6 asks for
+grouping by actual authority, and that is only checkable if membership is derived
+from authority. A hand-authored list is exactly how six locus-taking verbs came
+to live in a global bank in the first place, and it is how they would return.
+Under the predicate the strip's groups are Engine phase and project I/O, session
+history, transport, renderer request plus its typed error channel, viewport, and
+read-only locus export (§4).
+
+### Sequencing, not a shipping choice
+
+Two prerequisites, from §8, that make the difference between DELETE and dropping
+things on the floor: the utterance must stop being clipped before it inherits
+discovery, and each of the four `Toolbar`-only verbs must gain a named local route
+or be spoken unrouted. A third consequence is the end-state check:
+`routed_verbs(Toolbar, k)` empty for every `k`, and `commit_projection` unable to
+name a non-place.
+
+**Not decided by this vote**, and deliberately: which projection takes each verb
+where more than one renders the target, what a continuous control for `set-gain`
+is, and whether `Projection::Toolbar` is deleted or kept as an explicitly empty
+variant. §11 stands. No shipping winner is picked here.
