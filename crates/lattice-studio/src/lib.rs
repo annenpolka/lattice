@@ -27,8 +27,9 @@ pub use canvas::{
     CanvasResizeError, CanvasResizePatch, CanvasResizePreview, CanvasSize, ResizeCorner,
 };
 pub use gesture::{
-    CursorKind, DRAG_THRESHOLD_PX, Edge, GestureOutcome, SNAP_THRESHOLD_PX, TRACK_HEIGHT_PX,
-    TRIM_HANDLE_PX, TimelineGesture, TimelineHit, snap_time, y_ratio_from_db,
+    CursorKind, DRAG_THRESHOLD_PX, Edge, GAIN_LINE_HEIGHT_PX, GestureOutcome, SNAP_THRESHOLD_PX,
+    TRACK_HEIGHT_PX, TRIM_HANDLE_PX, TimelineGesture, TimelineHit, gain_line_top, on_gain_line,
+    snap_time, y_ratio_from_db,
 };
 pub use layout::{
     CanvasOverlay, CanvasView, InspectorView, ReviewView, SourceView, StudioLayout,

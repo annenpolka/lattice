@@ -936,7 +936,22 @@ scene demo {
             lattice_engine::LocusKind::Source
         );
         let original = ui.read(&view, |view, _| view.session.source().to_string());
-        ui.drag_within(format!("timeline.clip.{audio_id}"), (0.5, 0.85), (0.5, 0.1));
+        ui.drag_within(
+            format!("timeline.clip.{audio_id}"),
+            (0.15, 0.9),
+            (0.85, 0.9),
+        );
+        let after_body = ui.read(&view, |view, _| view.session.source().to_string());
+        assert_eq!(
+            after_body, original,
+            "audio-block body must not commit SetGain"
+        );
+        ui.drag(
+            format!("timeline.gain.{audio_id}"),
+            (0.5, 0.5),
+            format!("timeline.clip.{audio_id}"),
+            (0.5, 0.05),
+        );
         let after_gain = ui.read(&view, |view, _| view.session.source().to_string());
         assert_ne!(after_gain, original, "gain line must commit SetGain");
         assert!(!after_gain.contains("by --"));

@@ -56,9 +56,15 @@ pub fn begin_xy(
         TimelineHit::DeleteHandle { clip_id } => TimelineGesture::Delete { scene_id: clip_id },
         TimelineHit::ClipBody { clip_id, kind } => match kind {
             ClipKind::Video => TimelineGesture::PointSource { clip_id },
-            // Unselected audio is the empty-rail coordinate point (overlap).
-            // Selected audio is a Gain hit, not a body.
-            ClipKind::Audio => TimelineGesture::Point { start_x: x },
+            // Unselected audio is the coordinate point (overlap). Selected
+            // audio body is identity only — Gain commits from the drawn line.
+            ClipKind::Audio => {
+                if clips.iter().any(|clip| clip.id == clip_id && clip.selected) {
+                    TimelineGesture::PointSource { clip_id }
+                } else {
+                    TimelineGesture::Point { start_x: x }
+                }
+            }
             ClipKind::Scene => begin_scene_band(session, &clips, &clip_id, x),
             ClipKind::Title | ClipKind::Callout => {
                 begin_move_overlay(session, &clips, &clip_id, kind, x)?
@@ -911,6 +917,7 @@ fn hit_clips(session: &StudioSession) -> Result<Vec<HitClip>, EngineError> {
             duration: clip.span.duration,
             selected,
             scene_id,
+            gain_db: clip.gain_db.unwrap_or(0),
         });
     }
     for scene in &session.compilation.project.scenes {
@@ -936,6 +943,7 @@ fn hit_clips(session: &StudioSession) -> Result<Vec<HitClip>, EngineError> {
             duration: span.duration,
             selected,
             scene_id: scene.id.clone(),
+            gain_db: 0,
         });
     }
     Ok(clips)

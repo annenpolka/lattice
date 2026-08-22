@@ -172,9 +172,22 @@ fn trim_gesture_commits_once_and_undo_restores() {
     let mut session = open_video(8);
     let original = session.source().to_string();
     let clip = video_clip(&session);
+    let mid = clip_x(
+        &session,
+        clip.start,
+        session.viewport().delta_x(clip.duration) / 2.0,
+    );
+    session
+        .begin_timeline_pointer_on(mid, true, "Video")
+        .expect("point source");
+    session.commit_timeline_pointer(mid).expect("commit point");
+    assert_eq!(
+        session.current_locus().unwrap().unwrap().kind,
+        lattice_engine::LocusKind::Source
+    );
     let left = clip_x(&session, clip.start, 1.0);
     session
-        .begin_timeline_pointer(left, true)
+        .begin_timeline_pointer_on(left, true, "Video")
         .expect("begin left");
     assert!(
         matches!(
@@ -216,7 +229,7 @@ fn trim_gesture_commits_once_and_undo_restores() {
     let clip = video_clip(&session);
     let right = session.x_at_time(clip.start + clip.duration) - 1.0;
     session
-        .begin_timeline_pointer(right, true)
+        .begin_timeline_pointer_on(right, true, "Video")
         .expect("begin right");
     assert!(
         matches!(
@@ -488,8 +501,19 @@ fn zoom_scroll_snap_and_failed_commit_restore() {
 
     let original = session.source().to_string();
     let clip = video_clip(&session);
+    let mid = clip_x(
+        &session,
+        clip.start,
+        session.viewport().delta_x(clip.duration) / 2.0,
+    );
+    session
+        .begin_timeline_pointer_on(mid, true, "Video")
+        .unwrap();
+    session.commit_timeline_pointer(mid).unwrap();
     let left = clip_x(&session, clip.start, 1.0);
-    session.begin_timeline_pointer(left, true).unwrap();
+    session
+        .begin_timeline_pointer_on(left, true, "Video")
+        .unwrap();
     session.update_timeline_pointer(left + 80.0, true).unwrap();
     let ephemeral = session.layout().unwrap();
     let eclip = ephemeral

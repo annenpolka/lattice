@@ -583,8 +583,9 @@ fn source_here_commits_gain_on_audio_line_and_fade_on_video_wedge() {
     assert!(video.handles, "trim stays on clip edges");
 
     let x = session.x_at_time(audio.start) + session.viewport().delta_x(audio.duration) / 2.0;
+    let line_y = lattice_studio::gain_line_top(audio.gain_db.unwrap_or(0)) + 2.0;
     session
-        .begin_timeline_pointer_on_xy(x, 11.0, true, "Audio")
+        .begin_timeline_pointer_on_xy(x, line_y, true, "Audio")
         .unwrap();
     assert!(
         matches!(
@@ -599,6 +600,26 @@ fn source_here_commits_gain_on_audio_line_and_fade_on_video_wedge() {
     assert_ne!(session.source(), original);
     assert!(session.source().contains("gain"), "{}", session.source());
     assert!(!session.source().contains("by --"));
+
+    let before_body = session.source().to_string();
+    session
+        .begin_timeline_pointer_on_xy(x, 20.0, true, "Audio")
+        .unwrap();
+    assert!(
+        !matches!(
+            session.gesture(),
+            lattice_studio::TimelineGesture::Gain { .. }
+        ),
+        "audio-block body is not a hidden gain surface: {:?}",
+        session.gesture()
+    );
+    session.update_timeline_pointer_xy(x, 2.0, true).unwrap();
+    session.commit_timeline_pointer_xy(x, 2.0).unwrap();
+    assert_eq!(
+        session.source(),
+        before_body,
+        "audio-block body must not commit SetGain"
+    );
 
     let before_fade = session.source().to_string();
     let fade_x = session.x_at_time(video.start) + 14.0;
@@ -704,6 +725,67 @@ scene demo {
         "empty fade must not push Undo"
     );
     assert!(session.source().contains("for 0.5s"));
+}
+
+#[test]
+fn selected_overlay_does_not_expose_hidden_video_trim() {
+    let mut session = overlap_session();
+    let title = session
+        .loci()
+        .unwrap()
+        .into_iter()
+        .find(|locus| locus.kind == LocusKind::Title)
+        .expect("title");
+    let title_clip = session
+        .layout()
+        .unwrap()
+        .timeline
+        .tracks
+        .iter()
+        .find(|track| track.name == "Text")
+        .unwrap()
+        .clips
+        .iter()
+        .find(|clip| clip.kind == "title")
+        .cloned()
+        .expect("title clip");
+    let video = clip_on(&session, "Video");
+    assert!(!video.handles, "unselected video draws no trim handles");
+    let title_x = session.x_at_time(title_clip.start + Time::milliseconds(200));
+    session
+        .begin_timeline_pointer_on(title_x, true, "Text")
+        .unwrap();
+    session.commit_timeline_pointer(title_x).unwrap();
+    assert_eq!(
+        session.current_locus().unwrap().unwrap().id,
+        title.id,
+        "point the overlay through the Text track"
+    );
+    let video_left = session.x_at_time(video.start) + 1.0;
+    session
+        .begin_timeline_pointer_on(video_left, true, "Video")
+        .unwrap();
+    assert!(
+        !matches!(
+            session.gesture(),
+            lattice_studio::TimelineGesture::Trim { .. }
+        ),
+        "unselected video edge is not a hidden trim: {:?}",
+        session.gesture()
+    );
+    session.cancel_timeline_pointer();
+    let title_right = session.x_at_time(title_clip.start + title_clip.duration) - 1.0;
+    session
+        .begin_timeline_pointer_on(title_right, true, "Text")
+        .unwrap();
+    assert!(
+        matches!(
+            session.gesture(),
+            lattice_studio::TimelineGesture::ResizeOverlay { .. }
+        ),
+        "selected overlay still trims from its drawn edge: {:?}",
+        session.gesture()
+    );
 }
 
 #[test]
