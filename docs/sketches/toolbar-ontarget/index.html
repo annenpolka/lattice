@@ -408,7 +408,7 @@ table.t td code { font-family: var(--mono); font-size: 11.5px; }
 table.t .yes { color: var(--teal); }
 table.t .no { color: var(--note); }
 table.t tr.gone td { color: var(--dead); }
-table.t tr.gone td code { color: var(--dead); text-decoration: line-through; }
+table.t tr.gone td code { color: var(--dead); }
 
 /* ---------- deleted bank panel ---------- */
 
@@ -419,9 +419,16 @@ table.t tr.gone td code { color: var(--dead); text-decoration: line-through; }
 .gone-panel h4 { margin: 0 0 4px; font-size: 12px; font-weight: 600; color: var(--muted); }
 .gone-panel p { margin: 0 0 11px; color: var(--dead); font-size: 12px; }
 .gone-row { display: flex; flex-wrap: wrap; gap: 6px; }
+/* no strikethrough: a line through "Gain -3 dB" reads as "Gain +3 dB",
+   and a sign is the last thing this page may blur */
 .gone-btn {
-  padding: 4px 10px; border: 1px dashed #333c4d; border-radius: 3px;
-  color: var(--dead); font-size: 12px; text-decoration: line-through;
+  position: relative; padding: 4px 10px 4px 22px;
+  border: 1px dashed #333c4d; border-radius: 3px;
+  color: var(--dead); font-size: 12px;
+}
+.gone-btn::before {
+  content: "×"; position: absolute; left: 8px; top: 3px;
+  color: #6b5340; font-size: 13px; line-height: 1;
 }
 
 /* ---------- footer ---------- */
@@ -582,9 +589,9 @@ table.t tr.gone td code { color: var(--dead); text-decoration: line-through; }
   <div class="gone-panel">
     <h4>Deleted — six controls that committed without drawing</h4>
     <p>
-      Struck through because they are gone, not because they are disabled. Each failed on the same
-      point: nothing on screen tied the control to the locus it would edit, so the target was an
-      implicit argument and a wrong result looked exactly like a right one.
+      Marked gone rather than disabled. Each failed on the same point: nothing on screen tied the
+      control to the locus it would edit, so the target was an implicit argument and a wrong result
+      looked exactly like a right one.
     </p>
     <div class="gone-row">
       <span class="gone-btn">Set In</span>
