@@ -115,20 +115,27 @@ pub fn routed_verbs(projection: Projection, kind: LocusKind) -> Vec<&'static str
     }
 }
 
-/// Projection that commits `verb` for this kind, when it is legal but not
-/// committable on the touched projection.
+/// Projection that actually routes `verb` for this kind.
+///
+/// Derived from [`routed_verbs`] so a spoken "committed on" clause cannot name
+/// a surface that does not commit the verb. Timeline is searched first, then
+/// Toolbar, then the remaining projections.
 #[must_use]
 pub fn commit_projection(verb: &str, kind: LocusKind) -> Option<Projection> {
-    match (verb, kind) {
-        ("set-position" | "resize-overlay", LocusKind::Title | LocusKind::Callout) => {
-            Some(Projection::Canvas)
-        }
-        ("title", LocusKind::Title) => Some(Projection::Inspector),
-        ("trim" | "set-gain" | "set-fade", LocusKind::Source)
-        | ("split" | "delete" | "reorder-scene", LocusKind::Scene)
-        | ("callout", LocusKind::Callout) => Some(Projection::Timeline),
-        _ => None,
-    }
+    const SURFACES: [Projection; 7] = [
+        Projection::Timeline,
+        Projection::Toolbar,
+        Projection::Canvas,
+        Projection::Inspector,
+        Projection::Source,
+        Projection::Review,
+        Projection::Tree,
+    ];
+    SURFACES.into_iter().find(|&surface| {
+        routed_verbs(surface, kind)
+            .iter()
+            .any(|routed| *routed == verb)
+    })
 }
 
 #[must_use]
@@ -339,7 +346,7 @@ pub fn candidate_cards(unresolved: &UnresolvedPointing) -> Vec<PointCandidate> {
 mod tests {
     use lattice_engine::{Locus, LocusId, LocusKind, Origin, Provenance, SemanticEdit};
 
-    use super::{Projection, refuse_edit, routed_verbs, utterance};
+    use super::{Projection, commit_projection, refuse_edit, routed_verbs, utterance};
 
     fn locus(kind: LocusKind, id: &str, label: &str) -> Locus {
         Locus {
@@ -394,5 +401,44 @@ mod tests {
     fn timeline_does_not_route_set_position_for_title() {
         assert!(!routed_verbs(Projection::Timeline, LocusKind::Title).contains(&"set-position"));
         assert!(routed_verbs(Projection::Canvas, LocusKind::Title).contains(&"set-position"));
+    }
+
+    #[test]
+    fn source_gain_and_fade_commit_on_toolbar_not_timeline() {
+        assert_eq!(
+            commit_projection("set-gain", LocusKind::Source),
+            Some(Projection::Toolbar)
+        );
+        assert_eq!(
+            commit_projection("set-fade", LocusKind::Source),
+            Some(Projection::Toolbar)
+        );
+        assert_eq!(
+            commit_projection("trim", LocusKind::Source),
+            Some(Projection::Timeline)
+        );
+        let source = locus(LocusKind::Source, "source:fight", "fight");
+        let spoken = utterance(Some(&source), None, Projection::Timeline);
+        assert!(spoken.speaks_gap());
+        for verb in ["set-gain", "set-fade"] {
+            assert!(
+                spoken
+                    .spoken
+                    .iter()
+                    .any(|clause| clause.verb == verb && clause.status == "routed"),
+                "{verb} {}",
+                spoken.spoken_text()
+            );
+        }
+        assert!(
+            spoken.spoken_text().contains("committed on Toolbar"),
+            "{}",
+            spoken.spoken_text()
+        );
+        assert!(
+            !spoken.spoken_text().contains("committed on Timeline"),
+            "gain/fade must not claim Timeline: {}",
+            spoken.spoken_text()
+        );
     }
 }

@@ -320,3 +320,40 @@ fn timeline_title_utterance_speaks_canvas_route() {
     );
     assert!(utterance.spoken_text().contains("committed on Canvas"));
 }
+
+#[test]
+fn timeline_source_utterance_speaks_toolbar_for_gain_and_fade() {
+    let mut session = overlap_session();
+    let source = session
+        .loci()
+        .unwrap()
+        .into_iter()
+        .find(|locus| locus.kind == LocusKind::Source)
+        .unwrap();
+    session.point_at(source.id);
+    session.touch_projection(Projection::Timeline);
+    let utterance = session.utterance();
+    assert!(utterance.routed.iter().any(|verb| verb == "trim"));
+    assert!(!utterance.routed.iter().any(|verb| verb == "set-gain"));
+    assert!(!utterance.routed.iter().any(|verb| verb == "set-fade"));
+    for verb in ["set-gain", "set-fade"] {
+        assert!(
+            utterance
+                .spoken
+                .iter()
+                .any(|clause| clause.verb == verb && clause.status == "routed"),
+            "{verb} {}",
+            utterance.spoken_text()
+        );
+    }
+    assert!(
+        utterance.spoken_text().contains("committed on Toolbar"),
+        "{}",
+        utterance.spoken_text()
+    );
+    assert!(
+        !utterance.spoken_text().contains("committed on Timeline"),
+        "{}",
+        utterance.spoken_text()
+    );
+}
