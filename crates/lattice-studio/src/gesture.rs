@@ -5,8 +5,15 @@ use lattice_engine::{Time, TimeSpan};
 use crate::viewport::{TimelineViewport, time_as_secs, time_from_secs};
 
 pub const TRIM_HANDLE_PX: f64 = 8.0;
+pub const FADE_WEDGE_PX: f64 = 20.0;
+pub const DELETE_HANDLE_PX: f64 = 22.0;
+pub const CUT_LANE_Y_RATIO: f64 = 0.45;
+pub const MIN_DRAW_WIDTH_PX: f64 = 24.0;
+pub const TRACK_HEIGHT_PX: f64 = 22.0;
 pub const DRAG_THRESHOLD_PX: f64 = 4.0;
 pub const SNAP_THRESHOLD_PX: f64 = 8.0;
+pub const GAIN_DB_TOP: i32 = 12;
+pub const GAIN_DB_BOTTOM: i32 = -24;
 
 #[must_use]
 pub fn min_duration() -> Time {
@@ -26,13 +33,16 @@ pub enum CursorKind {
     Trim,
     Grab,
     Grabbing,
+    Adjust,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ClipKind {
     Video,
+    Audio,
     Title,
     Callout,
+    Scene,
     Other,
 }
 
@@ -42,6 +52,18 @@ pub enum TimelineHit {
         clip_id: String,
         edge: Edge,
         kind: ClipKind,
+    },
+    Fade {
+        clip_id: String,
+    },
+    Gain {
+        clip_id: String,
+    },
+    CutLane {
+        clip_id: String,
+    },
+    DeleteHandle {
+        clip_id: String,
     },
     ClipBody {
         clip_id: String,
@@ -100,6 +122,35 @@ pub enum TimelineGesture {
         start_x: f64,
         scene_offset: Time,
     },
+    Gain {
+        clip_id: String,
+        original_db: i32,
+        preview_db: i32,
+        start_y: f64,
+        moved: bool,
+    },
+    Fade {
+        clip_id: String,
+        original: Time,
+        preview: Time,
+        clip_start: Time,
+        clip_duration: Time,
+        start_x: f64,
+        moved: bool,
+    },
+    Split {
+        scene_id: String,
+        at: Time,
+    },
+    Delete {
+        scene_id: String,
+    },
+    PointSource {
+        clip_id: String,
+    },
+    PointScene {
+        scene_id: String,
+    },
 }
 
 impl TimelineGesture {
@@ -137,12 +188,35 @@ pub struct HitClip {
 
 #[must_use]
 pub fn clip_kind_from_track(kind: &str, track: &str) -> ClipKind {
-    match kind {
-        _ if track == "video" => ClipKind::Video,
-        "title" => ClipKind::Title,
-        "callout" => ClipKind::Callout,
+    match (kind, track) {
+        (_, "scene") => ClipKind::Scene,
+        (_, "video") => ClipKind::Video,
+        ("audio", _) | (_, "audio") => ClipKind::Audio,
+        ("title", _) => ClipKind::Title,
+        ("callout", _) => ClipKind::Callout,
         _ => ClipKind::Other,
     }
+}
+
+#[must_use]
+pub fn db_from_y_ratio(ratio: f64) -> i32 {
+    let span = f64::from(GAIN_DB_TOP - GAIN_DB_BOTTOM);
+    let db = f64::from(GAIN_DB_TOP) - ratio.clamp(0.0, 1.0) * span;
+    db.round() as i32
+}
+
+#[must_use]
+pub fn y_ratio_from_db(db: i32) -> f64 {
+    let span = f64::from(GAIN_DB_TOP - GAIN_DB_BOTTOM);
+    if span <= 0.0 {
+        return 0.5;
+    }
+    ((f64::from(GAIN_DB_TOP - db)) / span).clamp(0.0, 1.0)
+}
+
+#[must_use]
+pub fn clip_too_small(width: f64) -> bool {
+    width < MIN_DRAW_WIDTH_PX
 }
 
 #[must_use]
@@ -162,7 +236,15 @@ pub fn clips_at_x(clips: &[HitClip], x: f64, viewport: TimelineViewport) -> Vec<
 }
 
 pub fn hit_test(clips: &[HitClip], x: f64, viewport: TimelineViewport) -> TimelineHit {
+    hit_test_xy(clips, x, TRACK_HEIGHT_PX / 2.0, viewport)
+}
+
+pub fn hit_test_xy(clips: &[HitClip], x: f64, y: f64, viewport: TimelineViewport) -> TimelineHit {
     let mut best_trim: Option<(f64, TimelineHit)> = None;
+    let mut best_fade: Option<TimelineHit> = None;
+    let mut best_gain: Option<TimelineHit> = None;
+    let mut best_cut: Option<TimelineHit> = None;
+    let mut best_delete: Option<TimelineHit> = None;
     let mut body: Option<(bool, TimelineHit)> = None;
     for clip in clips {
         let left = viewport.x_at_time(clip.start);
@@ -178,7 +260,19 @@ pub fn hit_test(clips: &[HitClip], x: f64, viewport: TimelineViewport) -> Timeli
         if !on_clip {
             continue;
         }
-        let handleable = clip.selected
+        let drawable = !clip_too_small(width);
+        if clip.selected && clip.kind == ClipKind::Scene && x >= lo && x <= hi {
+            if drawable && x >= hi - DELETE_HANDLE_PX {
+                best_delete = Some(TimelineHit::DeleteHandle {
+                    clip_id: clip.id.clone(),
+                });
+            } else if drawable && y <= TRACK_HEIGHT_PX * CUT_LANE_Y_RATIO {
+                best_cut = Some(TimelineHit::CutLane {
+                    clip_id: clip.id.clone(),
+                });
+            }
+        }
+        let handleable = drawable
             && matches!(
                 clip.kind,
                 ClipKind::Video | ClipKind::Title | ClipKind::Callout
@@ -212,7 +306,21 @@ pub fn hit_test(clips: &[HitClip], x: f64, viewport: TimelineViewport) -> Timeli
                         },
                     ));
                 }
+            } else if clip.selected
+                && clip.kind == ClipKind::Video
+                && y <= TRACK_HEIGHT_PX * CUT_LANE_Y_RATIO
+                && x >= lo + handle
+                && x <= lo + handle + FADE_WEDGE_PX.min(width / 3.0).max(handle)
+            {
+                best_fade = Some(TimelineHit::Fade {
+                    clip_id: clip.id.clone(),
+                });
             }
+        }
+        if clip.selected && clip.kind == ClipKind::Audio && drawable && x >= lo && x <= hi {
+            best_gain = Some(TimelineHit::Gain {
+                clip_id: clip.id.clone(),
+            });
         }
         if x >= lo && x <= hi {
             let hit = TimelineHit::ClipBody {
@@ -228,7 +336,19 @@ pub fn hit_test(clips: &[HitClip], x: f64, viewport: TimelineViewport) -> Timeli
             }
         }
     }
+    if let Some(hit) = best_delete {
+        return hit;
+    }
+    if let Some(hit) = best_cut {
+        return hit;
+    }
     if let Some((_, hit)) = best_trim {
+        return hit;
+    }
+    if let Some(hit) = best_fade {
+        return hit;
+    }
+    if let Some(hit) = best_gain {
         return hit;
     }
     body.map_or(TimelineHit::Rail, |(_, hit)| hit)
@@ -246,14 +366,21 @@ pub fn cursor_for_hit(hit: &TimelineHit, dragging: bool) -> CursorKind {
     if dragging {
         return match hit {
             TimelineHit::Trim { .. } => CursorKind::Trim,
+            TimelineHit::Fade { .. } | TimelineHit::Gain { .. } | TimelineHit::CutLane { .. } => {
+                CursorKind::Adjust
+            }
             TimelineHit::ClipBody { .. } => CursorKind::Grabbing,
-            TimelineHit::Rail => CursorKind::Scrub,
+            TimelineHit::DeleteHandle { .. } | TimelineHit::Rail => CursorKind::Scrub,
         };
     }
     match hit {
         TimelineHit::Trim { .. } => CursorKind::Trim,
+        TimelineHit::Fade { .. } | TimelineHit::Gain { .. } | TimelineHit::CutLane { .. } => {
+            CursorKind::Adjust
+        }
+        TimelineHit::DeleteHandle { .. } => CursorKind::Select,
         TimelineHit::ClipBody {
-            kind: ClipKind::Video | ClipKind::Title | ClipKind::Callout,
+            kind: ClipKind::Video | ClipKind::Title | ClipKind::Callout | ClipKind::Scene,
             ..
         } => CursorKind::Grab,
         TimelineHit::ClipBody { .. } | TimelineHit::Rail => CursorKind::Scrub,

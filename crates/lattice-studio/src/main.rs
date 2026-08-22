@@ -1554,15 +1554,44 @@ impl StudioView {
         f64::from(x)
     }
 
-    fn begin_timeline_pointer_on(&mut self, window_x: gpui::Pixels, snap_off: bool, track: &str) {
+    fn pointer_y(&self, window_y: gpui::Pixels, track: Option<&str>) -> f64 {
+        let y = f32::from(window_y);
+        let Ok(geoms) = self.track_geoms.lock() else {
+            return 11.0;
+        };
+        if let Some(track) = track
+            && let Some((_, _, gy, _, _)) = geoms.iter().find(|(name, ..)| name == track)
+        {
+            return f64::from(y - *gy);
+        }
+        if let Some((_, _, gy, _, _)) = geoms
+            .iter()
+            .find(|(_, _, gy, _, gh)| y >= *gy && y <= *gy + *gh)
+        {
+            return f64::from(y - *gy);
+        }
+        11.0
+    }
+
+    fn begin_timeline_pointer_at(
+        &mut self,
+        window_x: gpui::Pixels,
+        window_y: gpui::Pixels,
+        snap_off: bool,
+        track: &str,
+    ) {
         self.audio_play_pending = false;
         let x = self.pointer_x(window_x);
+        let y = self.pointer_y(window_y, Some(track));
         self.apply_rail_width();
-        if let Err(err) = self.session.begin_timeline_pointer_on(x, snap_off, track) {
+        if let Err(err) = self
+            .session
+            .begin_timeline_pointer_on_xy(x, y, snap_off, track)
+        {
             trace::log(format!("begin gesture: {err}"));
         } else {
             trace::log(format!(
-                "gesture begin track={track} x={x:.1} kind={:?} playhead={}",
+                "gesture begin track={track} x={x:.1} y={y:.1} kind={:?} playhead={}",
                 self.session.gesture(),
                 format_time(self.session.playhead())
             ));
@@ -1575,12 +1604,18 @@ impl StudioView {
         self.log_semantic_state("timeline-pointer-begin", None);
     }
 
-    fn update_timeline_pointer(&mut self, window_x: gpui::Pixels, snap_off: bool) {
+    fn update_timeline_pointer_at(
+        &mut self,
+        window_x: gpui::Pixels,
+        window_y: gpui::Pixels,
+        snap_off: bool,
+    ) {
         if !self.session.gesture().is_active() {
             return;
         }
         let x = self.pointer_x(window_x);
-        if let Err(err) = self.session.update_timeline_pointer(x, snap_off) {
+        let y = self.pointer_y(window_y, self.hover_track.as_deref());
+        if let Err(err) = self.session.update_timeline_pointer_xy(x, y, snap_off) {
             trace::log(format!("update gesture: {err}"));
         } else {
             trace::log(format!(
@@ -1593,12 +1628,21 @@ impl StudioView {
         self.log_inflight_semantic_state("timeline-pointer-update");
     }
 
-    fn commit_timeline_pointer(&mut self, window_x: gpui::Pixels, snap_off: bool) {
+    fn commit_timeline_pointer_at(
+        &mut self,
+        window_x: gpui::Pixels,
+        window_y: gpui::Pixels,
+        snap_off: bool,
+    ) {
         if !self.session.gesture().is_active() {
             return;
         }
         let x = self.pointer_x(window_x);
-        match self.session.commit_timeline_pointer_snap(x, snap_off) {
+        let y = self.pointer_y(window_y, self.hover_track.as_deref());
+        match self
+            .session
+            .commit_timeline_pointer_xy_snap(x, y, snap_off)
+        {
             Ok(outcome) => {
                 trace::log(format!(
                     "gesture commit x={x:.1} outcome={outcome:?} playhead={} undo={}",
@@ -2293,7 +2337,11 @@ impl Render for StudioView {
                 this.hover_x = Some(x);
                 this.hover_track = track;
                 if this.session.gesture().is_active() {
-                    this.update_timeline_pointer(event.position.x, event.modifiers.alt);
+                    this.update_timeline_pointer_at(
+                        event.position.x,
+                        event.position.y,
+                        event.modifiers.alt,
+                    );
                     this.queue_preview_if_needed();
                     cx.notify();
                 } else if hover_changed {
@@ -2312,7 +2360,11 @@ impl Render for StudioView {
                         return;
                     }
                     let active = this.session.gesture().is_active();
-                    this.commit_timeline_pointer(event.position.x, event.modifiers.alt);
+                    this.commit_timeline_pointer_at(
+                        event.position.x,
+                        event.position.y,
+                        event.modifiers.alt,
+                    );
                     if active {
                         this.queue_preview();
                         cx.notify();
@@ -2331,7 +2383,11 @@ impl Render for StudioView {
                         return;
                     }
                     let active = this.session.gesture().is_active();
-                    this.commit_timeline_pointer(event.position.x, event.modifiers.alt);
+                    this.commit_timeline_pointer_at(
+                        event.position.x,
+                        event.position.y,
+                        event.modifiers.alt,
+                    );
                     if active {
                         this.queue_preview();
                         cx.notify();
@@ -2350,7 +2406,7 @@ impl Render for StudioView {
 
 fn cursor_style(kind: CursorKind) -> CursorStyle {
     match kind {
-        CursorKind::Trim => CursorStyle::ResizeLeftRight,
+        CursorKind::Trim | CursorKind::Adjust => CursorStyle::ResizeLeftRight,
         CursorKind::Grab => CursorStyle::OpenHand,
         CursorKind::Grabbing => CursorStyle::ClosedHand,
         CursorKind::Scrub => CursorStyle::IBeam,
@@ -2436,44 +2492,6 @@ impl StudioView {
                 this.open_video_clicked();
                 cx.notify();
             }))
-            .child(action_button("Set In", LINE, cx, move |this, cx| {
-                if let Err(err) = this.session.set_in_at_playhead() {
-                    this.speak_toolbar(err);
-                }
-                this.after_edit();
-                cx.notify();
-            }))
-            .child(action_button("Set Out", LINE, cx, move |this, cx| {
-                if let Err(err) = this.session.set_out_at_playhead() {
-                    this.speak_toolbar(err);
-                }
-                this.after_edit();
-                cx.notify();
-            }))
-            .child(action_button(
-                "Split at Playhead",
-                LINE,
-                cx,
-                move |this, cx| {
-                    if let Err(err) = this.session.split_at_playhead() {
-                        this.speak_toolbar(err);
-                    }
-                    this.after_edit();
-                    cx.notify();
-                },
-            ))
-            .child(action_button(
-                "Delete Selected Clip",
-                LINE,
-                cx,
-                move |this, cx| {
-                    if let Err(err) = this.session.delete_selected_clip() {
-                        this.speak_toolbar(err);
-                    }
-                    this.after_edit();
-                    cx.notify();
-                },
-            ))
             .child(
                 div()
                     .debug_selector(|| "toolbar.renderer-status".into())
@@ -2644,7 +2662,9 @@ impl StudioView {
                             this.last_render = Some("copied locus JSON".into());
                         }
                         Ok(None) => {
-                            this.last_render = Some("no current locus".into());
+                            this.speak_toolbar(
+                                "Copy locus JSON needs a committed locus. Here is unset.",
+                            );
                         }
                         Err(err) => {
                             trace::log(format!("copy locus: {err}"));
@@ -2654,23 +2674,6 @@ impl StudioView {
                     cx.notify();
                 },
             ))
-            .child(action_button("Gain -3 dB", LINE, cx, move |this, cx| {
-                if let Err(err) = this.session.set_gain(-3) {
-                    this.speak_toolbar(err);
-                }
-                this.after_edit();
-                cx.notify();
-            }))
-            .child(action_button("Fade", LINE, cx, move |this, cx| {
-                if let Err(err) = this
-                    .session
-                    .set_fade(lattice_engine::Time::milliseconds(500))
-                {
-                    this.speak_toolbar(err);
-                }
-                this.after_edit();
-                cx.notify();
-            }))
             .child(action_button("Zoom In", LINE, cx, move |this, cx| {
                 this.session.zoom_around(this.session.playhead(), 1.25);
                 cx.notify();
@@ -2723,7 +2726,7 @@ impl StudioView {
             .last_spoken()
             .map(ToOwned::to_owned)
             .unwrap_or_else(|| err.to_string());
-        trace::log(format!("toolbar: {spoken}"));
+        trace::log(format!("session-strip: {spoken}"));
         self.last_render = Some(spoken);
     }
 
@@ -3479,7 +3482,7 @@ impl StudioView {
             tracks = tracks.child(self.track_row(track, layout, cx));
         }
         div()
-            .h(px(160.0))
+            .h(px(196.0))
             .border_t_1()
             .border_color(rgb(LINE))
             .bg(rgb(PANEL))
@@ -3606,8 +3609,9 @@ impl StudioView {
                     if event.button != MouseButton::Left {
                         return;
                     }
-                    this.begin_timeline_pointer_on(
+                    this.begin_timeline_pointer_at(
                         event.position.x,
+                        event.position.y,
                         event.modifiers.alt,
                         &track_name,
                     );
@@ -3622,16 +3626,30 @@ impl StudioView {
             let selected = clip.selected;
             let label = clip.label.clone();
             let handles = clip.handles;
+            let fade_handle = clip.fade_handle;
+            let gain_handle = clip.gain_handle;
+            let cut_lane = clip.cut_lane;
+            let delete_handle = clip.delete_handle;
+            let fade_in = clip.fade_in;
+            let gain_db = clip.gain_db;
             let color = match clip.track.as_str() {
                 "text" => TEAL,
                 "audio" => 0x5a7a9a,
+                "scene" => 0x262c3a,
                 _ => 0x4a3a6a,
             };
             let mut block = div()
                 .id(SharedString::from(format!("tl-{id}")))
                 .debug_selector({
                     let id = id.clone();
-                    move || format!("timeline.clip.{id}")
+                    let scene = clip.track == "scene";
+                    move || {
+                        if scene {
+                            format!("timeline.scene.{id}")
+                        } else {
+                            format!("timeline.clip.{id}")
+                        }
+                    }
                 })
                 .absolute()
                 .left(px(left))
@@ -3675,6 +3693,104 @@ impl StudioView {
                             .bg(rgb(0xffffff))
                             .cursor(CursorStyle::ResizeLeftRight),
                     );
+            }
+            if fade_handle {
+                let fade_w = fade_in
+                    .map(|fade| viewport.delta_x(fade).abs() as f32)
+                    .filter(|w| *w > 4.0)
+                    .unwrap_or(16.0)
+                    .min(width * 0.45)
+                    .max(10.0);
+                block = block.child(
+                    div()
+                        .id(SharedString::from(format!("tl-{id}-fade")))
+                        .debug_selector({
+                            let id = id.clone();
+                            move || format!("timeline.fade.{id}")
+                        })
+                        .absolute()
+                        .left(px(8.0))
+                        .top(px(0.0))
+                        .w(px(fade_w))
+                        .h(px(10.0))
+                        .bg(rgb(TEAL))
+                        .opacity(0.7)
+                        .cursor(CursorStyle::ResizeLeftRight),
+                );
+            }
+            if gain_handle {
+                let ratio = lattice_studio::y_ratio_from_db(gain_db.unwrap_or(0)) as f32;
+                let line_y = (22.0 * ratio).clamp(2.0, 18.0);
+                block = block.child(
+                    div()
+                        .id(SharedString::from(format!("tl-{id}-gain")))
+                        .debug_selector({
+                            let id = id.clone();
+                            move || format!("timeline.gain.{id}")
+                        })
+                        .absolute()
+                        .left(px(0.0))
+                        .top(px(line_y))
+                        .w_full()
+                        .h(px(4.0))
+                        .bg(rgb(TEAL))
+                        .cursor(CursorStyle::ResizeLeftRight)
+                        .child(
+                            div()
+                                .absolute()
+                                .right(px(4.0))
+                                .top(px(-8.0))
+                                .text_color(rgb(TEAL))
+                                .child(format!("{} dB", gain_db.unwrap_or(0))),
+                        ),
+                );
+            }
+            if cut_lane {
+                block = block.child(
+                    div()
+                        .id(SharedString::from(format!("tl-{id}-cut")))
+                        .debug_selector({
+                            let id = id.clone();
+                            move || format!("timeline.cut.{id}")
+                        })
+                        .absolute()
+                        .left(px(0.0))
+                        .top(px(0.0))
+                        .right(px(24.0))
+                        .h(px(10.0))
+                        .bg(rgb(0x333d52))
+                        .cursor(CursorStyle::ResizeLeftRight)
+                        .child(
+                            div()
+                                .px_1()
+                                .text_color(rgb(MUTED))
+                                .child("cut lane"),
+                        ),
+                );
+            }
+            if delete_handle {
+                block = block.child(
+                    div()
+                        .id(SharedString::from(format!("tl-{id}-delete")))
+                        .debug_selector({
+                            let id = id.clone();
+                            move || format!("timeline.delete.{id}")
+                        })
+                        .absolute()
+                        .right(px(2.0))
+                        .top(px(2.0))
+                        .w(px(18.0))
+                        .h(px(18.0))
+                        .border_1()
+                        .border_color(rgb(TEAL))
+                        .bg(rgb(0x0d1b1a))
+                        .cursor_pointer()
+                        .child(
+                            div()
+                                .text_color(rgb(TEAL))
+                                .child("×"),
+                        ),
+                );
             }
             rail = rail.child(block);
         }
@@ -3983,10 +4099,6 @@ fn action_button(
 fn action_selector(label: &str) -> &'static str {
     match label {
         "Open Video…" => "toolbar.import",
-        "Set In" => "toolbar.set-in",
-        "Set Out" => "toolbar.set-out",
-        "Split at Playhead" => "toolbar.split",
-        "Delete Selected Clip" => "toolbar.delete-clip",
         "CPU" => "toolbar.renderer.cpu",
         "GPU DX12" => "toolbar.renderer.gpu-dx12",
         "Play" => "toolbar.play",
@@ -3998,8 +4110,6 @@ fn action_selector(label: &str) -> &'static str {
         "Redo" => "toolbar.redo",
         "Resolve" => "toolbar.resolve",
         "Copy locus JSON" => "toolbar.copy-locus",
-        "Gain -3 dB" => "toolbar.gain-minus-3",
-        "Fade" => "toolbar.fade",
         "Zoom In" => "toolbar.zoom-in",
         "Zoom Out" => "toolbar.zoom-out",
         "Apply edit" => "inspector.apply",
