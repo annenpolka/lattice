@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>A · Open · the Reading</title>
+  <link rel="stylesheet" href="reading.css" />
+</head>
+<body>
+  <header class="top">
+    <div class="brand">
+      <div class="mark"></div>
+      <h1>The Reading <span>open</span></h1>
+    </div>
+    <nav class="scenes" aria-label="Scenes">
+      <a class="here" href="a.html">A</a>
+      <a href="b.html">B</a>
+      <a href="c.html">C</a>
+      <a href="d.html">D</a>
+      <a href="e.html">E</a>
+      <a href="f.html">F</a>
+      <a href="g.html">G</a>
+      <a href="h.html">H</a>
+    </nav>
+  </header>
+
+  <div class="scene-head">
+    <div>
+      <div class="k">Scene A</div>
+      <h2>Title here · playhead 0s · active 1s–4s</h2>
+      <p>
+        Locus and playhead are both named and orthogonal. The title is here; time is before it
+        starts. That is a temporal-absence clause plus <b>Seek to here</b>, not a black stage.
+      </p>
+    </div>
+  </div>
+
+  <div class="page">
+    <div class="work">
+      <section class="witness live" aria-label="Witness">
+        <div class="cap">Witness <b>session open · Canvas overlay</b> <span class="tag">points</span></div>
+        <div class="body">
+          <div class="stage no-frame" data-stage data-empty-before data-span-start="1" data-span-end="4">
+            <div class="overlay ghost">
+              Hello
+              <span class="handle tl"></span><span class="handle tr"></span>
+              <span class="handle bl"></span><span class="handle br"></span>
+            </div>
+          </div>
+          <div class="timebar">
+            <span>playhead</span>
+            <span class="t" data-playhead-label>0.0s</span>
+            <span class="sep">·</span>
+            <span>locus span 1s–4s</span>
+            <span class="sep">·</span>
+            <span>geometry kept; pixels are not the answer</span>
+          </div>
+          <div class="tl">
+            <div class="ruler">
+              <span style="left:0%">0s</span>
+              <span style="left:10%">1s</span>
+              <span style="left:40%">4s</span>
+              <span style="left:100%">10s</span>
+            </div>
+            <div class="rail">
+              <div class="lab">Video</div>
+              <div class="track">
+                <a class="clip" style="left:0;width:100%" href="b.html">fight</a>
+                <div class="playhead" data-playhead data-duration="10" style="left:0%"></div>
+              </div>
+            </div>
+            <div class="rail">
+              <div class="lab">Text</div>
+              <div class="track">
+                <span class="clip text here" style="left:10%;width:30%">Hello</span>
+                <div class="playhead" data-playhead data-duration="10" style="left:0%"></div>
+              </div>
+            </div>
+            <div class="rail">
+              <div class="lab">Audio</div>
+              <div class="track">
+                <span class="clip audio" style="left:0;width:100%">score</span>
+                <div class="playhead" data-playhead data-duration="10" style="left:0%"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <aside class="reading" aria-label="Reading">
+        <div class="cap">Reading <b>one, complete</b></div>
+        <div class="body">
+          <h3>Title · Hello</h3>
+          <div class="clause">
+            <div class="n">Subject</div>
+            <p>
+              <code>LocusKind::Title</code> · label Hello · <span class="chip">demo:title:1</span><br />
+              citation <code>main.vel:18</code>
+            </p>
+          </div>
+          <div class="clause">
+            <div class="n">Witness</div>
+            <p>Session open restored this locus. Canvas shows its overlay from stored geometry.</p>
+          </div>
+          <div class="clause">
+            <div class="n">Reason</div>
+            <p>This is the current <code>LocusId</code>. Time did not choose it.</p>
+          </div>
+          <div class="clause">
+            <div class="n">When</div>
+            <p data-when data-span-start="1" data-span-end="4">
+              active 1s–4s; you are at <span class="mono">0.0s</span> <em>(before it starts)</em>
+            </p>
+          </div>
+          <div class="clause">
+            <div class="n">Scope</div>
+            <p>this placement · target <span class="chip">demo:title:1</span></p>
+          </div>
+          <div class="absence" data-temporal>
+            <strong>Temporal absence.</strong> The playhead is outside the locus span.
+            The stage is not empty: geometry outlives pixels. Black is never an answer.
+          </div>
+          <div class="verbs">
+            <button class="primary" data-seek data-span-start="1" data-span-end="4">Seek to here</button>
+          </div>
+          <p class="note-line">
+            Seek to here moves the playhead to 1.0s. It is a named verb, never automatic.
+            It does not rewrite VEL and does not push Undo.
+          </p>
+        </div>
+      </aside>
+    </div>
+
+    <section class="vel" aria-label="VEL">
+      <div class="cap">VEL <b>main.vel — protected, not hidden</b></div>
+      <pre><span class="ln">12</span>  scene demo {
+<span class="ln">13</span>    game[10s..20s] as fight
+<span class="ln">14</span>    bgm[0s..10s] as score
+<span class="ln">18</span>    <span class="hit">title "Hello" {</span>
+<span class="ln">19</span>    <span class="hit">  at 1s for 3s</span>
+<span class="ln">20</span>    <span class="hit">  opacity 90</span>
+<span class="ln">21</span>    <span class="hit">}</span></pre>
+    </section>
+  </div>
+  <script src="reading.js"></script>
+</body>
+</html>

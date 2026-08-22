@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>B · Video clip · the Reading</title>
+  <link rel="stylesheet" href="reading.css" />
+</head>
+<body>
+  <header class="top">
+    <div class="brand">
+      <div class="mark"></div>
+      <h1>The Reading <span>video clip</span></h1>
+    </div>
+    <nav class="scenes" aria-label="Scenes">
+      <a href="a.html">A</a>
+      <a class="here" href="b.html">B</a>
+      <a href="c.html">C</a>
+      <a href="d.html">D</a>
+      <a href="e.html">E</a>
+      <a href="f.html">F</a>
+      <a href="g.html">G</a>
+      <a href="h.html">H</a>
+    </nav>
+  </header>
+
+  <div class="scene-head">
+    <div>
+      <div class="k">Scene B</div>
+      <h2>Video clip click → scene here</h2>
+      <p>
+        A projected item body points. The clip on the Video rail is not its own object:
+        it commits <span class="chip">scene:demo</span>. Witness and reason are named.
+      </p>
+    </div>
+  </div>
+
+  <div class="page">
+    <div class="work">
+      <section class="witness live" aria-label="Witness">
+        <div class="cap">Witness <b>Timeline · Video rail · clip body</b> <span class="tag">points</span></div>
+        <div class="body">
+          <div class="stage game">
+            <div class="overlay cite">Hello</div>
+          </div>
+          <div class="timebar">
+            <span>playhead</span>
+            <span class="t">2.4s</span>
+            <span class="sep">·</span>
+            <span>locus is the scene, not the playhead</span>
+          </div>
+          <div class="tl">
+            <div class="ruler">
+              <span style="left:0%">0s</span>
+              <span style="left:10%">1s</span>
+              <span style="left:24%">2.4s</span>
+              <span style="left:40%">4s</span>
+              <span style="left:100%">10s</span>
+            </div>
+            <div class="rail">
+              <div class="lab">Video</div>
+              <div class="track">
+                <span class="clip here" style="left:0;width:100%">fight</span>
+                <div class="playhead" style="left:24%"></div>
+              </div>
+            </div>
+            <div class="rail">
+              <div class="lab">Text</div>
+              <div class="track">
+                <a class="clip text cite" style="left:10%;width:30%" href="a.html">Hello</a>
+                <div class="playhead" style="left:24%"></div>
+              </div>
+            </div>
+            <div class="rail">
+              <div class="lab">Audio</div>
+              <div class="track">
+                <span class="clip audio" style="left:0;width:100%">score</span>
+                <div class="playhead" style="left:24%"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <aside class="reading" aria-label="Reading">
+        <div class="cap">Reading <b>one shared LocusId</b></div>
+        <div class="body">
+          <h3>Scene · demo</h3>
+          <div class="clause">
+            <div class="n">Subject</div>
+            <p>
+              <code>LocusKind::Scene</code> · label demo · <span class="chip">scene:demo</span><br />
+              citation <code>main.vel:12</code>
+            </p>
+          </div>
+          <div class="clause">
+            <div class="n">Witness</div>
+            <p>Video rail · clip body <code>fight</code>. The rail item pointed; it is not a second selection.</p>
+          </div>
+          <div class="clause">
+            <div class="n">Reason</div>
+            <p>
+              Derived from the clip’s <code>scene_id</code>. This picture belongs to scene demo.
+              The title overlay cites a different locus and is not here.
+            </p>
+          </div>
+          <div class="clause">
+            <div class="n">When</div>
+            <p>playhead <span class="mono">2.4s</span> · a Scene has no <code>timeline_span</code> of its own</p>
+          </div>
+          <div class="clause">
+            <div class="n">Scope</div>
+            <p>this scene · target <span class="chip">scene:demo</span> · sequence <code>main</code></p>
+          </div>
+          <div class="absence">
+            <strong>Not applicable to this kind.</strong>
+            A Scene has no timeline range of its own; its clips do.
+            Video <code>fight</code> 0s–10s · title Hello 1s–4s · audio <code>score</code> 0s–10s.
+          </div>
+          <div class="verbs">
+            <div class="verb">
+              <div>
+                <div class="name">Split</div>
+                <div class="scope">this scene, at a source time</div>
+              </div>
+              <span class="target">scene:demo</span>
+            </div>
+            <div class="verb">
+              <div>
+                <div class="name">Delete</div>
+                <div class="scope">this scene</div>
+              </div>
+              <span class="target">scene:demo</span>
+            </div>
+            <div class="verb">
+              <div>
+                <div class="name">Reorder</div>
+                <div class="scope">this sequence’s order</div>
+              </div>
+              <span class="target">scene:demo</span>
+            </div>
+          </div>
+          <p class="note-line">
+            Title text is not offered. There is no draft carried over from a previous locus.
+          </p>
+        </div>
+      </aside>
+    </div>
+
+    <section class="vel" aria-label="VEL">
+      <div class="cap">VEL <b>main.vel:12 — scene definition</b></div>
+      <pre><span class="ln"> 8</span>  sequence main {
+<span class="ln"> 9</span>    demo
+<span class="ln">10</span>  }
+<span class="ln">12</span>  <span class="hit">scene demo {</span>
+<span class="ln">13</span>    game[10s..20s] as fight
+<span class="ln">14</span>    bgm[0s..10s] as score</pre>
+    </section>
+  </div>
+</body>
+</html>

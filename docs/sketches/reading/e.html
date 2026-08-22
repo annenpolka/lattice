@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>E · Verbs · the Reading</title>
+  <link rel="stylesheet" href="reading.css" />
+</head>
+<body>
+  <header class="top">
+    <div class="brand">
+      <div class="mark"></div>
+      <h1>The Reading <span>verbs</span></h1>
+    </div>
+    <nav class="scenes" aria-label="Scenes">
+      <a href="a.html">A</a>
+      <a href="b.html">B</a>
+      <a href="c.html">C</a>
+      <a href="d.html">D</a>
+      <a class="here" href="e.html">E</a>
+      <a href="f.html">F</a>
+      <a href="g.html">G</a>
+      <a href="h.html">H</a>
+    </nav>
+  </header>
+
+  <div class="scene-head">
+    <div>
+      <div class="k">Scene E</div>
+      <h2>Legal verbs for Scene versus Title</h2>
+      <p>
+        There is no permanent Inspector and no leftover Title text field.
+        Each verb names a Core field group, a scope, and a real target.
+        Scene demo declares two bindings — fail closed, no project-wide fallback.
+      </p>
+    </div>
+  </div>
+
+  <div class="page">
+    <div class="work pair">
+      <aside class="reading" aria-label="Title Reading">
+        <div class="cap">Reading <b>Title · Hello</b></div>
+        <div class="body">
+          <h3>Title · Hello</h3>
+          <div class="clause">
+            <div class="n">Subject</div>
+            <p><span class="chip">demo:title:1</span> · <code>main.vel:18</code> · kind Title</p>
+          </div>
+          <div class="clause">
+            <div class="n">Scope</div>
+            <p>Reachable from this locus’s own fields only.</p>
+          </div>
+          <div class="verbs">
+            <button type="button" class="verb" data-open-verb="title-text">
+              <div>
+                <div class="name">Retype title</div>
+                <div class="scope">definition text · SemanticEdit::Title { text }</div>
+              </div>
+              <span class="target">demo:title:1</span>
+            </button>
+            <button type="button" class="verb" data-open-verb="title-time">
+              <div>
+                <div class="name">Move / lengthen title</div>
+                <div class="scope">this placement’s timing · Title { at, duration }</div>
+              </div>
+              <span class="target">demo:title:1</span>
+            </button>
+            <button type="button" class="verb" data-open-verb="title-opacity">
+              <div>
+                <div class="name">Set title opacity</div>
+                <div class="scope">this placement · Title { opacity }</div>
+              </div>
+              <span class="target">demo:title:1</span>
+            </button>
+            <div class="verb">
+              <div>
+                <div class="name">Place overlay</div>
+                <div class="scope">this placement’s geometry · SetPosition</div>
+              </div>
+              <span class="target">demo:title:1</span>
+            </div>
+            <div class="verb">
+              <div>
+                <div class="name">Resize overlay</div>
+                <div class="scope">this placement’s geometry · ResizeOverlay</div>
+              </div>
+              <span class="target">demo:title:1</span>
+            </div>
+            <div class="verb closed">
+              <div>
+                <div class="name">Trim / Set gain / Fade in</div>
+                <div class="scope">not derived from this locus</div>
+              </div>
+              <span class="target">—</span>
+            </div>
+          </div>
+          <div class="field" data-verb-field="title-text" hidden>
+            <label for="title-text">definition text — seeded now, destroyed on dismiss</label>
+            <input id="title-text" value="Hello" />
+            <div class="row">
+              <button type="button" class="primary">Commit Title { text }</button>
+              <button type="button" data-dismiss-verb>Dismiss</button>
+            </div>
+          </div>
+          <div class="field" data-verb-field="title-time" hidden>
+            <label>this placement’s timing</label>
+            <input value="at 1s for 3s" />
+            <div class="row">
+              <button type="button" class="primary">Commit Title { at, duration }</button>
+              <button type="button" data-dismiss-verb>Dismiss</button>
+            </div>
+          </div>
+          <div class="field" data-verb-field="title-opacity" hidden>
+            <label>this placement</label>
+            <input value="90" />
+            <div class="row">
+              <button type="button" class="primary">Commit Title { opacity }</button>
+              <button type="button" data-dismiss-verb>Dismiss</button>
+            </div>
+          </div>
+          <div class="gap">
+            <strong>Fail closed.</strong>
+            Trim, SetGain, and SetFade need a source binding.
+            Scene <code>demo</code> declares 2 — <code>fight</code>, <code>score</code>.
+            Point at one. The first binding in the project is not a target.
+          </div>
+        </div>
+      </aside>
+
+      <aside class="reading" aria-label="Scene Reading">
+        <div class="cap">Reading <b>Scene · demo</b></div>
+        <div class="body">
+          <h3>Scene · demo</h3>
+          <div class="clause">
+            <div class="n">Subject</div>
+            <p><span class="chip">scene:demo</span> · <code>main.vel:12</code> · kind Scene</p>
+          </div>
+          <div class="clause">
+            <div class="n">Scope</div>
+            <p>this scene · <code>sequence_id</code> present · two bindings declared</p>
+          </div>
+          <div class="verbs">
+            <div class="verb">
+              <div>
+                <div class="name">Split</div>
+                <div class="scope">this scene, at a source time · Split { at }</div>
+              </div>
+              <span class="target">scene:demo</span>
+            </div>
+            <div class="verb">
+              <div>
+                <div class="name">Delete</div>
+                <div class="scope">this scene · Delete</div>
+              </div>
+              <span class="target">scene:demo</span>
+            </div>
+            <div class="verb">
+              <div>
+                <div class="name">Reorder</div>
+                <div class="scope">this sequence’s order · ReorderScene</div>
+              </div>
+              <span class="target">scene:demo</span>
+            </div>
+            <div class="verb closed">
+              <div>
+                <div class="name">Set gain</div>
+                <div class="scope">needs a named source</div>
+              </div>
+              <span class="target">—</span>
+            </div>
+            <div class="verb closed">
+              <div>
+                <div class="name">Retype title</div>
+                <div class="scope">kind is not Title · no text field invented</div>
+              </div>
+              <span class="target">—</span>
+            </div>
+          </div>
+          <div class="gap">
+            <strong>Fail closed.</strong>
+            Gain needs a source binding; scene <code>demo</code> declares 2 — point at one.
+            A Sequence locus would not grow a gain verb either.
+          </div>
+          <p class="note-line">
+            Three Title labels share one bundled <code>SemanticEdit::Title</code> variant.
+            Each label still names a field group that already exists in Core.
+            Choosing a verb creates its input; dismissing destroys it.
+          </p>
+        </div>
+      </aside>
+    </div>
+
+    <section class="vel" aria-label="VEL">
+      <div class="cap">VEL <b>two bindings — the reason fail-closed has work to do</b></div>
+      <pre><span class="ln">12</span>  scene demo {
+<span class="ln">13</span>    game[10s..20s] as fight
+<span class="ln">14</span>    bgm[0s..10s] as score
+<span class="ln">18</span>    title "Hello" {
+<span class="ln">19</span>      at 1s for 3s</pre>
+    </section>
+  </div>
+  <script src="reading.js"></script>
+</body>
+</html>

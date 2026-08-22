@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>D · Overlap · the Reading</title>
+  <link rel="stylesheet" href="reading.css" />
+</head>
+<body>
+  <header class="top">
+    <div class="brand">
+      <div class="mark"></div>
+      <h1>The Reading <span>overlap</span></h1>
+    </div>
+    <nav class="scenes" aria-label="Scenes">
+      <a href="a.html">A</a>
+      <a href="b.html">B</a>
+      <a href="c.html">C</a>
+      <a class="here" href="d.html">D</a>
+      <a href="e.html">E</a>
+      <a href="f.html">F</a>
+      <a href="g.html">G</a>
+      <a href="h.html">H</a>
+    </nav>
+  </header>
+
+  <div class="scene-head">
+    <div>
+      <div class="k">Scene D</div>
+      <h2>Title, scene, and source under the playhead</h2>
+      <p>
+        Pointing at a time ranks immediately. No modal. The Reading states the collapse.
+        One key steps the single shared <code>LocusId</code>.
+      </p>
+    </div>
+  </div>
+
+  <div class="page">
+    <div class="work">
+      <section class="witness live" aria-label="Witness">
+        <div class="cap">Witness <b>Timeline time 2.4s</b> <span class="tag">rank → state → step</span></div>
+        <div class="body">
+          <div class="stage game">
+            <div class="overlay" data-step-locus="0">
+              Hello
+              <span class="handle tl"></span><span class="handle tr"></span>
+              <span class="handle bl"></span><span class="handle br"></span>
+            </div>
+          </div>
+          <div class="timebar">
+            <span>playhead</span>
+            <span class="t">2.4s</span>
+            <span class="sep">·</span>
+            <span>3 under this time · no prompt</span>
+            <span class="sep">·</span>
+            <button type="button" class="primary" data-step>Step shared locus</button>
+          </div>
+          <div class="tl">
+            <div class="ruler">
+              <span style="left:0%">0s</span>
+              <span style="left:10%">1s</span>
+              <span style="left:24%">2.4s</span>
+              <span style="left:40%">4s</span>
+              <span style="left:100%">10s</span>
+            </div>
+            <div class="rail">
+              <div class="lab">Video</div>
+              <div class="track">
+                <span class="clip" data-step-locus="1" style="left:0;width:100%">fight · scene demo</span>
+                <div class="playhead" style="left:24%"></div>
+              </div>
+            </div>
+            <div class="rail">
+              <div class="lab">Text</div>
+              <div class="track">
+                <span class="clip text here" data-step-locus="0" style="left:10%;width:30%">Hello</span>
+                <div class="playhead" style="left:24%"></div>
+              </div>
+            </div>
+            <div class="rail">
+              <div class="lab">Audio</div>
+              <div class="track">
+                <span class="clip audio" style="left:0;width:100%">score</span>
+                <div class="playhead" style="left:24%"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <aside class="reading" aria-label="Reading">
+        <div class="cap">Reading <b>collapse stated</b></div>
+        <div class="body">
+          <div data-step-panel="0">
+            <h3>Title · Hello</h3>
+            <div class="clause">
+              <div class="n">Subject</div>
+              <p>
+                <code>LocusKind::Title</code> · <span class="chip">demo:title:1</span><br />
+                citation <code>main.vel:18</code>
+              </p>
+            </div>
+            <div class="clause">
+              <div class="n">Reason</div>
+              <p>
+                Ranked #1 of things under 2.4s. Only this locus has a <code>timeline_span</code>
+                (specificity 4, 3s). Taken immediately — no modal.
+              </p>
+            </div>
+          </div>
+          <div data-step-panel="1" hidden>
+            <h3>Scene · demo</h3>
+            <div class="clause">
+              <div class="n">Subject</div>
+              <p>
+                <code>LocusKind::Scene</code> · <span class="chip">scene:demo</span><br />
+                citation <code>main.vel:12</code>
+              </p>
+            </div>
+            <div class="clause">
+              <div class="n">Reason</div>
+              <p>
+                Stepped from the named others at 2.4s. Specificity 1.
+                Not a timeline candidate — a Scene has no <code>timeline_span</code> of its own.
+              </p>
+            </div>
+          </div>
+          <div data-step-panel="2" hidden>
+            <h3>Source · fight</h3>
+            <div class="clause">
+              <div class="n">Subject</div>
+              <p>
+                <code>LocusKind::Source</code> · <span class="chip">source:fight</span><br />
+                citation <code>main.vel:13</code>
+              </p>
+            </div>
+            <div class="clause">
+              <div class="n">Reason</div>
+              <p>
+                Stepped from the named others at 2.4s. Specificity 3.
+                Not a timeline candidate — a Source has no <code>timeline_span</code> of its own.
+              </p>
+            </div>
+          </div>
+
+          <div class="clause">
+            <div class="n">When</div>
+            <p>playhead <span class="mono">2.4s</span> · title active 1s–4s · picture from fight</p>
+          </div>
+          <div class="clause">
+            <div class="n">Shared</div>
+            <p>One session <code>LocusId</code>. Step replaces it. Nothing is per-view. Nothing enters Undo.</p>
+          </div>
+
+          <div class="cands">
+            <button type="button" class="cand taken" data-cand="0" data-step-to="0">
+              <span class="rk">1</span>
+              <span>Title Hello · spec 4 · span 3s · <em>timeline candidate</em></span>
+              <span class="chip">demo:title:1</span>
+            </button>
+            <button type="button" class="cand" data-cand="1" data-step-to="1">
+              <span class="rk">—</span>
+              <span>Scene demo · spec 1 · no own span · under the picture</span>
+              <span class="chip">scene:demo</span>
+            </button>
+            <button type="button" class="cand" data-cand="2" data-step-to="2">
+              <span class="rk">—</span>
+              <span>Source fight · spec 3 · no own span · under the binding</span>
+              <span class="chip">source:fight</span>
+            </button>
+          </div>
+          <p class="note-line">
+            Specificity is interaction policy, not domain order. It is spoken because it decided the click.
+          </p>
+        </div>
+      </aside>
+    </div>
+
+    <section class="vel" aria-label="VEL">
+      <div class="cap">VEL <b>same source, whichever LocusId is current</b></div>
+      <pre><span class="ln">12</span>  scene demo {
+<span class="ln">13</span>    game[10s..20s] as fight
+<span class="ln">18</span>    title "Hello" {
+<span class="ln">19</span>      at 1s for 3s</pre>
+    </section>
+  </div>
+  <script src="reading.js"></script>
+</body>
+</html>
