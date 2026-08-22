@@ -59,6 +59,7 @@ pub struct InspectorView {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[allow(clippy::struct_excessive_bools)]
 pub struct TimelineClipView {
     pub id: String,
     pub kind: String,
@@ -69,6 +70,12 @@ pub struct TimelineClipView {
     pub selected: bool,
     pub scene_id: String,
     pub handles: bool,
+    pub fade_handle: bool,
+    pub gain_handle: bool,
+    pub cut_lane: bool,
+    pub delete_handle: bool,
+    pub fade_in: Option<Time>,
+    pub gain_db: Option<i32>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -376,6 +383,7 @@ fn utterance_view(utterance: &Utterance) -> UtteranceView {
     }
 }
 
+#[allow(clippy::too_many_lines)]
 fn timeline_view(
     session: &StudioSession,
     timeline: &lattice_engine::Timeline,
@@ -437,7 +445,13 @@ fn timeline_view(
             });
             let (start, duration) = crate::interaction::ephemeral_clip_span(session, &clip.id)
                 .unwrap_or((clip.span.start, clip.span.duration));
-            let handles = selected && matches!(kind.as_str(), "video" | "title" | "callout");
+            let wide_enough =
+                session.viewport().delta_x(duration).abs() >= crate::gesture::MIN_DRAW_WIDTH_PX;
+            let source_here = current.is_some_and(|locus| locus.kind == LocusKind::Source);
+            let handles =
+                selected && wide_enough && matches!(kind.as_str(), "video" | "title" | "callout");
+            let fade_handle = selected && source_here && wide_enough && kind == "video";
+            let gain_handle = selected && source_here && wide_enough && kind == "audio";
             TimelineClipView {
                 selected,
                 id: clip.id.clone(),
@@ -448,15 +462,56 @@ fn timeline_view(
                 duration,
                 scene_id,
                 handles,
+                fade_handle,
+                gain_handle,
+                cut_lane: false,
+                delete_handle: false,
+                fade_in: clip.fade_in,
+                gain_db: clip.gain_db,
             }
         })
         .collect();
+    let scene_here = current.is_some_and(|locus| locus.kind == LocusKind::Scene);
+    let mut scene_clips = Vec::new();
+    for scene in &session.compilation().project.scenes {
+        let Some(span) = scene_layout_span(session, timeline, &scene.id) else {
+            continue;
+        };
+        let (start, duration) = (span.start, span.duration);
+        let wide_enough =
+            session.viewport().delta_x(duration).abs() >= crate::gesture::MIN_DRAW_WIDTH_PX;
+        let selected = current.is_some_and(|locus| {
+            locus.kind == LocusKind::Scene
+                && (locus.id.as_str() == scene.id || locus.node_id == scene.id)
+        });
+        scene_clips.push(TimelineClipView {
+            selected,
+            id: scene.id.clone(),
+            kind: "scene".into(),
+            track: "scene".into(),
+            label: scene.name.clone(),
+            start,
+            duration,
+            scene_id: scene.id.clone(),
+            handles: false,
+            fade_handle: false,
+            gain_handle: false,
+            cut_lane: selected && scene_here && wide_enough,
+            delete_handle: selected && scene_here && wide_enough,
+            fade_in: None,
+            gain_db: None,
+        });
+    }
     TimelineView {
         duration: timeline.duration,
         tracks: vec![
             track_named("Video", "video", &clips),
             track_named("Audio", "audio", &clips),
             track_named("Text", "text", &clips),
+            TimelineTrackView {
+                name: "Scene".into(),
+                clips: scene_clips,
+            },
         ],
         snap_indicator: session.snap_indicator(),
         insertion_marker: crate::interaction::insertion_marker(session),
@@ -467,6 +522,34 @@ fn timeline_view(
             .map(verb::candidate_cards)
             .unwrap_or_default(),
     }
+}
+
+fn scene_layout_span(
+    session: &StudioSession,
+    timeline: &lattice_engine::Timeline,
+    scene_id: &str,
+) -> Option<lattice_engine::TimeSpan> {
+    let scene = session
+        .compilation()
+        .project
+        .scenes
+        .iter()
+        .find(|scene| scene.id == scene_id)?;
+    let mut start = None;
+    let mut end = None;
+    for placement in &scene.placements {
+        let Some(clip) = timeline.clips.iter().find(|clip| clip.id == placement.id) else {
+            continue;
+        };
+        start = Some(start.map_or(clip.span.start, |time: Time| time.min(clip.span.start)));
+        end = Some(end.map_or(clip.span.end(), |time: Time| time.max(clip.span.end())));
+    }
+    let start = start?;
+    let end = end?;
+    Some(lattice_engine::TimeSpan::new(
+        start,
+        end.checked_sub(start).ok()?,
+    ))
 }
 
 fn track_named(name: &str, track: &str, clips: &[TimelineClipView]) -> TimelineTrackView {

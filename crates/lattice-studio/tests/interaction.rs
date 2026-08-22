@@ -172,9 +172,22 @@ fn trim_gesture_commits_once_and_undo_restores() {
     let mut session = open_video(8);
     let original = session.source().to_string();
     let clip = video_clip(&session);
+    let mid = clip_x(
+        &session,
+        clip.start,
+        session.viewport().delta_x(clip.duration) / 2.0,
+    );
+    session
+        .begin_timeline_pointer_on(mid, true, "Video")
+        .expect("point source");
+    session.commit_timeline_pointer(mid).expect("commit point");
+    assert_eq!(
+        session.current_locus().unwrap().unwrap().kind,
+        lattice_engine::LocusKind::Source
+    );
     let left = clip_x(&session, clip.start, 1.0);
     session
-        .begin_timeline_pointer(left, true)
+        .begin_timeline_pointer_on(left, true, "Video")
         .expect("begin left");
     assert!(
         matches!(
@@ -216,7 +229,7 @@ fn trim_gesture_commits_once_and_undo_restores() {
     let clip = video_clip(&session);
     let right = session.x_at_time(clip.start + clip.duration) - 1.0;
     session
-        .begin_timeline_pointer(right, true)
+        .begin_timeline_pointer_on(right, true, "Video")
         .expect("begin right");
     assert!(
         matches!(
@@ -279,20 +292,29 @@ scene c {
     let b = &video.clips[1];
     session.point_at(lattice_engine::LocusId::new(c.scene_id.clone()));
     let start = session.x_at_time(c.start + Time::milliseconds(200));
-    session.begin_timeline_pointer(start, true).expect("begin");
+    session
+        .begin_timeline_pointer_on(start, true, "Scene")
+        .expect("begin scene band");
     assert!(
         matches!(session.gesture(), TimelineGesture::Reorder { .. }),
-        "{:?}",
+        "scene-band body drag reorders: {:?}",
         session.gesture()
     );
     let between_ab = session.x_at_time(a.start + a.duration);
     let _ = b;
     session
-        .update_timeline_pointer(between_ab - DRAG_THRESHOLD_PX - 8.0, true)
+        .update_timeline_pointer_xy(
+            between_ab - DRAG_THRESHOLD_PX - 8.0,
+            lattice_studio::TRACK_HEIGHT_PX * 0.75,
+            true,
+        )
         .unwrap();
     assert_eq!(session.source(), original);
     session
-        .commit_timeline_pointer(between_ab - DRAG_THRESHOLD_PX - 8.0)
+        .commit_timeline_pointer_xy(
+            between_ab - DRAG_THRESHOLD_PX - 8.0,
+            lattice_studio::TRACK_HEIGHT_PX * 0.75,
+        )
         .unwrap();
     let reordered = session.source().to_string();
     assert_ne!(reordered, original);
@@ -337,7 +359,9 @@ scene c {
     let original_at = title_clip.start;
     let original_dur = title_clip.duration;
     let body_x = session.x_at_time(title_clip.start + Time::milliseconds(200));
-    session.begin_timeline_pointer(body_x, true).unwrap();
+    session
+        .begin_timeline_pointer_on(body_x, true, "Text")
+        .unwrap();
     assert!(
         matches!(session.gesture(), TimelineGesture::MoveOverlay { .. }),
         "title body drag: {:?}",
@@ -380,7 +404,9 @@ scene c {
         .find(|c| c.kind == "title")
         .unwrap();
     let right = session.x_at_time(title_clip.start + title_clip.duration) - 1.0;
-    session.begin_timeline_pointer(right, true).unwrap();
+    session
+        .begin_timeline_pointer_on(right, true, "Text")
+        .unwrap();
     session.update_timeline_pointer(right - 30.0, true).unwrap();
     session.commit_timeline_pointer(right - 30.0).unwrap();
     let shorter = session
@@ -427,7 +453,7 @@ scene c {
         .expect("callout clip");
     let cx = session.x_at_time(callout_clip.start + Time::milliseconds(200));
     let orig_dur = callout_clip.duration;
-    session.begin_timeline_pointer(cx, true).unwrap();
+    session.begin_timeline_pointer_on(cx, true, "Text").unwrap();
     session.update_timeline_pointer(cx + 35.0, true).unwrap();
     session.commit_timeline_pointer(cx + 35.0).unwrap();
     let after_layout = session.layout().unwrap();
@@ -475,8 +501,19 @@ fn zoom_scroll_snap_and_failed_commit_restore() {
 
     let original = session.source().to_string();
     let clip = video_clip(&session);
+    let mid = clip_x(
+        &session,
+        clip.start,
+        session.viewport().delta_x(clip.duration) / 2.0,
+    );
+    session
+        .begin_timeline_pointer_on(mid, true, "Video")
+        .unwrap();
+    session.commit_timeline_pointer(mid).unwrap();
     let left = clip_x(&session, clip.start, 1.0);
-    session.begin_timeline_pointer(left, true).unwrap();
+    session
+        .begin_timeline_pointer_on(left, true, "Video")
+        .unwrap();
     session.update_timeline_pointer(left + 80.0, true).unwrap();
     let ephemeral = session.layout().unwrap();
     let eclip = ephemeral
@@ -592,8 +629,8 @@ scene a {
     let x = session.x_at_time(title_clip.start + Time::milliseconds(200));
     session.begin_timeline_pointer_on(x, true, "Video").unwrap();
     assert!(
-        matches!(session.gesture(), TimelineGesture::Reorder { .. }),
-        "video rail at title time must not start overlay move: {:?}",
+        matches!(session.gesture(), TimelineGesture::PointSource { .. }),
+        "video rail click keeps source-clip identity: {:?}",
         session.gesture()
     );
     session.cancel_timeline_pointer();
@@ -606,14 +643,13 @@ scene a {
     session.cancel_timeline_pointer();
     session.begin_timeline_pointer_on(x, true, "Audio").unwrap();
     assert!(
-        matches!(session.gesture(), TimelineGesture::Point { .. }),
-        "audio rail click begins a coordinate point: {:?}",
-        session.gesture()
-    );
-    session.update_timeline_pointer(x + 20.0, true).unwrap();
-    assert!(
-        matches!(session.gesture(), TimelineGesture::Scrub { .. }),
-        "audio rail drag becomes scrub: {:?}",
+        matches!(
+            session.gesture(),
+            TimelineGesture::Point { .. }
+                | TimelineGesture::PointSource { .. }
+                | TimelineGesture::Gain { .. }
+        ),
+        "audio rail stays on the audio projection: {:?}",
         session.gesture()
     );
 }

@@ -417,6 +417,7 @@ fn apply_title_text_rewrites_vel_and_render_preview_writes_mp4() {
 }
 
 #[test]
+#[allow(clippy::too_many_lines)]
 fn window_source_composes_documented_panes() {
     let main = include_str!("../src/main.rs");
     for pane in ["SEQUENCE", "Canvas", "VEL", "Inspector", "Timeline"] {
@@ -435,19 +436,37 @@ fn window_source_composes_documented_panes() {
     );
     for action in [
         "Open Video…",
-        "Set In",
-        "Set Out",
-        "Split at Playhead",
-        "Delete Selected Clip",
         "Play",
         "Pause",
         "Seek",
         "Scrub",
-        "Gain -3 dB",
-        "Fade",
+        "Undo",
+        "Redo",
+        "Resolve",
     ] {
         assert!(main.contains(action), "window source must expose {action}");
     }
+    for evicted in [
+        "Set In",
+        "Set Out",
+        "Split at Playhead",
+        "Delete Selected Clip",
+        "Gain -3 dB",
+        "Fade",
+    ] {
+        assert!(
+            !main.contains(&format!("\"{evicted}\"")),
+            "session strip must not keep locus-taking button {evicted}"
+        );
+    }
+    assert!(
+        main.contains("timeline.fade.") && main.contains("timeline.gain."),
+        "drawn gain/fade routes must exist"
+    );
+    assert!(
+        main.contains("timeline.cut.") && main.contains("timeline.delete."),
+        "drawn split/delete routes must exist"
+    );
     assert!(
         main.contains("StudioSession::open_video"),
         "Open Video… must call StudioSession::open_video"

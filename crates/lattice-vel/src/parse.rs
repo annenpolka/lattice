@@ -272,9 +272,10 @@ impl Parser {
             return Ok(Expr::End { span: tok.span });
         }
         if self.at(TokenKind::Minus) {
-            self.bump();
+            let minus = self.bump();
             let mut expr = self.parse_timeish()?;
             negate_time(&mut expr);
+            expand_span_left(&mut expr, minus.span);
             return Ok(expr);
         }
         self.parse_expr()
@@ -282,9 +283,10 @@ impl Parser {
 
     fn parse_primary(&mut self) -> Result<Expr, ParseError> {
         if self.at(TokenKind::Minus) {
-            self.bump();
+            let minus = self.bump();
             let mut expr = self.parse_primary()?;
             negate_time(&mut expr);
+            expand_span_left(&mut expr, minus.span);
             return Ok(expr);
         }
         match self.peek().kind {
@@ -566,6 +568,25 @@ fn negate_time(expr: &mut Expr) {
     }
 }
 
+fn expand_span_left(expr: &mut Expr, left: Span) {
+    match expr {
+        Expr::Quantity(q) => q.span = left.merge(q.span),
+        Expr::Time(
+            TimeLiteral::Seconds { span, .. }
+            | TimeLiteral::Milliseconds { span, .. }
+            | TimeLiteral::MinutesSeconds { span, .. }
+            | TimeLiteral::Frames { span, .. },
+        )
+        | Expr::String { span, .. }
+        | Expr::Ident { span, .. }
+        | Expr::Path { span, .. }
+        | Expr::Range { span, .. }
+        | Expr::Index { span, .. }
+        | Expr::Tuple { span, .. }
+        | Expr::End { span } => *span = left.merge(*span),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -700,6 +721,14 @@ scene demo {
             ),
             "unary minus is syntax, not gain semantics: {:?}",
             by.value
+        );
+        let Expr::Quantity(q) = &by.value else {
+            panic!("expected quantity");
+        };
+        let lexeme = &r"scene x { gain fight by -3 }"[q.span.start as usize..q.span.end as usize];
+        assert_eq!(
+            lexeme, "-3",
+            "quantity span must include the unary minus so splices cannot write `--3`"
         );
     }
 

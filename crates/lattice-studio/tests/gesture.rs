@@ -36,6 +36,7 @@ fn begin_update_commit_applies_one_rewrite_and_one_undo() {
             session.gesture(),
             TimelineGesture::Trim { .. }
                 | TimelineGesture::Point { .. }
+                | TimelineGesture::PointSource { .. }
                 | TimelineGesture::Scrub { .. }
                 | TimelineGesture::Reorder { .. }
         ),
