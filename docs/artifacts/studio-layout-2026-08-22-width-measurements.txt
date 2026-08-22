@@ -1,0 +1,11 @@
+measured with scripts/studio-linux-smoke-window.py identify + xdotool windowsize, fixture timeline-basic, 60ce42f
+
+window   rail x/w      tree node w   Play origin (toolbar row)
+1400     72 / 640      183           1115,67   (row 2)
+1000     72 / 640      183           1115,67   (row 2)
+ 800     72 / 640      183            166,102  (row 3)
+ 640     72 / 640      183            396,102  (row 4)
+
+No pane is dropped at any width.
+The Canvas pane (the only flex_1 pane) collapses to a sliver first.
+The timeline rail keeps its hardcoded w(px(640)) and overflows the window at 640.
