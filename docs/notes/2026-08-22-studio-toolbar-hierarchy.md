@@ -138,7 +138,7 @@ The current top toolbar does not spatially correlate with these lower domains:
 
 ---
 
-## Summary Matrix
+## 5. Summary Matrix
 
 | Item | Visual Treatment | Dominance | Semantic Category | Reads As |
 |---|---|---|---|---|
@@ -161,3 +161,82 @@ The current top toolbar does not spatially correlate with these lower domains:
 | `Gain -3 dB` | Dark gray button | Medium | Audio Property | Hardcoded step button |
 | `Fade` | Dark gray button | Medium | Audio Property | Hardcoded step button |
 | `Zoom In` / `Zoom Out`| Dark gray button | Medium | Viewport Nav | Detached view control |
+
+---
+
+## 6. Radical Rethink (根本的見直し): Is a Global Verb Button Row the Right Object?
+
+Beyond cosmetic realignment (e.g. organizing buttons into neat groups or hiding overflow in menus), the fundamental question must be asked:
+
+> **Under the locked integrated verb-license spine, should a global top-of-window verb button row even exist?**
+
+### The Core Tension: Top Toolbar vs. The Locked Spine
+
+The verb-license spine establishes strict architectural and interaction contracts:
+1. **One Locus**: Exactly one semantic "here" exists across the entire application.
+2. **One Engine Legal Set**: Engine `legal_edits_for(here)` defines what is legally permissible for the pointed entity.
+3. **Projection-Local Commits**: Gestures commit edits directly on the touched projection surface (Canvas, Timeline, Inspector, VEL).
+4. **Spoken Utterance**: When legality differs from what a projection surface can commit, the UI **speaks** the route (`committed on Canvas / Inspector / Timeline — not implied absent here`) rather than silently retargeting or inventing fake affordances.
+
+A global top-of-window verb button row directly contradicts this interaction model in three structural ways:
+
+#### 1. Global Buttons Break Spatial Locality and Direct Manipulation
+- When a user points a Title on Canvas or Timeline, the legal verbs are `set-position`, `resize-overlay`, and `title` (text/opacity).
+- Having a static `[Split at Playhead]`, `[Gain -3 dB]`, or `[Set In]` button permanently visible in the top header creates a false affordance: it invites the user to click a verb button for a target that cannot accept it, resulting in a spoken refusal (`toolbar: split needs a scene or source`).
+- The toolbar acts as a second, artificial "catch-all projection" that attempts to hold all verbs for all possible locus kinds simultaneously.
+
+#### 2. Fixed Delta Step-Buttons Are a Foreign Paradigm
+- Buttons like `[Gain -3 dB]` and `[Fade]` hardcode arbitrary edit deltas (-3 dB, 500ms).
+- These are not verbs; they are specific *evaluations* of a verb.
+- In a text-first NLE backed by VEL, audio gain and fade are continuous property modifications that belong in the **Inspector** (numeric/slider inputs) or **Timeline** (direct fade handle / clip volume line), not static global pushbuttons.
+
+#### 3. Test/Harness Scaffolding Impersonating Product Surface
+- Discrete buttons for `[Seek]`, `[Scrub]`, `[CPU]`/`[GPU DX12]`, and `[Copy locus JSON]` exist primarily because headless smoke tests and CLI parity checks needed clickable GPUI selectors (`toolbar.seek-start`, `toolbar.renderer.cpu`, `toolbar.copy-locus`).
+- In product terms, transport seek/scrub belongs to the Timeline playhead, renderer selection belongs to export or environment config, and locus inspection belongs to the Inspector / CLI.
+
+---
+
+### The Rethought Model: Eliminating the Global Verb Row
+
+If cosmetic toolbar polish is rejected, the principled architecture under the locked spine is:
+
+```text
+┌────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+│ Lattice  main.vel · Scene demo                     [Resolve] [Save] [Undo] [Redo]  Renderer · CPU ready│ (Window Header)
+├───────────────────────┬────────────────────────────────────────┬───────────────────────────────────────┤
+│ SEQUENCE              │ CANVAS                                 │ VEL / INSPECTOR                       │
+│                       │                                        │                                       │
+│ • Points Scene        │ • Commits:                             │ • Commits:                            │
+│ • Points Source Clip  │   - set-position (drag)                │   - title text (direct edit)          │
+│ • Points Overlay      │   - resize-overlay (corner)            │   - gain / fade / properties          │
+│                       │ • Displays:                            │ • Speaks:                             │
+│                       │   - Preview frame + overlays           │   - here, pointing, legal, spoken     │
+├───────────────────────┴────────────────────────────────────────┴───────────────────────────────────────┤
+│ TIMELINE                                                                                               │
+│ [Play] [Pause] 0.00s / 4.00s | Ruler (Scrub / Seek) | Zoom [ - | + ]                                   │
+│ Video  [ demo:video:3                   ]  (Commits: trim, reorder-scene)                             │
+│ Audio  [ demo:audio:4                   ]                                                              │
+│ Text          [ Hello ]     [ Hold ]       (Commits: overlay time, overlap candidates)                 │
+└────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Allocation of Responsibilities (Without a Global Verb Home)
+
+1. **Window Header (`header_bar`) — Document & Engine Lifecycle Only**:
+   - Stripped of all editing verbs.
+   - Retains only global project operations: `[Save]`, `[Undo]`, `[Redo]`, `[Resolve]` (asset compilation), and subtle engine telemetry (`Renderer · CPU ready`).
+
+2. **Commit Surfaces (Where Actions Actually Commit)**:
+   - **Canvas**: Direct pointer manipulation (`set-position`, `resize-overlay`).
+   - **Timeline**: Direct ruler scrub/seek, transport (`Play`/`Pause`), clip trim, scene reorder, and local overlap candidate cards.
+   - **Inspector / Utterance Panel**:
+     - Authoritative home for the **Engine Legal Set** and **Spoken Clauses** (`here`, `pointing`, `legal`, `routed`, `spoken`).
+     - Entity properties (title text, exact gain dB, fade duration) committed via direct fields when here matches.
+   - **VEL Editor**: Direct source code editing with immediate recompile and error diagnostics.
+
+3. **No Per-View Selection, No Hidden Retargeting**:
+   - Zero global verb buttons means zero ambiguity about what a button targets.
+   - If an entity is focused, its legal actions are committed on the projection that owns the geometry/property, and all other relations are explicitly spoken in the Inspector.
+
+### Conclusion of the Rethink
+A global top-of-window verb button row is an artifact of early milestone bootstrapping, not a requirement of the Lattice architecture. Under the locked verb-license spine, verbs have natural physical homes on specific projection surfaces (Canvas, Timeline, Inspector). Removing the top verb row entirely—leaving only a clean document header—eliminates visual clutter, resolves the 2-row wrap artifact, and fully aligns the visual experience with the underlying semantic engine.
