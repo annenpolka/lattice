@@ -263,10 +263,13 @@ A global top-of-window verb button row is an artifact of early test scaffolding.
 
 ---
 
-## 6. Visual references & frozen mockup claims
+## 6. Visual claims (live captures) vs frozen mockup references
 
-For visual verification against frozen Studio interaction boards:
-- Manipulate board reference: `https://github.com/annenpolka/lattice/blob/85b589ec260554f851c214731e607c7727c7cae8/docs/mockups/studio/screens/manipulate.jpg?raw=true`
-- Navigate board reference: `https://github.com/annenpolka/lattice/blob/85b589ec260554f851c214731e607c7727c7cae8/docs/mockups/studio/screens/navigate.jpg?raw=true`
-- Review board reference: `https://github.com/annenpolka/lattice/blob/85b589ec260554f851c214731e607c7727c7cae8/docs/mockups/studio/screens/review.jpg?raw=true`
+- **Live Studio Window Capture (Current @ `617991b`)**: `https://github.com/annenpolka/lattice/blob/617991b9750c902cf062976470610f59927f1893/docs/notes/assets/2026-08-22-studio-toolbar/toolbar-top-row.png?raw=true`
+- **Live Toolbar Row Crop (Current @ `617991b`)**: `https://github.com/annenpolka/lattice/blob/617991b9750c902cf062976470610f59927f1893/docs/notes/assets/2026-08-22-studio-toolbar/toolbar-button-row-cropped.png?raw=true`
+
+For historical comparison against frozen design mockups (pre-spine):
+- Frozen manipulate mockup: `https://github.com/annenpolka/lattice/blob/85b589ec260554f851c214731e607c7727c7cae8/docs/mockups/studio/screens/manipulate.jpg?raw=true`
+- Frozen navigate mockup: `https://github.com/annenpolka/lattice/blob/85b589ec260554f851c214731e607c7727c7cae8/docs/mockups/studio/screens/navigate.jpg?raw=true`
+- Frozen review mockup: `https://github.com/annenpolka/lattice/blob/85b589ec260554f851c214731e607c7727c7cae8/docs/mockups/studio/screens/review.jpg?raw=true`
 
