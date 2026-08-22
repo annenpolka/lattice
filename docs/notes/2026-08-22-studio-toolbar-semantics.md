@@ -129,3 +129,32 @@ touched projection until one candidate becomes the shared `LocusId`. Video
 click still points the source clip, never promotes to Scene. There is no
 cross-surface modal, silent retarget, per-view selection, Core Freeze, or GPUI
 type in Core.
+
+## Phase III vote addendum — domain semantics
+
+This is a lens vote, not a shipping-winner selection.
+
+- **DELETE** the fixed, always-visible bank of locus-taking `SemanticEdit`
+  buttons. Its standing invitations imply availability independently of here,
+  and a global click has no intrinsic committing projection.
+- **KEEP** a global **session strip** for transport, viewport, project,
+  persistence/history, Resolve, renderer/audio, status, and context-copy
+  controls, grouped by the authority that owns each command.
+- **STEAL** the useful disclosure into a named replacement object:
+  **Route Ledger + Projection Commit Affordance**. The one utterance is the
+  ledger; Timeline, Canvas, and Inspector alone expose affordances they can
+  commit.
+
+The replacement object votes against the six tests as follows:
+
+| Test | Vote |
+|---|---|
+| 1. Standing invitation for a locus-taking edit? | **PASS — no.** An edit affordance exists only on its committing projection for the one here. |
+| 2. Full disclosure before commit? | **PASS — required.** Verb, target, scope, effect, concrete or gesture-bound parameter, and committing projection are disclosed before commit. |
+| 3. Engine only legality authority? | **PASS.** The ledger projects Engine's legal set; projections add routes, never legality. |
+| 4. One here, fail-closed, no search/promotion? | **PASS.** An illegal or unresolved edit refuses against the same here; it never searches or promotes a target. |
+| 5. Every legal edit routed or spoken unrouted? | **PASS.** The ledger names Timeline, Canvas, or Inspector, otherwise explicitly says `unrouted`. |
+| 6. Non-verb globals grouped by actual authority? | **PASS.** The session strip groups session, projection-view, phase, runtime, and context commands without calling them Engine-licensed verbs. |
+
+The unchanged locks remain constraints on this vote, not tradeable properties
+of the replacement object.
