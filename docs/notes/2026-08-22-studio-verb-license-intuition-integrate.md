@@ -8,13 +8,23 @@ decision, not an implementation plan.
 Scope: the verb-license question only. No Studio, GPUI, Core, or sketch change is proposed here, and
 none is implied by anything below.
 
-Locked constraint: **the overlap UI is not open in this note.** Resolution of a point that names
-several loci is fixed to Projection-Local Verbs — a candidate list on the projection that was
-touched, no cross-surface modal, one shared `LocusId` after the pick — as drawn in scene D of its
-[sketch](https://github.com/annenpolka/lattice/blob/39fc7827e69a4b1d70608402ea1b01eefe7a05a1/docs/sketches/projection-local/index.html).
-Compass's coordinate probe, the Reading's rank-then-step, and click-to-commit are therefore out as
-overlap UI and are proposed nowhere below. The lock covers overlap only. It does not select a
-verb-license model, which is why the two questions are still open questions.
+Locked constraints: **pointing is not open in this note.** Two behaviors are fixed, and both are
+treated below as invariants rather than as options.
+
+1. **Overlap UI.** A point that names several loci resolves through Projection-Local Verbs: a
+   candidate list on the projection that was touched, no cross-surface modal, one shared `LocusId`
+   after the pick, as drawn in scene D of its
+   [sketch](https://github.com/annenpolka/lattice/blob/39fc7827e69a4b1d70608402ea1b01eefe7a05a1/docs/sketches/projection-local/index.html).
+   Compass's coordinate probe, the Reading's rank-then-step, and click-to-commit are out as overlap UI
+   and are proposed nowhere below.
+2. **Video click.** Clicking a video clip points the **source clip** and keeps its identity. Here is
+   not promoted to or replaced by the containing Scene when the pointed thing is the source clip.
+   Reference: scene B of the Control
+   [sketch](https://github.com/annenpolka/lattice/blob/fb2cc04d3b9767ec243f05579881ebb4423a1c84/docs/sketches/control/index.html),
+   where the video click commits `source:clip` at `main.vel:12` rather than `scene:demo`.
+
+Both locks are about pointing, and neither selects a verb-license model. That is why the two
+questions below are still open questions.
 
 ## What is being read
 
@@ -62,7 +72,7 @@ Before the disagreement, the agreement. All three already hold, without arbitrat
   Projection-Local deletes the Inspector as a verb home, and the Reading deletes the pane outright.
 
 What was in dispute is one question — what licenses a verb — plus one parameter, overlap, which the
-locked constraint has closed.
+first lock has closed.
 
 | | What licenses a verb | Where verbs appear | Overlap UI, as its own note proposed it |
 |---|---|---|---|
@@ -74,11 +84,15 @@ Note the shape of that table. Compass and the Reading are near-siblings on the l
 were opponents on overlap. Projection-Local Verbs is the only genuine dissent on license and was the
 closer of the two to Compass on overlap. No two of the three agreed on both, which is why this reads
 as three models rather than two — and why closing the second axis does not close the first. The
-license question stays open below; only the overlap UI is settled.
+license question stays open below. What is settled is pointing: its ambiguous case by the first lock,
+its identity-bearing case by the second.
 
-One consequence of the lock is worth pulling out before it recurs: the locked UI holds a point open
-until a card is chosen, so **"here" may be temporarily unset after a pointer-up.** That is a
-downstream fact the merged model has to carry, not a detail of one sketch.
+Two consequences of the locks are worth pulling out before they recur. The locked overlap UI holds a
+point open until a card is chosen, so **"here" may be temporarily unset after a pointer-up.** The
+locked video click means **an identity-bearing point is never promoted to its container**, so a
+pointed source clip stays a source clip. Both are facts the merged model has to carry, not details of
+two sketches — and between them they settle pointing, which is the half of interaction the three notes
+argued about most.
 
 ## Question 1 — intuitive for whom, misread as what
 
@@ -143,6 +157,18 @@ That last row deserves stating plainly rather than leaving in a list. **The lice
 intuitive for a first-time human is the least expressible for the repo's other first-class client.**
 Any merge has to carry that cost explicitly instead of discovering it later in the CLI surface.
 
+The locks move these rows without collapsing them. The video-click lock helps the first-time editor
+most, because "I clicked the clip, so the clip is what I named" is the strongest prior they have and a
+click that promotes to the containing scene is the largest available violation of it — so the distance
+between the three models narrows for that reader while their order stays put. It helps the external
+agent for an unrelated reason: the locus a video click yields is a Source, which is the locus `Trim`,
+`SetGain`, and `SetFade` actually target, so the client that cannot point at all is handed a usable
+binding instead of one it has to derive. And it helps the power user by making the most frequent click
+in the editor predictable, which is the property muscle memory needs. The overlap lock cuts the other
+way for that reader, as noted above. Neither lock disturbs the Lattice-native's ordering, because both
+are restatements of identity-before-relation — which is why Compass reads as native to them to begin
+with.
+
 ### What each will be misread as
 
 These are misreads of the three notes as written, which is why two of them are about overlap
@@ -191,6 +217,23 @@ why the mechanism was worth retiring, and the same reflex will be aimed at whate
   the pointing it explains. The model most committed to not guessing behind the user's back is
   therefore the one most exposed to that accusation.
 
+**The locked pointing contract**
+
+The locks carry misreads of their own, and these will arrive first, because locked behavior is what
+users actually touch.
+
+- *"The source clip is a clip object."* Pointing a video clip and keeping its identity is what an NLE
+  prior predicts, so it will be read as confirmation that the NLE object model is back: clip
+  selected, therefore clip has a property sheet. The lock fixes what pointing *names*. It does not
+  restore a thing with properties, and `SemanticEdit` still targets definitions, source bindings,
+  scenes, and sequences rather than a clip id.
+- *"The scene is unreachable now."* No promotion means a user who wanted `Split`, `Delete`, or
+  `ReorderScene` did not get them from that click. Under the spine that is a route rather than an
+  absence — legal for `scene demo`, reachable by Navigate — but stated badly it reads as the scene
+  having lost its verbs.
+- *"The candidate list is where things live."* Already listed under Projection-Local, and repeated
+  here because the lock makes that list the overlap UI rather than one model's proposal.
+
 ## Question 2 — yes, there is room, on one condition
 
 The merge is smaller than the three names suggest, because the shared base above is already large.
@@ -223,14 +266,23 @@ That is one rule, and the shared base is already its entailment rather than an a
 - Nothing may hold a verb whose target the Engine cannot name → the always-on property grid has no
   subject to invent, in one line, for all three.
 
+The locks sit upstream of both sets rather than inside either, which is why they fit without
+amending the spine. **Pointing** decides which locus the Engine is asked about: identity-bearing when
+the thing touched names itself, and a local candidate list when the coordinate does not. **Legality**
+is then the Engine's answer for that locus. **Routing** is what the gesture can commit of it. Three
+layers, one per question, and the only obligation the spine adds is that the seams between them are
+spoken.
+
 ### KEEP / STEAL / DELETE
 
 **Semantic Compass**
 
 - **KEEP.** The center, and `(verb, target, scope, effect)` disclosed before invocation. The ledger's
   three outcomes as *the* absence vocabulary for the merged model, because they are typed reasons
-  rather than prose. Identity versus relation: displaying a relation never silently moves the center.
-  Freeze as a temporal reading rather than a target.
+  rather than prose. Identity versus relation: displaying a relation never silently moves the center —
+  which the video-click lock raises from a preference to an invariant, since a pointed source clip's
+  scene is now a relation shown rather than a center adopted. And its identity-first pointing path,
+  which the same lock ratifies unchanged. Freeze as a temporal reading rather than a target.
 - **STEAL.** Projection-Local's routing table, so "one Engine list" can no longer be read as one
   Engine panel. And Projection-Local's overlap list as the surface Compass left unowned: Compass
   already has the right typed reason for an unresolved point and no place to put it.
@@ -252,7 +304,9 @@ That is one rule, and the shared base is already its entailment rather than an a
   overlap UI entire: the failed point stays visible on the projection that was touched, each candidate
   carries its identity, its scope, and the verbs that projection would license for it, and the pick
   commits one shared `LocusId` to Canvas, Timeline, Source, Review, and agent context. The list is not
-  project state, not per-view selection, and not in Undo.
+  project state, not per-view selection, and not in Undo. Under the video-click lock the Video rail's
+  source clip is an identity-bearing point in that same grammar, so the list is for coordinate
+  ambiguity and not for a clip that already named itself.
 - **STEAL.** The global legal set. This is the fix for its own worst misread and it costs the model
   nothing it wanted: a locally uncommittable verb becomes "legal for this locus, committed on that
   projection" with a Navigate route, instead of a silence that reads as impossibility.
@@ -265,7 +319,7 @@ That is one rule, and the shared base is already its entailment rather than an a
 
 - **KEEP.** The fail-closed half of the spine asymmetry: where the consequence is a source rewrite,
   derive the target from the locus's own fields or fail closed and say what is needed. That is the
-  half that deletes the project-wide first-match target fallthrough, and the lock does not touch it.
+  half that deletes the project-wide first-match target fallthrough, and neither lock touches it.
   Also: verbs create their own inputs, so no draft outlives the locus it was copied from; selectable implies
   resolvable; geometry outlives pixels; scrub stops pointing; and the derivation living in Engine so
   Studio, `--json`, and an agent consume one answer. That last item is what keeps the merged model
@@ -274,8 +328,8 @@ That is one rule, and the shared base is already its entailment rather than an a
   instead of per-clause prose. And Projection-Local's routing table, so the utterance can say *where*
   a verb commits and not merely that it is unavailable here.
 - **DELETE.** The permissive half of the asymmetry — "ranking is allowed where the consequence is a
-  reversible pointing" — and with it rank-then-state-then-step as the overlap UI. The lock forecloses
-  it. What is left is simpler than the rule it came from, and that is a gain rather than a loss: the
+  reversible pointing" — and with it rank-then-state-then-step as the overlap UI. The overlap lock
+  forecloses it. What is left is simpler than the rule it came from, and that is a gain rather than a loss: the
   merged model never ranks, on either side of the pointing/rewrite line. Also "Five panes are not the
   product" and "Space is not the editor's identity" as stated deletions — both are consequences the
   model does not need to claim, and both generate the hide-the-UI misread. The testable claim survives
@@ -296,15 +350,15 @@ verbs *that* projection would license for it. Pointing stays unresolved until a 
 the choice commits one `LocusId` to Canvas, Timeline, Source, Review, and agent context. No
 cross-surface modal, no ownerless candidate set, no ranking, no click-to-commit.
 
-The lock is an input to the integration rather than a constraint bolted on top of it, because three
-things follow for the merged model:
+The overlap lock is an input to the integration rather than a constraint bolted on top of it, because
+three things follow for the merged model:
 
 1. **An unresolved "here" is a reading, not an error.** The locked UI holds pointing open, so the
    merged model must carry that state as a first-class disclosure. Compass already has the typed reason
    for it and no surface to show it on; Projection-Local has the surface. That pairing is the whole
    fix, and it retires the Reading's requirement that pointing never obstruct.
 2. **The resolution policy becomes uniform.** The Reading's asymmetry permitted ranking on the
-   pointing side because a wrong rank cost one keystroke. The lock withdraws that permission, so both
+   pointing side because a wrong rank cost one keystroke. The overlap lock withdraws it, so both
    sides of the pointing/rewrite line now derive or disclose and neither ranks. The merged model comes
    out simpler than the rule that motivated it: it does not guess, and the asymmetry survives only as
    the argument for why rewrites in particular must not be guessed.
@@ -314,7 +368,7 @@ things follow for the merged model:
    list would reproduce Projection-Local's worst misread three cards at a time, which is exactly the
    failure mode the spine exists to prevent.
 
-What the lock costs, stated rather than hidden: Projection-Local's own falsifier asked whether
+What the overlap lock costs, stated rather than hidden: Projection-Local's own falsifier asked whether
 candidates on the touched projection add scope predictability *without* materially obstructing
 ordinary pointing. A lock forecloses the comparison that would have answered that, so the risk is now
 carried rather than tested away. It will show up first on dense ties — two invocations with identical
@@ -324,14 +378,49 @@ becomes the stress test of the chosen one: whether a list whose cards differ onl
 says anything a user can act on. That is a question about how the locked UI presents identity, and it
 is not an invitation to reopen the choice.
 
-Two smaller tensions do merge. They are recorded here so they are not rediscovered as blockers:
+### Video click is locked too, and it pays for the fail-closed rule
 
-- **Definition versus instance emphasis.** Compass treats one-to-many as relation disclosure,
-  Projection-Local makes the touched instance the subject, and the Reading absorbs multiplicity as a
-  clause. Merged rule: pointing names the identity that was touched; the definition relation is
-  disclosed with its count and a Navigate route; every verb carries its real scope, so
-  instance-versus-definition is never something the user has to guess. Simultaneous highlighting is
-  neither required nor forbidden — it stops being a semantic question at all.
+The second lock fixes the other half of pointing. A click on a video clip commits the source clip and
+keeps its identity; here is not promoted to the containing scene. The Control sketch's scene B is the
+reference — the click lands on `source:clip`, defined at `main.vel:12`, rather than on `scene:demo`.
+
+Four sketches are worth putting side by side, because the lock is not choosing against the prose. The
+Control sketch appears as the lock's reference, not as a fourth model under evaluation:
+
+| Sketch | What it drew for a video click |
+|---|---|
+| Compass, scene b | "Point the identified video clip. Identity-bearing pointing commits that locus as here." — already the locked behavior |
+| Projection-Local, scene b | video click → scene here, while its own note names dropping clip identity and landing on a scene as the failure to fix |
+| The Reading, scene b | video click → `scene:demo`, derived from the clip's `scene_id`, with witness and reason named |
+| Control, scene B | `source:clip` — the locked reference |
+
+The lock therefore ratifies what Compass drew and what Projection-Local's prose diagnosed, against
+what two of the sketches drew. It also settles the definition-versus-instance question this note had
+listed as an open tension: pointing names the identity that was touched, and the container is a
+relation to disclose rather than a substitute to adopt. Compass's identity-versus-relation
+distinction stops being a preference and becomes the invariant, which in turn makes simultaneous
+highlighting a non-question — the definition relation is disclosed with its count and a Navigate
+route, and every verb carries its real scope, so instance-versus-definition is never something a user
+has to guess.
+
+The more useful consequence is what the lock does for the half of the Reading this note kept. The
+Reading's falsifier was aimed at exactly the verbs that retarget — `Trim`, `SetGain`, `SetFade` — and
+its worry was that failing closed ("gain needs a source binding; scene `demo` declares 2 — point at
+one") would produce more wrong or abandoned edits than a silent first-match. Read closely, that worry
+is about a missing affordance rather than about the rule: "point at one" is a fair instruction only if
+pointing at one binding is something a user can do. The locked video click is that affordance. A click
+on a video clip yields a Source locus, which is the locus those three verbs want, so the fail-closed
+path is both reached less often and answerable when it is reached. The two locks and the kept half of
+the Reading's spine reinforce each other instead of competing.
+
+One obligation follows, in the same shape as the Reading's Audio-rail honesty point: if the Video rail
+draws a source clip, that block has to be pointable, because a drawn block that cannot be pointed at
+is the same lie as a pointable thing with a silently empty verb list. And the container's verbs —
+`Split`, `Delete`, `ReorderScene` — are routed to the scene and disclosed as legal there, never
+reported as absent here. That is the spine applied to the locked behavior rather than a new rule.
+
+One smaller tension is left over, recorded here so it is not rediscovered as a blocker:
+
 - **Where the seek verb lives.** Compass puts explicit seek among the transitions from here,
   Projection-Local puts it on the projection that currently lacks a picture, and the Reading names it
   as one of exactly two couplings. All three agree it is explicit, temporary, unpersisted, and absent
@@ -342,8 +431,9 @@ Two smaller tensions do merge. They are recorded here so they are not rediscover
 - It does not select a shipping model. The spine above is a proposal for how three existing notes
   could be read as one, offered as discussion input.
 - It does not implement anything, and nothing here should be read as a plan of record.
-- It does not reopen the overlap UI. That is locked to Projection-Local's candidate list on the
-  touched projection, and the note reads the lock as an integration input rather than as an option.
+- It does not reopen either lock. Overlap resolution is Projection-Local's candidate list on the
+  touched projection, and a video click points the source clip without promotion to its scene. The
+  note reads both as integration inputs rather than as options.
 - It does not fill the Core gaps the three notes name — no time-scoped audio edit, no `TimeMap` edit
   variant, and the bundling of definition and placement fields inside one `SemanticEdit::Title`
   variant. Naming a gap is not license to invent a filler.
