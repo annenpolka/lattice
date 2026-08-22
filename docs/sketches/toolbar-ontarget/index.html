@@ -1,0 +1,1560 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Studio toolbar sketch — on-target</title>
+<style>
+/* ------------------------------------------------------------------
+   Static sketch. No script anywhere in this file.
+   Scene switching is :target. Every in-scene state is a radio input
+   plus a :has() rule. Nothing here is Studio code and nothing here
+   runs an Engine; the strings are copied from the checked-in fixtures
+   and from legal_edits_for / refuse_edit so the sketch cannot drift
+   into inventing legality it does not have.
+   ------------------------------------------------------------------ */
+
+:root {
+  --bg: #0c0e12;
+  --panel: #141821;
+  --line: #2a3140;
+  --text: #e8edf5;
+  --muted: #8b95a8;
+  --teal: #3dd6c6;
+  --handle: #3dd6c6;
+  --note: #e2b04a;
+  --dead: #55607a;
+  --video: #2c3a52;
+  --audio: #2b4342;
+  --overlay: #3c3350;
+  --band: #262c3a;
+  --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+  --sans: ui-sans-serif, system-ui, "Inter", "Segoe UI", Helvetica, Arial, sans-serif;
+}
+
+* { box-sizing: border-box; }
+html { background: var(--bg); }
+body {
+  margin: 0;
+  padding: 0 0 64px;
+  background: var(--bg);
+  color: var(--text);
+  font: 14px/1.55 var(--sans);
+  -webkit-font-smoothing: antialiased;
+}
+.page { max-width: 1180px; margin: 0 auto; padding: 0 24px; }
+code { font-family: var(--mono); font-size: 0.92em; }
+
+/* ---------- page header ---------- */
+
+.masthead { padding: 32px 0 18px; border-bottom: 1px solid var(--line); }
+.masthead h1 { margin: 0 0 10px; font-size: 22px; letter-spacing: -0.01em; font-weight: 620; }
+.rule {
+  margin: 0 0 14px;
+  padding: 12px 16px;
+  border-left: 3px solid var(--teal);
+  background: #10141c;
+  font-size: 15px;
+}
+.rule b { color: var(--teal); font-weight: 620; }
+.masthead .meta { margin: 0; color: var(--muted); font-size: 12.5px; }
+.masthead .meta code { color: #b6c0d2; }
+
+/* ---------- scene tabs ---------- */
+
+.tabs { display: flex; flex-wrap: wrap; gap: 6px; padding: 14px 0 22px; }
+.tab {
+  display: inline-block;
+  padding: 7px 13px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  background: var(--panel);
+  color: var(--muted);
+  font-size: 12.5px;
+  text-decoration: none;
+}
+.tab:hover { border-color: #3c4557; color: var(--text); }
+.tab .n { color: var(--dead); margin-right: 7px; font-variant-numeric: tabular-nums; }
+
+body:not(:has(.scene:target)) .tab[href="#sc-strip"],
+body:has(#sc-strip:target) .tab[href="#sc-strip"],
+body:has(#sc-source:target) .tab[href="#sc-source"],
+body:has(#sc-scene:target) .tab[href="#sc-scene"],
+body:has(#sc-point:target) .tab[href="#sc-point"],
+body:has(#sc-overlap:target) .tab[href="#sc-overlap"] {
+  border-color: var(--teal);
+  background: #10201f;
+  color: var(--text);
+}
+body:not(:has(.scene:target)) .tab[href="#sc-strip"] .n,
+body:has(#sc-strip:target) .tab[href="#sc-strip"] .n,
+body:has(#sc-source:target) .tab[href="#sc-source"] .n,
+body:has(#sc-scene:target) .tab[href="#sc-scene"] .n,
+body:has(#sc-point:target) .tab[href="#sc-point"] .n,
+body:has(#sc-overlap:target) .tab[href="#sc-overlap"] .n { color: var(--teal); }
+
+/* ---------- scenes ---------- */
+
+.scene { display: none; }
+.scene:target { display: block; }
+body:not(:has(.scene:target)) #sc-strip { display: block; }
+
+.scene > h2 { margin: 0 0 6px; font-size: 17px; font-weight: 600; }
+.scene > h2 .n { color: var(--teal); margin-right: 9px; font-variant-numeric: tabular-nums; }
+.lede { margin: 0 0 20px; max-width: 86ch; color: #c2cbdb; }
+.lede code, .lede b { color: var(--text); }
+
+/* ---------- studio frame ---------- */
+
+.studio { border: 1px solid var(--line); border-radius: 4px; background: var(--panel); }
+.frame-tag {
+  padding: 5px 12px;
+  border-bottom: 1px solid var(--line);
+  background: #0f131b;
+  color: var(--dead);
+  font-size: 10.5px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+/* ---------- session strip ---------- */
+
+.strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+}
+.btn {
+  display: inline-block;
+  padding: 4px 10px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  background: #191e29;
+  color: #cfd7e5;
+  font-size: 12px;
+  white-space: nowrap;
+}
+.btn.on { border-color: var(--teal); color: var(--teal); }
+.stat { padding: 0 8px; color: var(--muted); font-size: 12px; white-space: nowrap; }
+.sep { width: 1px; align-self: stretch; margin: 0 5px; background: var(--line); }
+.strip label.btn, .strip label.stat { cursor: pointer; }
+
+/* ---------- canvas + inspector ---------- */
+
+.mid { display: grid; grid-template-columns: 1fr 300px; border-bottom: 1px solid var(--line); }
+.canvas {
+  display: flex; align-items: center; justify-content: center;
+  min-height: 132px; padding: 14px;
+  background: #090b0f;
+  border-right: 1px solid var(--line);
+}
+.canvas .plate {
+  width: 100%; max-width: 380px; aspect-ratio: 16 / 7;
+  display: flex; align-items: center; justify-content: center;
+  border: 1px dashed #232a37; border-radius: 2px;
+  color: var(--dead); font-size: 11.5px; text-align: center; padding: 0 12px;
+}
+.inspector { padding: 12px 14px; font-size: 12.5px; }
+.inspector h3 {
+  margin: 0 0 9px; color: var(--dead);
+  font-size: 10.5px; letter-spacing: 0.09em; text-transform: uppercase; font-weight: 600;
+}
+.kv { display: grid; grid-template-columns: 52px 1fr; gap: 3px 10px; margin: 0 0 10px; }
+.kv dt { color: var(--muted); }
+.kv dd { margin: 0; font-family: var(--mono); font-size: 11.5px; color: var(--text); word-break: break-all; }
+.absent-fields {
+  padding: 8px 10px;
+  border: 1px dashed #333c4d; border-radius: 3px;
+  color: var(--muted); font-size: 11.5px; line-height: 1.45;
+}
+
+/* ---------- timeline ---------- */
+
+.tl { padding: 10px 12px 26px; }
+.tl-head {
+  display: flex; justify-content: space-between; align-items: baseline; gap: 16px;
+  margin-bottom: 8px;
+  color: var(--dead); font-size: 10.5px; letter-spacing: 0.09em; text-transform: uppercase;
+}
+.ruler { position: relative; height: 17px; margin: 0 0 6px 72px; border-bottom: 1px solid #1c2230; }
+.ruler i { position: absolute; top: 0; width: 1px; height: 6px; background: #303a4c; }
+.ruler span {
+  position: absolute; top: 6px; transform: translateX(-50%);
+  color: var(--dead); font-size: 10px; font-family: var(--mono);
+}
+.ruler span.first { transform: none; }
+
+.lane { display: grid; grid-template-columns: 62px 1fr; align-items: center; gap: 10px; margin-bottom: 6px; }
+.lane-name { color: var(--muted); font-size: 11px; text-align: right; }
+.track { position: relative; height: 40px; background: #0e1219; border: 1px solid #1c2230; border-radius: 3px; }
+.track.tall { height: 46px; }
+.track.thin { height: 26px; }
+
+.blk {
+  position: absolute; top: 4px; bottom: 4px;
+  border: 1px solid #3c4557; border-radius: 2px;
+  display: flex; align-items: center; padding: 0 8px;
+  font-size: 11.5px; color: #d3dbe9; overflow: hidden; white-space: nowrap;
+}
+.blk.video { background: var(--video); border-color: #3d4e6b; padding-left: 16px; }
+.blk.audio { background: var(--audio); border-color: #3a5b59; padding-left: 16px; }
+.blk.ov { background: var(--overlay); border-color: #4e4269; }
+.blk.gen { background: #2f2c3a; border-style: dashed; border-color: #4a4459; color: #9aa3b8; }
+.blk .id, .band .id { margin-left: auto; padding-left: 10px; color: #93a0b6; font-family: var(--mono); font-size: 10px; }
+
+.band {
+  position: absolute; inset: 4px;
+  background: var(--band); border: 1px solid #38415a; border-radius: 2px;
+  padding: 0 8px;
+  font-size: 11.5px; color: #cbd4e4;
+  display: flex; align-items: center;
+}
+
+/* here highlight — bound to LocusId, never to visible text */
+.is-here { outline: 2px solid var(--teal); outline-offset: -1px; box-shadow: 0 0 0 3px rgba(61,214,198,0.13); }
+.here-tag {
+  margin-left: auto; padding: 1px 6px; border-radius: 2px;
+  background: rgba(61,214,198,0.16); color: var(--teal);
+  font-family: var(--mono); font-size: 9.5px; letter-spacing: 0.05em;
+}
+
+/* ---------- handles: drawn on the target, one region one verb ---------- */
+
+.pick { position: absolute; width: 1px; height: 1px; opacity: 0; }
+
+.h-trim {
+  position: absolute; top: 3px; bottom: 3px; width: 7px;
+  background: repeating-linear-gradient(180deg, var(--handle) 0 2px, transparent 2px 4px);
+  border-radius: 2px; cursor: ew-resize; opacity: 0.85;
+}
+.h-trim.in { left: 2px; }
+.h-trim.out { right: 2px; }
+.h-trim:hover { opacity: 1; }
+
+/* the opacity ramp is drawn along the top of the clip, so the clip's own
+   label stays readable underneath it and no two regions overlap */
+.h-wedge {
+  position: absolute; top: 3px; height: 12px; left: 12px;
+  background: linear-gradient(to right, rgba(61,214,198,0.55), rgba(61,214,198,0.03));
+  border-left: 2px solid var(--handle); border-top: 1px solid rgba(61,214,198,0.7);
+  cursor: ew-resize;
+}
+.h-wedge .grip {
+  position: absolute; right: -4px; top: 50%; margin-top: -4px;
+  width: 8px; height: 8px; background: var(--handle); border-radius: 50%;
+}
+
+.gain { position: absolute; left: 0; right: 0; height: 2px; background: var(--handle); pointer-events: none; }
+.gain::after {
+  content: ""; position: absolute; left: 50%; top: -4px; margin-left: -5px;
+  width: 10px; height: 10px; background: var(--handle); border-radius: 50%;
+}
+.gain .chip {
+  position: absolute; right: 76px; top: -9px;
+  padding: 1px 6px; border-radius: 2px;
+  background: #0d1b1a; border: 1px solid var(--handle);
+  color: var(--handle); font-family: var(--mono); font-size: 10px;
+}
+.gain-scale { position: absolute; inset: 0; pointer-events: none; }
+.gain-scale i { position: absolute; left: 0; right: 0; height: 1px; background: #1f2836; }
+.gain-scale i b {
+  position: absolute; left: 5px; top: -7px;
+  color: #46516a; font-family: var(--mono); font-size: 9px; font-weight: 400;
+}
+.gain-stop { position: absolute; left: 0; right: 0; height: 25%; cursor: ns-resize; }
+
+/* scene band: three regions, three verbs, no overlap */
+.cut-strip { position: absolute; left: 0; right: 34px; top: 0; height: 17px; cursor: col-resize; }
+.cut-strip::after {
+  content: "cut lane"; position: absolute; left: 8px; top: 3px;
+  color: #5d6a85; font-family: var(--mono); font-size: 9px; letter-spacing: 0.06em;
+}
+.cut-strip .guide { position: absolute; left: 0; right: 0; bottom: 0; height: 1px; background: #333d52; }
+.cut-stop { position: absolute; top: 0; height: 17px; width: 22%; cursor: col-resize; }
+.cutlane { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--handle); pointer-events: none; }
+.cutlane::before {
+  content: ""; position: absolute; top: -1px; left: 50%; margin-left: -4px;
+  border-left: 4px solid transparent; border-right: 4px solid transparent; border-top: 5px solid var(--handle);
+}
+.cutlane .t {
+  position: absolute; bottom: -21px; left: 50%; transform: translateX(-50%);
+  padding: 1px 6px; border-radius: 2px; background: #0d1b1a; border: 1px solid var(--handle);
+  color: var(--handle); font-family: var(--mono); font-size: 10px; white-space: nowrap;
+}
+.h-body { position: absolute; left: 0; right: 34px; top: 17px; bottom: 0; cursor: grab; }
+.h-body::after {
+  content: "band body · drag to reorder"; position: absolute; right: 10px; top: 5px;
+  color: #6b7690; font-size: 10.5px;
+}
+.band-name { position: absolute; left: 8px; top: 22px; font-size: 11.5px; color: #cbd4e4; }
+.h-del {
+  position: absolute; right: 5px; top: 50%; margin-top: -11px;
+  width: 22px; height: 22px; border-radius: 3px;
+  border: 1px solid var(--handle); background: #0d1b1a;
+  cursor: pointer;
+}
+.h-del:hover { background: #123331; }
+/* a trash mark drawn in CSS: no icon font to go missing */
+.h-del::before {
+  content: ""; position: absolute; left: 4px; right: 4px; top: 6px;
+  height: 1.5px; background: var(--handle);
+}
+.h-del::after {
+  content: ""; position: absolute; left: 6px; right: 6px; top: 8px; bottom: 4px;
+  border: 1.5px solid var(--handle); border-top: 0; border-radius: 0 0 2px 2px;
+}
+
+.ghost-edge { position: absolute; top: -2px; bottom: -2px; width: 2px; background: var(--note); }
+.ghost-edge .t {
+  position: absolute; top: -17px; left: 50%; transform: translateX(-50%);
+  padding: 1px 6px; border-radius: 2px; background: #201a0d; border: 1px solid var(--note);
+  color: var(--note); font-family: var(--mono); font-size: 10px; white-space: nowrap;
+}
+
+.dot {
+  position: absolute; width: 11px; height: 11px; margin: -5px 0 0 -5px;
+  border-radius: 50%; background: #fff; box-shadow: 0 0 0 4px rgba(255,255,255,0.16);
+}
+
+/* ---------- utterance ---------- */
+
+.utter { border-top: 1px solid var(--line); background: #0f131b; padding: 11px 14px; }
+.utter-head {
+  display: flex; align-items: center; gap: 9px; margin-bottom: 8px;
+  color: var(--dead); font-size: 10.5px; letter-spacing: 0.09em; text-transform: uppercase;
+}
+.utter-head .badge {
+  padding: 1px 7px; border: 1px solid #3a4459; border-radius: 2px;
+  color: var(--muted); letter-spacing: 0.06em;
+}
+.clause { display: flex; gap: 9px; padding: 3px 0; font-size: 12.5px; }
+.clause .st {
+  flex: none; width: 76px; padding-top: 2px;
+  font-family: var(--mono); font-size: 9.5px; letter-spacing: 0.05em; text-transform: uppercase;
+}
+.clause.present .st { color: var(--teal); }
+.clause.relation .st { color: #9d8ad6; }
+.clause.routed .st, .clause.absent .st, .clause.unresolved .st { color: var(--note); }
+.clause .tx { color: #c8d1e0; }
+.clause .tx code { color: #e8edf5; }
+.utter-foot {
+  margin-top: 9px; padding-top: 8px; border-top: 1px dashed #232a37;
+  color: var(--muted); font-size: 11.5px;
+}
+.nav-chip {
+  display: inline-block; padding: 0 6px; margin: 0 2px;
+  border: 1px solid #3f4a60; border-radius: 2px;
+  color: #b9c3d4; font-size: 11px;
+}
+
+/* ---------- readout cards ---------- */
+
+.cards { display: grid; gap: 12px; margin-top: 18px; }
+.cards.two { grid-template-columns: 1fr 1fr; }
+.cards.three { grid-template-columns: repeat(3, 1fr); }
+.card { border: 1px solid var(--line); border-radius: 4px; background: var(--panel); padding: 12px 14px; }
+.card h4 {
+  margin: 0 0 9px; font-size: 12px; font-weight: 600; color: var(--text);
+  display: flex; align-items: center; gap: 8px;
+}
+.card h4 .tick { color: var(--teal); font-size: 10px; }
+.card p { margin: 0 0 8px; font-size: 12.5px; color: #c2cbdb; }
+.card p:last-child { margin-bottom: 0; }
+.card .hint { color: var(--muted); font-size: 11.5px; }
+
+.stops { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 10px; }
+.stop {
+  padding: 3px 9px; border: 1px solid var(--line); border-radius: 3px;
+  background: #191e29; color: #b9c3d4; font-family: var(--mono); font-size: 11px; cursor: pointer;
+}
+.stop:hover { border-color: #46536b; color: var(--text); }
+
+.commit {
+  padding: 8px 10px; border-radius: 3px;
+  background: #0d1b1a; border: 1px solid #24443f;
+  font-family: var(--mono); font-size: 11.5px; color: #b9e8e1; line-height: 1.55;
+  word-break: break-word;
+}
+.commit .lbl {
+  display: block; color: #5f8b85; font-size: 9.5px;
+  letter-spacing: 0.07em; text-transform: uppercase; margin-bottom: 3px;
+}
+.commit.rest { background: #14171f; border-color: #2d3546; color: #b6c0d2; }
+.commit.rest .lbl { color: #6b7690; }
+.commit.refusal { background: #1d1710; border-color: #4a3a1d; color: #ecd6a8; }
+.commit.refusal .lbl { color: #8a7040; }
+
+.state { display: none; }
+
+/* ---------- sketch annotation (meta, not product chrome) ---------- */
+
+.anno {
+  margin-top: 14px; padding: 10px 13px;
+  border: 1px dashed #4a4028; border-radius: 3px;
+  background: #16130c; color: #d8c69b; font-size: 12px;
+}
+.anno b { color: var(--note); font-weight: 600; }
+
+/* ---------- tables ---------- */
+
+table.t { width: 100%; border-collapse: collapse; margin-top: 16px; font-size: 12.5px; }
+table.t th, table.t td { padding: 7px 10px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+table.t th { color: var(--dead); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; font-weight: 600; }
+table.t td code { font-family: var(--mono); font-size: 11.5px; }
+table.t .yes { color: var(--teal); }
+table.t .no { color: var(--note); }
+table.t tr.gone td { color: var(--dead); }
+table.t tr.gone td code { color: var(--dead); text-decoration: line-through; }
+
+/* ---------- deleted bank panel ---------- */
+
+.gone-panel {
+  margin-top: 18px; padding: 13px 15px;
+  border: 1px dashed #3a4459; border-radius: 4px; background: #101017;
+}
+.gone-panel h4 { margin: 0 0 4px; font-size: 12px; font-weight: 600; color: var(--muted); }
+.gone-panel p { margin: 0 0 11px; color: var(--dead); font-size: 12px; }
+.gone-row { display: flex; flex-wrap: wrap; gap: 6px; }
+.gone-btn {
+  padding: 4px 10px; border: 1px dashed #333c4d; border-radius: 3px;
+  color: var(--dead); font-size: 12px; text-decoration: line-through;
+}
+
+/* ---------- footer ---------- */
+
+.locks { margin-top: 42px; padding-top: 20px; border-top: 1px solid var(--line); }
+.locks h3 { margin: 0 0 10px; font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--dead); }
+.locks ul { margin: 0; padding-left: 18px; color: #b9c3d4; font-size: 12.5px; }
+.locks li { margin-bottom: 5px; }
+.locks li b { color: var(--text); font-weight: 600; }
+.colophon { margin-top: 22px; color: var(--dead); font-size: 11.5px; }
+
+@media (max-width: 980px) {
+  .cards.three, .cards.two { grid-template-columns: 1fr; }
+  .mid { grid-template-columns: 1fr; }
+  .canvas { border-right: 0; border-bottom: 1px solid var(--line); }
+}
+</style>
+</head>
+<body>
+
+<div class="page">
+
+<header class="masthead">
+  <h1>Studio toolbar sketch — on-target</h1>
+  <div class="rule">
+    <b>A verb's control is drawn on its target, or it is not drawn at all.</b>
+    Where no projection draws the target, the verb is legal-and-unrouted, and the utterance says so
+    with the typed reason.
+  </div>
+  <p class="meta">
+    Static HTML and CSS, no script. Scenes are <code>:target</code>; every state below is a radio
+    input and a CSS rule — click the handles and the stops.
+    Source: <code>docs/notes/2026-08-22-studio-toolbar-gen2-opus.md</code> (PR&nbsp;#36).
+    Locus ids, spans, legal sets, and the refusal string are the values
+    <code>examples/gameplay-commentary/main.vel</code> and the duplicate-overlay fixture actually
+    produce. This is a sketch: it changes no Studio, Engine, Core, or VEL code.
+  </p>
+</header>
+
+<nav class="tabs">
+  <a class="tab" href="#sc-strip"><span class="n">1</span>Session strip, no verb bank</a>
+  <a class="tab" href="#sc-source"><span class="n">2</span>Source here</a>
+  <a class="tab" href="#sc-scene"><span class="n">3</span>Scene here</a>
+  <a class="tab" href="#sc-point"><span class="n">4</span>Video click stays source</a>
+  <a class="tab" href="#sc-overlap"><span class="n">5</span>Overlap stays Projection-Local</a>
+</nav>
+
+
+<!-- ================================================================
+     SCENE 1 — the session strip, with the bank gone
+     ================================================================ -->
+<section class="scene" id="sc-strip">
+  <h2><span class="n">1</span>The session strip, with the bank gone</h2>
+  <p class="lede">
+    Six locus-taking controls have left the actions row, and nothing verb-shaped replaced them here,
+    because a standing control cannot name a locus it did not draw. What is left passes a membership
+    test rather than sitting on a list. <b>Click any control in the strip</b> to read it against the
+    test.
+  </p>
+
+  <div class="studio">
+    <div class="frame-tag">Studio · session strip</div>
+
+    <div class="strip">
+      <input class="pick" type="radio" name="strip" id="st-rule" checked />
+      <input class="pick" type="radio" name="strip" id="st-doc" />
+      <label class="btn" for="st-doc">Open Video…</label>
+      <label class="btn" for="st-doc">Save</label>
+      <label class="btn" for="st-doc">Resolve</label>
+      <span class="sep"></span>
+
+      <input class="pick" type="radio" name="strip" id="st-transport" />
+      <label class="btn" for="st-transport">Play</label>
+      <label class="btn" for="st-transport">Pause</label>
+      <label class="btn" for="st-transport">Seek</label>
+      <label class="btn" for="st-transport">Scrub</label>
+      <span class="sep"></span>
+
+      <input class="pick" type="radio" name="strip" id="st-zoom" />
+      <label class="btn" for="st-zoom">Zoom In</label>
+      <label class="btn" for="st-zoom">Zoom Out</label>
+      <span class="sep"></span>
+
+      <input class="pick" type="radio" name="strip" id="st-render" />
+      <label class="btn on" for="st-render">CPU</label>
+      <label class="btn" for="st-render">GPU DX12</label>
+      <label class="stat" for="st-render">Renderer · cpu</label>
+      <label class="stat" for="st-render">Audio · idle</label>
+      <span class="sep"></span>
+
+      <input class="pick" type="radio" name="strip" id="st-undo" />
+      <label class="btn" for="st-undo">Undo</label>
+      <label class="btn" for="st-undo">Redo</label>
+      <span class="sep"></span>
+
+      <input class="pick" type="radio" name="strip" id="st-copy" />
+      <label class="btn" for="st-copy">Copy locus JSON</label>
+    </div>
+
+    <div class="utter">
+      <div class="utter-head"><span>Membership test</span><span class="badge">reading</span></div>
+
+      <div class="state" data-s="st-rule">
+        <div class="clause present"><span class="st">rule</span><span class="tx">
+          A control may stand permanently only if it commits no <code>SemanticEdit</code> and its
+          subject is the session, the document, or the application — something that is always present.
+          Stated as the thing it is really about: <b>no standing control may name a locus it did not
+          draw.</b></span></div>
+        <div class="clause routed"><span class="st">open</span><span class="tx">
+          Membership is not settled here. The rows below are the current strip classified against the
+          test, as an input rather than a decision.</span></div>
+      </div>
+
+      <div class="state" data-s="st-transport">
+        <div class="clause present"><span class="st">stands</span><span class="tx">
+          <code>Play</code>, <code>Pause</code>, <code>Seek</code>, <code>Scrub</code> commit no
+          <code>SemanticEdit</code>, and their subject is the transport, which is always present. They
+          name no locus.</span></div>
+      </div>
+      <div class="state" data-s="st-zoom">
+        <div class="clause present"><span class="st">stands</span><span class="tx">
+          <code>Zoom In</code> and <code>Zoom Out</code> commit no <code>SemanticEdit</code>; the
+          subject is the viewport. This pair is also the affordance that restores a verb reported as
+          <code>too-small-to-draw</code>.</span></div>
+      </div>
+      <div class="state" data-s="st-doc">
+        <div class="clause present"><span class="st">stands</span><span class="tx">
+          <code>Save</code>, <code>Resolve</code>, <code>Open Video…</code> commit no
+          <code>SemanticEdit</code>; the subject is the document or a phase. Resolve is the Resolve
+          phase, not an edit to a locus.</span></div>
+      </div>
+      <div class="state" data-s="st-render">
+        <div class="clause present"><span class="st">stands</span><span class="tx">
+          <code>CPU</code> / <code>GPU DX12</code> and the two status readings commit no
+          <code>SemanticEdit</code>; the subject is the explicit renderer request and the device state.
+          A GPU request still either selects DX12 or returns a typed error.</span></div>
+      </div>
+      <div class="state" data-s="st-undo">
+        <div class="clause routed"><span class="st">argued</span><span class="tx">
+          <code>Undo</code> and <code>Redo</code> mutate source, so they fail the test as first
+          written. They pass the rule the test is for: their subject is the volatile session history,
+          which is always present, and they take no <code>LocusId</code>, so they cannot invent a
+          target or retarget anything.</span></div>
+      </div>
+      <div class="state" data-s="st-copy">
+        <div class="clause routed"><span class="st">conditional</span><span class="tx">
+          <code>Copy locus JSON</code> commits no <code>SemanticEdit</code>, but it reads on here, so it
+          can be pressed when here is unset. It stands only if it fails closed and says what is missing
+          instead of copying something plausible.</span></div>
+      </div>
+
+      <div class="utter-foot">
+        The strip is not the utterance. It carries no clause, and no clause carries a control.
+      </div>
+    </div>
+  </div>
+
+  <div class="gone-panel">
+    <h4>Deleted — six controls that committed without drawing</h4>
+    <p>
+      Struck through because they are gone, not because they are disabled. Each failed on the same
+      point: nothing on screen tied the control to the locus it would edit, so the target was an
+      implicit argument and a wrong result looked exactly like a right one.
+    </p>
+    <div class="gone-row">
+      <span class="gone-btn">Set In</span>
+      <span class="gone-btn">Set Out</span>
+      <span class="gone-btn">Split at Playhead</span>
+      <span class="gone-btn">Delete Selected Clip</span>
+      <span class="gone-btn">Gain -3 dB</span>
+      <span class="gone-btn">Fade</span>
+    </div>
+  </div>
+
+  <table class="t">
+    <thead>
+      <tr>
+        <th>Control</th>
+        <th>Commits no <code>SemanticEdit</code></th>
+        <th>Always-present subject</th>
+        <th>Reading</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td><code>Play</code> · <code>Pause</code> · <code>Seek</code> · <code>Scrub</code></td><td class="yes">yes</td><td>transport</td><td>stands</td></tr>
+      <tr><td><code>Zoom In</code> · <code>Zoom Out</code></td><td class="yes">yes</td><td>viewport</td><td>stands — the affordance for <code>too-small-to-draw</code></td></tr>
+      <tr><td><code>Save</code> · <code>Resolve</code> · <code>Open Video…</code></td><td class="yes">yes</td><td>document / phase</td><td>stands</td></tr>
+      <tr><td><code>CPU</code> · <code>GPU DX12</code> · renderer and audio status</td><td class="yes">yes</td><td>renderer request, device state</td><td>stands</td></tr>
+      <tr><td><code>Undo</code> · <code>Redo</code></td><td class="no">no — they mutate source</td><td>session history</td><td>stands, and is the one row that needs an argument</td></tr>
+      <tr><td><code>Copy locus JSON</code></td><td class="yes">yes</td><td><b>here</b></td><td>stands only if it fails closed and speaks when here is unset</td></tr>
+      <tr class="gone"><td><code>Set In</code> · <code>Set Out</code> · <code>Split at Playhead</code> · <code>Delete Selected Clip</code> · <code>Gain -3 dB</code> · <code>Fade</code></td><td class="no">no</td><td>a locus</td><td>fails both — this is the deletion</td></tr>
+    </tbody>
+  </table>
+
+  <div class="anno">
+    <b>Sketch note.</b> The six verbs lost a route, not a capability. Scenes 2 and 3 draw
+    <code>set-gain</code>, <code>set-fade</code>, <code>split</code> and <code>delete</code> on the
+    regions that already draw their targets, and <code>trim</code> absorbs <code>Set In</code> /
+    <code>Set Out</code> at the clip edges with the playhead demoted to a snap target.
+  </div>
+</section>
+
+
+<!-- ================================================================
+     SCENE 2 — here is source:fight
+     ================================================================ -->
+<section class="scene" id="sc-source">
+  <h2><span class="n">2</span>Here is <code>source:fight</code> — gain line and fade wedge</h2>
+  <p class="lede">
+    One source binding projects to two blocks: <code>demo:video:4</code> on the Video rail and
+    <code>demo:audio:5</code> on the Audio rail. Both resolve to the same <code>LocusId</code>, so both
+    are drawn as here, and each carries the verb that belongs to it — the fade wedge is visual, the
+    gain line is audio. <b>Drag the gain line and the fade wedge</b>, and drag a trim edge.
+  </p>
+
+  <div class="studio">
+    <div class="frame-tag">Studio · here = source "fight"</div>
+
+    <div class="strip">
+      <span class="btn">Open Video…</span><span class="btn">Save</span><span class="btn">Resolve</span>
+      <span class="sep"></span>
+      <span class="btn">Play</span><span class="btn">Pause</span><span class="btn">Seek</span><span class="btn">Scrub</span>
+      <span class="sep"></span>
+      <span class="btn">Zoom In</span><span class="btn">Zoom Out</span>
+      <span class="sep"></span>
+      <span class="btn on">CPU</span><span class="btn">GPU DX12</span><span class="stat">Renderer · cpu</span><span class="stat">Audio · idle</span>
+      <span class="sep"></span>
+      <span class="btn">Undo</span><span class="btn">Redo</span>
+      <span class="sep"></span>
+      <span class="btn">Copy locus JSON</span>
+    </div>
+
+    <div class="mid">
+      <div class="canvas"><div class="plate">preview · no overlay is here, so no corner handles are drawn</div></div>
+      <div class="inspector">
+        <h3>Inspector</h3>
+        <dl class="kv">
+          <dt>here</dt><dd>source "fight"</dd>
+          <dt>locus</dt><dd>source:fight</dd>
+          <dt>scope</dt><dd>source-binding</dd>
+          <dt>vel</dt><dd>main.vel:12</dd>
+        </dl>
+        <div class="absent-fields">
+          No Title-shaped fields. They appear only when here is Title.
+        </div>
+      </div>
+    </div>
+
+    <div class="tl">
+      <div class="tl-head"><span>Timeline · scene demo · 0s – 11.5s</span><span>1 locus · 1 legal set · 1 utterance</span></div>
+
+      <div class="ruler">
+        <i style="left:0%"></i><span class="first" style="left:0%">0s</span>
+        <i style="left:17.391%"></i><span style="left:17.391%">2s</span>
+        <i style="left:34.783%"></i><span style="left:34.783%">4s</span>
+        <i style="left:52.174%"></i><span style="left:52.174%">6s</span>
+        <i style="left:69.565%"></i><span style="left:69.565%">8s</span>
+        <i style="left:86.957%"></i><span style="left:86.957%">10s</span>
+      </div>
+
+      <input class="pick" type="radio" name="trim" id="tr-rest" checked />
+      <input class="pick" type="radio" name="trim" id="tr-in" />
+      <input class="pick" type="radio" name="trim" id="tr-out" />
+      <input class="pick" type="radio" name="fade" id="fd-0" />
+      <input class="pick" type="radio" name="fade" id="fd-05" checked />
+      <input class="pick" type="radio" name="fade" id="fd-10" />
+      <input class="pick" type="radio" name="gain" id="gn-0" />
+      <input class="pick" type="radio" name="gain" id="gn-3" checked />
+      <input class="pick" type="radio" name="gain" id="gn-6" />
+      <input class="pick" type="radio" name="gain" id="gn-12" />
+
+      <div class="lane">
+        <div class="lane-name">Video</div>
+        <div class="track tall">
+          <div class="blk video is-here" style="left:0; right:0;">
+            fight
+            <span class="id">demo:video:4</span>
+            <span class="here-tag">HERE</span>
+            <label class="h-wedge" id="wedge" for="fd-10" title="fade wedge — drag to set fade_in"><span class="grip"></span></label>
+            <label class="h-trim in" for="tr-in" title="in edge — drag to trim"></label>
+            <label class="h-trim out" for="tr-out" title="out edge — drag to trim"></label>
+          </div>
+          <div class="ghost-edge" id="gh-in" style="display:none; left:9.5%;"><span class="t">in → 11s</span></div>
+          <div class="ghost-edge" id="gh-out" style="display:none; left:89.5%;"><span class="t">out → 19s</span></div>
+        </div>
+      </div>
+
+      <div class="lane">
+        <div class="lane-name">Audio</div>
+        <div class="track tall">
+          <div class="blk audio is-here" style="left:0; right:0;">
+            fight
+            <span class="id">demo:audio:5</span>
+            <span class="here-tag">HERE</span>
+          </div>
+          <div class="gain-scale">
+            <i style="top:18%"><b>0</b></i>
+            <i style="top:47.6%"><b>-6</b></i>
+            <i style="top:92%"><b>-15</b></i>
+          </div>
+          <div class="gain" id="gainline"><span class="chip" id="gainchip"></span></div>
+          <label class="gain-stop" for="gn-0"  style="top:0"   title="0 dB"></label>
+          <label class="gain-stop" for="gn-3"  style="top:25%" title="-3 dB"></label>
+          <label class="gain-stop" for="gn-6"  style="top:50%" title="-6 dB"></label>
+          <label class="gain-stop" for="gn-12" style="top:75%" title="-12 dB"></label>
+        </div>
+      </div>
+
+      <div class="lane">
+        <div class="lane-name">Speech</div>
+        <div class="track thin">
+          <div class="blk gen" style="left:45.217%; width:13.043%;">Nice freeze</div>
+          <span style="position:absolute; left:59.5%; top:6px; color:#6b7690; font-family:var(--mono); font-size:10px;">demo:speech:3</span>
+        </div>
+      </div>
+
+      <div class="lane">
+        <div class="lane-name">Overlays</div>
+        <div class="track thin">
+          <div class="blk ov" style="left:17.391%; width:26.087%;">Hello</div>
+          <div class="blk ov" style="left:45.217%; width:13.043%;">Hold</div>
+        </div>
+      </div>
+
+      <div class="lane">
+        <div class="lane-name">Scene</div>
+        <div class="track thin">
+          <div class="band">demo<span class="id">scene:demo</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="utter">
+      <div class="utter-head"><span>Utterance</span><span class="badge">disclosure-only</span></div>
+      <div class="clause present"><span class="st">present</span><span class="tx">
+        <code>trim → source:fight (source-range: set in/out on this source binding)</code> is legal for
+        this source and this Timeline gesture commits it.</span></div>
+      <div class="clause present"><span class="st">present</span><span class="tx">
+        <code>set-gain → source:fight (source-binding: set gain on this source)</code> is legal for this
+        source and this Timeline gesture commits it.</span></div>
+      <div class="clause present"><span class="st">present</span><span class="tx">
+        <code>set-fade → source:fight (source-binding: set fade on this source)</code> is legal for this
+        source and this Timeline gesture commits it.</span></div>
+      <div class="clause relation"><span class="st">relation</span><span class="tx">
+        scene "demo" is a relation, not here. <code>split → scene:demo (scene: split this scene at a
+        source time)</code>; <code>delete → scene:demo (scene: delete this scene)</code>;
+        <code>reorder-scene → scene:demo (sequence: reorder this scene in the sequence)</code> —
+        Navigate, do not retarget.</span></div>
+      <div class="utter-foot">
+        Text only. Nothing in this region commits a <code>SemanticEdit</code>. It may carry
+        <span class="nav-chip">Navigate</span> and explicit seek: those move the eye, change no source,
+        push no Undo, and do not change here.
+      </div>
+    </div>
+  </div>
+
+  <div class="cards three">
+    <div class="card">
+      <h4><span class="tick">●</span>Gain line · Audio rail</h4>
+      <div class="stops">
+        <label class="stop" for="gn-0">0 dB</label>
+        <label class="stop" for="gn-3">-3 dB</label>
+        <label class="stop" for="gn-6">-6 dB</label>
+        <label class="stop" for="gn-12">-12 dB</label>
+      </div>
+      <div class="state" data-s="gn-0"><div class="commit"><span class="lbl">pointer-up commits</span>SetGain { db: 0 }<br />target source:fight · scope source-binding</div></div>
+      <div class="state" data-s="gn-3"><div class="commit rest"><span class="lbl">at rest — the fixture's own value</span>gain fight by -3<br />main.vel:29 · gain_db = -3</div></div>
+      <div class="state" data-s="gn-6"><div class="commit"><span class="lbl">pointer-up commits</span>SetGain { db: -6 }<br />target source:fight · scope source-binding</div></div>
+      <div class="state" data-s="gn-12"><div class="commit"><span class="lbl">pointer-up commits</span>SetGain { db: -12 }<br />target source:fight · scope source-binding</div></div>
+      <p class="hint" style="margin-top:9px">
+        The line spans the whole block because the scope is the whole binding: Core has no time-scoped
+        audio edit, so a drag never produces a range and the rail never simulates a gap Core does not
+        have. <code>SetGain</code> sets rather than trims, and a line at a height with its value
+        written on it is the honest presentation of an absolute value — the display the deleted button
+        never had.
+      </p>
+    </div>
+
+    <div class="card">
+      <h4><span class="tick">●</span>Fade wedge · Video rail head</h4>
+      <div class="stops">
+        <label class="stop" for="fd-0">0s</label>
+        <label class="stop" for="fd-05">0.5s</label>
+        <label class="stop" for="fd-10">1.0s</label>
+      </div>
+      <div class="state" data-s="fd-0"><div class="commit"><span class="lbl">pointer-up commits</span>SetFade { fade_in: 0s }<br />target source:fight · scope source-binding</div></div>
+      <div class="state" data-s="fd-05"><div class="commit rest"><span class="lbl">at rest — the fixture's own value</span>fade fight { at 0s for 0.5s }<br />main.vel:16 · fade_in = 0.5s</div></div>
+      <div class="state" data-s="fd-10"><div class="commit"><span class="lbl">pointer-up commits</span>SetFade { fade_in: 1s }<br />target source:fight · scope source-binding</div></div>
+      <p class="hint" style="margin-top:9px">
+        Head only, and drawn to scale against the 11.5s scene. <code>SemanticEdit::SetFade</code>
+        carries <code>fade_in</code> and nothing else, so there is no tail wedge to drag.
+        <code>TimelineClip.fade_out</code> exists and <code>evaluate</code> honours it, but no VEL word
+        and no edit field sets it — drawing a tail handle would invent the missing half.
+      </p>
+    </div>
+
+    <div class="card">
+      <h4><span class="tick">●</span>Trim edges · Video rail</h4>
+      <div class="stops">
+        <label class="stop" for="tr-rest">rest</label>
+        <label class="stop" for="tr-in">drag in edge</label>
+        <label class="stop" for="tr-out">drag out edge</label>
+      </div>
+      <div class="state" data-s="tr-rest"><div class="commit rest"><span class="lbl">at rest</span>game[10s..20s] as fight<br />main.vel:12</div></div>
+      <div class="state" data-s="tr-in"><div class="commit"><span class="lbl">pointer-up commits</span>Trim { in_point: 11s }<br />target source:fight · scope source-range</div></div>
+      <div class="state" data-s="tr-out"><div class="commit"><span class="lbl">pointer-up commits</span>Trim { out_point: 19s }<br />target source:fight · scope source-range</div></div>
+      <p class="hint" style="margin-top:9px">
+        <code>Set In</code> and <code>Set Out</code> are absorbed here, not replaced, and the playhead
+        is demoted from an implicit argument to a snap target. The amber edge is ephemeral gesture
+        geometry: pointer-up commits exactly one edit and one Undo entry, and Escape cancels without
+        changing source.
+      </p>
+    </div>
+  </div>
+
+  <div class="anno">
+    <b>Sketch note.</b> Three handles, three regions, one verb each — a region that would host a second
+    verb is a bank with a smaller footprint. The handles bind to <code>TimelineClip.id</code> /
+    <code>LocusId</code> and never to the visible label; scene 5 is the stress test for that.
+  </div>
+</section>
+
+
+<!-- ================================================================
+     SCENE 3 — here is scene:demo
+     ================================================================ -->
+<section class="scene" id="sc-scene">
+  <h2><span class="n">3</span>Here is <code>scene:demo</code> — cut lane and delete handle</h2>
+  <p class="lede">
+    Point the scene band and the band draws its own verbs in three regions that do not overlap: a cut
+    lane across its top for <code>split</code>, the band body for <code>reorder-scene</code>, and a
+    delete handle at its end for <code>delete</code>. The source handles are gone from the rails
+    because the source is not here. <b>Click along the cut lane</b>, then click the delete handle.
+  </p>
+
+  <div class="studio">
+    <div class="frame-tag">Studio · here = scene "demo"</div>
+
+    <div class="strip">
+      <span class="btn">Open Video…</span><span class="btn">Save</span><span class="btn">Resolve</span>
+      <span class="sep"></span>
+      <span class="btn">Play</span><span class="btn">Pause</span><span class="btn">Seek</span><span class="btn">Scrub</span>
+      <span class="sep"></span>
+      <span class="btn">Zoom In</span><span class="btn">Zoom Out</span>
+      <span class="sep"></span>
+      <span class="btn on">CPU</span><span class="btn">GPU DX12</span><span class="stat">Renderer · cpu</span><span class="stat">Audio · idle</span>
+      <span class="sep"></span>
+      <span class="btn">Undo</span><span class="btn">Redo</span>
+      <span class="sep"></span>
+      <span class="btn">Copy locus JSON</span>
+    </div>
+
+    <div class="mid">
+      <div class="canvas"><div class="plate">preview · no overlay is here, so no corner handles are drawn</div></div>
+      <div class="inspector">
+        <h3>Inspector</h3>
+        <dl class="kv">
+          <dt>here</dt><dd>scene "demo"</dd>
+          <dt>locus</dt><dd>scene:demo</dd>
+          <dt>scope</dt><dd>scene</dd>
+          <dt>span</dt><dd>0s–11.5s</dd>
+        </dl>
+        <div class="absent-fields">
+          No Title-shaped fields. They appear only when here is Title.
+        </div>
+      </div>
+    </div>
+
+    <div class="tl">
+      <div class="tl-head"><span>Timeline · scene demo · 0s – 11.5s</span><span>1 locus · 1 legal set · 1 utterance</span></div>
+
+      <div class="ruler">
+        <i style="left:0%"></i><span class="first" style="left:0%">0s</span>
+        <i style="left:17.391%"></i><span style="left:17.391%">2s</span>
+        <i style="left:34.783%"></i><span style="left:34.783%">4s</span>
+        <i style="left:52.174%"></i><span style="left:52.174%">6s</span>
+        <i style="left:69.565%"></i><span style="left:69.565%">8s</span>
+        <i style="left:86.957%"></i><span style="left:86.957%">10s</span>
+      </div>
+
+      <input class="pick" type="radio" name="cut" id="ct-rest" checked />
+      <input class="pick" type="radio" name="cut" id="ct-25" />
+      <input class="pick" type="radio" name="cut" id="ct-hold" />
+      <input class="pick" type="radio" name="cut" id="ct-78" />
+      <input class="pick" type="radio" name="band" id="bd-rest" checked />
+      <input class="pick" type="radio" name="band" id="bd-del" />
+      <input class="pick" type="radio" name="band" id="bd-reorder" />
+
+      <div class="lane">
+        <div class="lane-name">Video</div>
+        <div class="track tall">
+          <div class="blk video" style="left:0; right:0;">fight<span class="id">demo:video:4</span></div>
+        </div>
+      </div>
+
+      <div class="lane">
+        <div class="lane-name">Audio</div>
+        <div class="track tall">
+          <div class="blk audio" style="left:0; right:0;">fight<span class="id">demo:audio:5</span></div>
+        </div>
+      </div>
+
+      <div class="lane">
+        <div class="lane-name">Overlays</div>
+        <div class="track thin">
+          <div class="blk ov" style="left:17.391%; width:26.087%;">Hello</div>
+          <div class="blk ov" style="left:45.217%; width:13.043%;">Hold</div>
+        </div>
+      </div>
+
+      <div class="lane">
+        <div class="lane-name">Scene</div>
+        <div class="track" style="height:52px">
+          <div class="band is-here">
+            <span class="band-name">demo</span>
+            <span class="here-tag" style="position:absolute; left:52px; top:21px; margin:0">HERE</span>
+
+            <label class="h-body" for="bd-reorder" title="drag the band body to reorder the scene"></label>
+            <label class="h-del" for="bd-del" title="delete this scene"></label>
+
+            <label class="cut-strip" for="ct-rest" title="cut lane">
+              <span class="guide"></span>
+            </label>
+            <label class="cut-stop" for="ct-25"   style="left:11%" title="split here"></label>
+            <label class="cut-stop" for="ct-hold" style="left:41%" title="split here"></label>
+            <label class="cut-stop" for="ct-78"   style="left:67%" title="split here"></label>
+
+            <div class="cutlane" id="lane25"   style="display:none; left:21.739%"><span class="t">2.5s → source 12.5s</span></div>
+            <div class="cutlane" id="lanehold" style="display:none; left:52.174%"><span class="t">6.0s → source 15.2s</span></div>
+            <div class="cutlane" id="lane78"   style="display:none; left:78.261%"><span class="t">9.0s → source 17.5s</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="utter">
+      <div class="utter-head"><span>Utterance</span><span class="badge">disclosure-only</span></div>
+      <div class="clause present"><span class="st">present</span><span class="tx">
+        <code>split → scene:demo (scene: split this scene at a source time)</code> is legal for this
+        scene and this Timeline gesture commits it.</span></div>
+      <div class="clause present"><span class="st">present</span><span class="tx">
+        <code>delete → scene:demo (scene: delete this scene)</code> is legal for this scene and this
+        Timeline gesture commits it.</span></div>
+      <div class="clause present"><span class="st">present</span><span class="tx">
+        <code>reorder-scene → scene:demo (sequence: reorder this scene in the sequence)</code> is legal
+        for this scene and this Timeline gesture commits it.</span></div>
+      <div class="clause relation"><span class="st">relation</span><span class="tx">
+        <code>trim</code>, <code>set-gain</code>, <code>set-fade</code> need a source binding. Point the
+        video clip — do not retarget.</span></div>
+      <div class="utter-foot">
+        Text only. The relation clause names the region to point at; it does not point there for you.
+        Two explicit acts, zero silent retargets.
+      </div>
+    </div>
+  </div>
+
+  <div class="cards two">
+    <div class="card">
+      <h4><span class="tick">●</span>Cut lane · scene band</h4>
+      <div class="stops">
+        <label class="stop" for="ct-rest">rest</label>
+        <label class="stop" for="ct-25">at 2.5s</label>
+        <label class="stop" for="ct-hold">at 6.0s</label>
+        <label class="stop" for="ct-78">at 9.0s</label>
+      </div>
+      <div class="state" data-s="ct-rest"><div class="commit rest"><span class="lbl">at rest</span>the lane follows the pointer across the band<br />nothing commits until pointer-up</div></div>
+      <div class="state" data-s="ct-25"><div class="commit"><span class="lbl">pointer-up commits</span>Split { at: 12.5s }<br />pointer x → timeline 2.5s → map_timeline_to_source → source 12.5s</div></div>
+      <div class="state" data-s="ct-hold"><div class="commit"><span class="lbl">pointer-up commits</span>Split { at: 15.2s }<br />pointer x → timeline 6.0s → inside the freeze hold, rate 0 → source 15.2s</div></div>
+      <div class="state" data-s="ct-78"><div class="commit"><span class="lbl">pointer-up commits</span>Split { at: 17.5s }<br />pointer x → timeline 9.0s → map_timeline_to_source → source 17.5s</div></div>
+      <p class="hint" style="margin-top:9px">
+        No new mapping. <code>split_at_playhead</code> already obtains a source time by calling
+        <code>map_timeline_to_source</code> on the playhead; the lane calls the same function on the
+        pointer x, so the argument becomes visible without becoming new. That includes the
+        <code>freeze</code> hold at 5.2s–6.7s, where the rate is 0 and a range of timeline times maps
+        to the single source time 15.2s.
+      </p>
+    </div>
+
+    <div class="card">
+      <h4><span class="tick">●</span>Delete handle and band body</h4>
+      <div class="stops">
+        <label class="stop" for="bd-rest">rest</label>
+        <label class="stop" for="bd-del">delete handle</label>
+        <label class="stop" for="bd-reorder">drag the band</label>
+      </div>
+      <div class="state" data-s="bd-rest"><div class="commit rest"><span class="lbl">at rest</span>the delete handle is drawn because this band is here<br />point another locus and it is not drawn at all</div></div>
+      <div class="state" data-s="bd-del"><div class="commit"><span class="lbl">pointer-up commits</span>Delete<br />target scene:demo · scope scene · the edit carries no fields</div></div>
+      <div class="state" data-s="bd-reorder"><div class="commit"><span class="lbl">pointer-up commits</span>ReorderScene { before: … }<br />target scene:demo · scope sequence</div></div>
+      <p class="hint" style="margin-top:9px">
+        The handle is drawn on the band it deletes, and only while that band is here. There is no
+        "Delete Selected Clip" standing ready to be pressed against a locus the Engine cannot name, so
+        there is nothing to refuse: fail-closed becomes fail-early.
+      </p>
+    </div>
+  </div>
+
+  <div class="anno">
+    <b>Sketch note.</b> Compare the rails with scene 2. The same two blocks are drawn, and no gain
+    line, fade wedge, or trim edge appears on them, because the source is a relation here and not
+    here. Nothing adopts it silently.
+  </div>
+</section>
+
+
+<!-- ================================================================
+     SCENE 4 — a click on the video clip stays the source clip
+     ================================================================ -->
+<section class="scene" id="sc-point">
+  <h2><span class="n">4</span>A click on the video clip stays the source clip</h2>
+  <p class="lede">
+    The drawn block is a placement; pointing it yields the source binding and keeps its identity, with
+    no promotion to the containing scene. The audio block resolves to the same <code>LocusId</code> as
+    the video block — two projections of one binding, not two selections. <b>Click a region</b> in the
+    timeline below.
+  </p>
+
+  <input class="pick" type="radio" name="pt" id="pt-video" checked />
+  <input class="pick" type="radio" name="pt" id="pt-audio" />
+  <input class="pick" type="radio" name="pt" id="pt-band" />
+  <input class="pick" type="radio" name="pt" id="pt-agent" />
+
+  <div class="studio">
+    <div class="frame-tag">Studio · pointing</div>
+
+    <div class="mid">
+      <div class="canvas"><div class="plate">preview · one here, read by every view</div></div>
+      <div class="inspector">
+        <h3>Inspector</h3>
+        <div class="state" data-s="pt-video">
+          <dl class="kv"><dt>here</dt><dd>source "fight"</dd><dt>locus</dt><dd>source:fight</dd><dt>via</dt><dd>demo:video:4</dd></dl>
+        </div>
+        <div class="state" data-s="pt-audio">
+          <dl class="kv"><dt>here</dt><dd>source "fight"</dd><dt>locus</dt><dd>source:fight</dd><dt>via</dt><dd>demo:audio:5</dd></dl>
+        </div>
+        <div class="state" data-s="pt-band">
+          <dl class="kv"><dt>here</dt><dd>scene "demo"</dd><dt>locus</dt><dd>scene:demo</dd><dt>via</dt><dd>scene band</dd></dl>
+        </div>
+        <div class="state" data-s="pt-agent">
+          <dl class="kv"><dt>here</dt><dd>source "fight"</dd><dt>locus</dt><dd>source:fight</dd><dt>via</dt><dd>demo:video:4</dd></dl>
+        </div>
+        <div class="absent-fields">
+          Canvas, Timeline, VEL and Inspector all read this one here. There is no per-view selection to
+          disagree with it.
+        </div>
+      </div>
+    </div>
+
+    <div class="tl">
+      <div class="tl-head"><span>Timeline · scene demo</span><span>click a block or the band</span></div>
+
+      <div class="ruler">
+        <i style="left:0%"></i><span class="first" style="left:0%">0s</span>
+        <i style="left:34.783%"></i><span style="left:34.783%">4s</span>
+        <i style="left:69.565%"></i><span style="left:69.565%">8s</span>
+      </div>
+
+      <div class="lane">
+        <div class="lane-name">Video</div>
+        <div class="track tall">
+          <label class="blk video" id="p-vblk" for="pt-video" style="left:0; right:0; cursor:pointer;">
+            fight<span class="id">demo:video:4</span>
+            <span class="here-tag" id="p-vtag" style="display:none">HERE</span>
+            <span class="dot" id="p-vdot" style="display:none; left:30%; top:50%;"></span>
+          </label>
+        </div>
+      </div>
+
+      <div class="lane">
+        <div class="lane-name">Audio</div>
+        <div class="track tall">
+          <label class="blk audio" id="p-ablk" for="pt-audio" style="left:0; right:0; cursor:pointer;">
+            fight<span class="id">demo:audio:5</span>
+            <span class="here-tag" id="p-atag" style="display:none">HERE</span>
+            <span class="dot" id="p-adot" style="display:none; left:62%; top:50%;"></span>
+          </label>
+        </div>
+      </div>
+
+      <div class="lane">
+        <div class="lane-name">Scene</div>
+        <div class="track tall">
+          <label class="band" id="p-band" for="pt-band" style="cursor:pointer;">
+            demo
+            <span class="here-tag" id="p-btag" style="display:none">HERE</span>
+            <span class="dot" id="p-bdot" style="display:none; left:46%; top:50%;"></span>
+          </label>
+        </div>
+      </div>
+    </div>
+
+    <div class="utter">
+      <div class="utter-head"><span>Utterance</span><span class="badge">disclosure-only</span></div>
+
+      <div class="state" data-s="pt-video">
+        <div class="clause present"><span class="st">present</span><span class="tx">
+          <code>trim</code>, <code>set-gain</code> and <code>set-fade</code> →
+          <code>source:fight</code> are legal for this source and this Timeline gesture commits
+          them.</span></div>
+        <div class="clause relation"><span class="st">relation</span><span class="tx">
+          scene "demo" is a relation, not here. <code>split</code>, <code>delete</code> and
+          <code>reorder-scene</code> → <code>scene:demo</code> — Navigate, do not retarget.</span></div>
+      </div>
+      <div class="state" data-s="pt-audio">
+        <div class="clause present"><span class="st">present</span><span class="tx">
+          The audio block's point resolved to <code>source:fight</code>, the same <code>LocusId</code>
+          the video block resolves to. One binding, one here — so both blocks are drawn as here.</span></div>
+        <div class="clause relation"><span class="st">relation</span><span class="tx">
+          scene "demo" is a relation, not here. Navigate, do not retarget.</span></div>
+      </div>
+      <div class="state" data-s="pt-band">
+        <div class="clause present"><span class="st">present</span><span class="tx">
+          <code>split</code>, <code>delete</code> and <code>reorder-scene</code> →
+          <code>scene:demo</code> are legal for this scene and this Timeline gesture commits
+          them.</span></div>
+        <div class="clause relation"><span class="st">relation</span><span class="tx">
+          <code>trim</code>, <code>set-gain</code>, <code>set-fade</code> need a source binding. Point
+          the video clip — do not retarget.</span></div>
+      </div>
+      <div class="state" data-s="pt-agent">
+        <div class="clause absent"><span class="st">needs-scene</span><span class="tx">
+          <code>split is not legal for source "fight" (needs-scene). split → scene:demo (scene: split
+          this scene at a source time) — Navigate, do not retarget.</code></span></div>
+        <div class="clause present"><span class="st">unmoved</span><span class="tx">
+          Here is still <code>source:fight</code>. The refusal named the scene; it did not adopt
+          it.</span></div>
+      </div>
+
+      <div class="utter-foot">
+        Here changes only when the user points. No control and no clause retargets it.
+      </div>
+    </div>
+  </div>
+
+  <div class="cards two">
+    <div class="card">
+      <h4><span class="tick">●</span>What the point committed</h4>
+      <div class="stops">
+        <label class="stop" for="pt-video">click video block</label>
+        <label class="stop" for="pt-audio">click audio block</label>
+        <label class="stop" for="pt-band">click scene band</label>
+        <label class="stop" for="pt-agent">agent or CLI</label>
+      </div>
+      <div class="state" data-s="pt-video"><div class="commit"><span class="lbl">pointed demo:video:4</span>here = source:fight · kind source<br />No promotion to scene:demo. The placement is what was drawn; the binding is what was pointed.</div></div>
+      <div class="state" data-s="pt-audio"><div class="commit"><span class="lbl">pointed demo:audio:5</span>here = source:fight · kind source<br />The same LocusId the video block yields. Two loci for one binding would be per-view selection wearing a rail.</div></div>
+      <div class="state" data-s="pt-band"><div class="commit"><span class="lbl">pointed the scene band</span>here = scene:demo · kind scene<br />The band draws the scene, so pointing it yields the scene. Nothing was promoted or demoted.</div></div>
+      <div class="state" data-s="pt-agent"><div class="commit refusal"><span class="lbl">an agent posted Split against source:fight</span>refuse_edit spoke the typed reason and the relation.<br />here is unchanged: source:fight</div></div>
+    </div>
+
+    <div class="card">
+      <h4><span class="tick">●</span>Why refusals still exist, and why a pointer cannot reach one</h4>
+      <p>
+        A handle is drawn only where the Engine can name a target, so ordinary pointing cannot produce
+        "X is not legal for here". That is the cheap falsifier for the whole rule: after the change,
+        any path that yields a refusal from a pointer alone is a surviving bank.
+      </p>
+      <p class="hint">
+        <code>refuse_edit</code> does not disappear. The keyboard, an agent, and the CLI still arrive
+        without a pointer, and they commit against a <code>LocusId</code> directly — routing is a
+        Studio fact and does not bind them. Accelerators are the narrow case: one is live exactly while
+        its handle is drawn, and commits exactly what that handle commits, so the bank cannot regrow
+        invisibly in the keymap.
+      </p>
+    </div>
+  </div>
+</section>
+
+
+<!-- ================================================================
+     SCENE 5 — overlap still resolves Projection-Local
+     ================================================================ -->
+<section class="scene" id="sc-overlap">
+  <h2><span class="n">5</span>Overlap still resolves through Projection-Local</h2>
+  <p class="lede">
+    Handles change nothing about pointing. An ambiguous point still holds itself open on the projection
+    that was touched and lists its candidates, and here stays unset until a card is picked. The
+    dense-tie fixture is the stress test: two titles and a callout with identical text
+    <code>"Same"</code> and identical spans <code>0s–2s</code>, carrying distinct
+    <code>LocusId</code>s. <b>Pick a card</b>, and switch the touched projection.
+  </p>
+
+  <input class="pick" type="radio" name="olproj" id="op-tl" checked />
+  <input class="pick" type="radio" name="olproj" id="op-cv" />
+  <input class="pick" type="radio" name="olpick" id="ol-none" checked />
+  <input class="pick" type="radio" name="olpick" id="ol-t1" />
+  <input class="pick" type="radio" name="olpick" id="ol-t2" />
+  <input class="pick" type="radio" name="olpick" id="ol-c" />
+
+  <div class="studio">
+    <div class="frame-tag">Studio · duplicate-overlays fixture · one ambiguous point</div>
+
+    <div class="strip">
+      <span class="stat">Touched projection</span>
+      <label class="btn" id="op-tl-btn" for="op-tl">Timeline</label>
+      <label class="btn" id="op-cv-btn" for="op-cv">Canvas</label>
+      <span class="sep"></span>
+      <span class="stat">Identity is the same on both. Only routing and drawing are local.</span>
+    </div>
+
+    <div class="tl">
+      <div class="tl-head"><span>Overlay rail · three invocations at 0s–2s</span><span>identical text, distinct LocusId</span></div>
+
+      <div class="lane">
+        <div class="lane-name">Overlays</div>
+        <div class="track" style="height:82px">
+          <div class="blk ov" id="ol-b1" style="left:2%; width:46%; top:5px; height:21px;">
+            Same<span class="id">demo:title:1</span>
+            <span class="here-tag" id="ol-t1-tag" style="display:none">HERE</span>
+          </div>
+          <div class="blk ov" id="ol-b2" style="left:2%; width:46%; top:30px; height:21px;">
+            Same<span class="id">demo:title:2</span>
+            <span class="here-tag" id="ol-t2-tag" style="display:none">HERE</span>
+          </div>
+          <div class="blk ov" id="ol-b3" style="left:2%; width:46%; top:55px; height:21px; background:#3a2f3f; border-color:#5b4560;">
+            Same<span class="id">demo:callout:3</span>
+            <span class="here-tag" id="ol-c-tag" style="display:none">HERE</span>
+          </div>
+          <div class="dot" style="left:25%; top:41px;"></div>
+        </div>
+      </div>
+
+      <div class="utter-head" style="margin:16px 0 8px">
+        <span>Candidate cards · drawn on the projection that was touched</span>
+      </div>
+
+      <div class="cards three" style="margin-top:0">
+        <label class="card" for="ol-t1" id="ol-c1" style="cursor:pointer">
+          <h4>title "Same"</h4>
+          <p class="hint" style="font-family:var(--mono)">demo:title:1 · 0s–2s</p>
+          <p class="hint">
+            <span class="state" data-s="op-tl-r">routes here: <code>title</code></span>
+            <span class="state" data-s="op-cv-r">routes here: <code>set-position</code>, <code>resize-overlay</code></span>
+          </p>
+        </label>
+        <label class="card" for="ol-t2" id="ol-c2" style="cursor:pointer">
+          <h4>title "Same"</h4>
+          <p class="hint" style="font-family:var(--mono)">demo:title:2 · 0s–2s</p>
+          <p class="hint">
+            <span class="state" data-s="op-tl-r">routes here: <code>title</code></span>
+            <span class="state" data-s="op-cv-r">routes here: <code>set-position</code>, <code>resize-overlay</code></span>
+          </p>
+        </label>
+        <label class="card" for="ol-c" id="ol-c3" style="cursor:pointer">
+          <h4>callout "Same"</h4>
+          <p class="hint" style="font-family:var(--mono)">demo:callout:3 · 0s–2s</p>
+          <p class="hint">
+            <span class="state" data-s="op-tl-r">routes here: <code>callout</code></span>
+            <span class="state" data-s="op-cv-r">routes here: <code>set-position</code>, <code>resize-overlay</code></span>
+          </p>
+        </label>
+      </div>
+    </div>
+
+    <div class="utter">
+      <div class="utter-head"><span>Utterance</span><span class="badge">disclosure-only</span></div>
+
+      <div class="state" data-s="ol-none">
+        <div class="clause unresolved"><span class="st">unresolved</span><span class="tx">
+          <span class="state" data-s="op-tl-r">This Timeline point named 3 loci. Pick one card. Here is unset.</span>
+          <span class="state" data-s="op-cv-r">This Canvas point named 3 loci. Pick one card. Here is unset.</span></span></div>
+        <div class="clause routed"><span class="st">held</span><span class="tx">
+          The failed point is held open on the projection that was touched. Nothing was picked for you
+          by z-order, by draw order, or by the visible label.</span></div>
+      </div>
+      <div class="state" data-s="ol-t1">
+        <div class="clause present"><span class="st">committed</span><span class="tx">
+          here = title "Same" · <code>demo:title:1</code>. The handles are drawn on that block and on no
+          other, because they bind to the <code>LocusId</code> and not to the text.</span></div>
+      </div>
+      <div class="state" data-s="ol-t2">
+        <div class="clause present"><span class="st">committed</span><span class="tx">
+          here = title "Same" · <code>demo:title:2</code>. Identical label, identical span, a different
+          locus — and the handles moved to the second block.</span></div>
+      </div>
+      <div class="state" data-s="ol-c">
+        <div class="clause present"><span class="st">committed</span><span class="tx">
+          here = callout "Same" · <code>demo:callout:3</code>. A different kind, so a different legal
+          set and a different drawn verb.</span></div>
+      </div>
+
+      <div class="utter-foot">
+        The cards are a reading plus a pick, not a verb bank: each one commits a locus, never a
+        <code>SemanticEdit</code>.
+      </div>
+    </div>
+  </div>
+
+  <div class="cards two">
+    <div class="card">
+      <h4><span class="tick">●</span>What the pick committed</h4>
+      <div class="stops">
+        <label class="stop" for="ol-none">ambiguous point</label>
+        <label class="stop" for="ol-t1">pick title:1</label>
+        <label class="stop" for="ol-t2">pick title:2</label>
+        <label class="stop" for="ol-c">pick callout:3</label>
+      </div>
+      <div class="state" data-s="ol-none"><div class="commit rest"><span class="lbl">here</span>unset — the point named 3 loci<br />no handle is drawn anywhere, because no target is named</div></div>
+      <div class="state" data-s="ol-t1"><div class="commit"><span class="lbl">here</span>demo:title:1 · kind title<br />drawn handles: overlay body and edges, on that block only</div></div>
+      <div class="state" data-s="ol-t2"><div class="commit"><span class="lbl">here</span>demo:title:2 · kind title<br />drawn handles: overlay body and edges, on that block only</div></div>
+      <div class="state" data-s="ol-c"><div class="commit"><span class="lbl">here</span>demo:callout:3 · kind callout<br />drawn handles: overlay body and edges, on that block only</div></div>
+      <p class="hint" style="margin-top:9px">
+        Reverse-matching an overlay by its visible text or its source span would pick the wrong one
+        here every time. Duplicate labels are legal, so the binding is the identity.
+      </p>
+    </div>
+
+    <div class="card">
+      <h4><span class="tick">●</span>Local routing, global legality</h4>
+      <div class="stops">
+        <label class="stop" for="op-tl">touched Timeline</label>
+        <label class="stop" for="op-cv">touched Canvas</label>
+      </div>
+      <div class="state" data-s="op-tl-r"><div class="commit"><span class="lbl">Timeline point</span>same three candidates · same three legal sets<br />routed on this projection: title, callout</div></div>
+      <div class="state" data-s="op-cv-r"><div class="commit"><span class="lbl">Canvas point</span>same three candidates · same three legal sets<br />routed on this projection: set-position, resize-overlay</div></div>
+      <p class="hint" style="margin-top:9px">
+        Switching the touched projection changes which verbs that projection commits. It does not
+        change the candidate list, the legal set, or which locus is here. Legality stays global and
+        Engine-owned and only drawing and routing are local, so a verb with no drawn handle anywhere is
+        still legal and is still spoken.
+      </p>
+    </div>
+  </div>
+
+  <div class="anno">
+    <b>Sketch note.</b> This scene reopens nothing. The candidate list, the held-open point, and the
+    one-locus rule are exactly as they are on <code>main</code>; the only change is that after a pick,
+    the verbs the picked locus routes are drawn on it instead of standing in a row.
+  </div>
+</section>
+
+
+<section class="locks">
+  <h3>Locks this sketch is drawn inside</h3>
+  <ul>
+    <li><b>Overlap</b> resolves through Projection-Local's candidate list on the projection that was touched — scene 5.</li>
+    <li><b>A click on a video clip points the source clip</b> and keeps its identity, with no promotion to the containing scene — scene 4.</li>
+    <li><b>One locus, one Engine legal set, one utterance</b> — every scene shows exactly one here and one reading.</li>
+    <li><b>No silent retarget:</b> a control never rewrites a target while the displayed locus stays put — scenes 3 and 4 speak the relation instead.</li>
+    <li><b>Title-shaped Inspector fields appear only when here is Title</b> — scenes 2 and 3 show the Inspector saying so.</li>
+    <li><b>No per-view selection</b> — the audio and video blocks resolve to one <code>LocusId</code>, and every view reads it.</li>
+    <li><b>The utterance is disclosure-only.</b> It may carry Navigate and explicit seek: it may move the eye, and it may never move the source.</li>
+  </ul>
+  <p class="colophon">
+    Sketch only. No Studio, Engine, Core, or VEL code is changed by this file, and nothing here is a
+    shipping decision. Fixtures: <code>examples/gameplay-commentary/main.vel</code> (scene
+    <code>demo</code>, 0s–11.5s after the <code>freeze</code> hold at 5.2s–6.7s) and the
+    duplicate-overlay fixture in <code>crates/lattice-studio/tests/layout.rs</code>.
+  </p>
+</section>
+
+</div><!-- /.page -->
+
+<style>
+/* ------------------------------------------------------------------
+   State rules, kept at the end so the markup above reads as the
+   sketch and this reads as the wiring.
+   ------------------------------------------------------------------ */
+
+/* --- scene 1: session strip membership --- */
+#sc-strip:has(#st-rule:checked)      .state[data-s="st-rule"],
+#sc-strip:has(#st-transport:checked) .state[data-s="st-transport"],
+#sc-strip:has(#st-zoom:checked)      .state[data-s="st-zoom"],
+#sc-strip:has(#st-doc:checked)       .state[data-s="st-doc"],
+#sc-strip:has(#st-render:checked)    .state[data-s="st-render"],
+#sc-strip:has(#st-undo:checked)      .state[data-s="st-undo"],
+#sc-strip:has(#st-copy:checked)      .state[data-s="st-copy"] { display: block; }
+
+#sc-strip:has(#st-transport:checked) label[for="st-transport"],
+#sc-strip:has(#st-zoom:checked)      label[for="st-zoom"],
+#sc-strip:has(#st-doc:checked)       label[for="st-doc"],
+#sc-strip:has(#st-render:checked)    label[for="st-render"],
+#sc-strip:has(#st-undo:checked)      label[for="st-undo"],
+#sc-strip:has(#st-copy:checked)      label[for="st-copy"] {
+  border-color: var(--teal); color: var(--teal); background: #10201f;
+}
+
+/* --- scene 2: gain line --- */
+/* linear scale: 0 dB at 18%, -15 dB at 92% */
+#sc-source:has(#gn-0:checked)  #gainline { top: 18%; }
+#sc-source:has(#gn-3:checked)  #gainline { top: 32.8%; }
+#sc-source:has(#gn-6:checked)  #gainline { top: 47.6%; }
+#sc-source:has(#gn-12:checked) #gainline { top: 77.2%; }
+
+#sc-source:has(#gn-0:checked)  #gainchip::after { content: "0 dB"; }
+#sc-source:has(#gn-3:checked)  #gainchip::after { content: "-3 dB"; }
+#sc-source:has(#gn-6:checked)  #gainchip::after { content: "-6 dB"; }
+#sc-source:has(#gn-12:checked) #gainchip::after { content: "-12 dB"; }
+
+#sc-source:has(#gn-0:checked)  .state[data-s="gn-0"],
+#sc-source:has(#gn-3:checked)  .state[data-s="gn-3"],
+#sc-source:has(#gn-6:checked)  .state[data-s="gn-6"],
+#sc-source:has(#gn-12:checked) .state[data-s="gn-12"] { display: block; }
+
+#sc-source:has(#gn-0:checked)  label.stop[for="gn-0"],
+#sc-source:has(#gn-3:checked)  label.stop[for="gn-3"],
+#sc-source:has(#gn-6:checked)  label.stop[for="gn-6"],
+#sc-source:has(#gn-12:checked) label.stop[for="gn-12"] { border-color: var(--teal); color: var(--teal); }
+
+/* --- scene 2: fade wedge, true scale against the 11.5s scene --- */
+#sc-source:has(#fd-0:checked)  #wedge { width: 0; border-left-width: 0; }
+#sc-source:has(#fd-05:checked) #wedge { width: 4.348%; }
+#sc-source:has(#fd-10:checked) #wedge { width: 8.696%; }
+
+#sc-source:has(#fd-0:checked)  .state[data-s="fd-0"],
+#sc-source:has(#fd-05:checked) .state[data-s="fd-05"],
+#sc-source:has(#fd-10:checked) .state[data-s="fd-10"] { display: block; }
+
+#sc-source:has(#fd-0:checked)  label.stop[for="fd-0"],
+#sc-source:has(#fd-05:checked) label.stop[for="fd-05"],
+#sc-source:has(#fd-10:checked) label.stop[for="fd-10"] { border-color: var(--teal); color: var(--teal); }
+
+/* --- scene 2: trim edges, ephemeral gesture geometry --- */
+#sc-source:has(#tr-in:checked)  #gh-in  { display: block !important; }
+#sc-source:has(#tr-out:checked) #gh-out { display: block !important; }
+
+#sc-source:has(#tr-rest:checked) .state[data-s="tr-rest"],
+#sc-source:has(#tr-in:checked)   .state[data-s="tr-in"],
+#sc-source:has(#tr-out:checked)  .state[data-s="tr-out"] { display: block; }
+
+#sc-source:has(#tr-rest:checked) label.stop[for="tr-rest"],
+#sc-source:has(#tr-in:checked)   label.stop[for="tr-in"],
+#sc-source:has(#tr-out:checked)  label.stop[for="tr-out"] { border-color: var(--teal); color: var(--teal); }
+
+/* --- scene 3: cut lane --- */
+#sc-scene:has(#ct-25:checked)   #lane25   { display: block !important; }
+#sc-scene:has(#ct-hold:checked) #lanehold { display: block !important; }
+#sc-scene:has(#ct-78:checked)   #lane78   { display: block !important; }
+
+#sc-scene:has(#ct-rest:checked) .state[data-s="ct-rest"],
+#sc-scene:has(#ct-25:checked)   .state[data-s="ct-25"],
+#sc-scene:has(#ct-hold:checked) .state[data-s="ct-hold"],
+#sc-scene:has(#ct-78:checked)   .state[data-s="ct-78"] { display: block; }
+
+#sc-scene:has(#ct-rest:checked) label.stop[for="ct-rest"],
+#sc-scene:has(#ct-25:checked)   label.stop[for="ct-25"],
+#sc-scene:has(#ct-hold:checked) label.stop[for="ct-hold"],
+#sc-scene:has(#ct-78:checked)   label.stop[for="ct-78"] { border-color: var(--teal); color: var(--teal); }
+
+/* --- scene 3: delete handle and band body --- */
+#sc-scene:has(#bd-del:checked)     .h-del { background: #123331; box-shadow: 0 0 0 3px rgba(61,214,198,0.18); }
+#sc-scene:has(#bd-reorder:checked) .h-body { background: rgba(61,214,198,0.07); box-shadow: inset 0 0 0 1px rgba(61,214,198,0.4); }
+
+#sc-scene:has(#bd-rest:checked)    .state[data-s="bd-rest"],
+#sc-scene:has(#bd-del:checked)     .state[data-s="bd-del"],
+#sc-scene:has(#bd-reorder:checked) .state[data-s="bd-reorder"] { display: block; }
+
+#sc-scene:has(#bd-rest:checked)    label.stop[for="bd-rest"],
+#sc-scene:has(#bd-del:checked)     label.stop[for="bd-del"],
+#sc-scene:has(#bd-reorder:checked) label.stop[for="bd-reorder"] { border-color: var(--teal); color: var(--teal); }
+
+/* --- scene 4: pointing --- */
+#sc-point:has(#pt-video:checked) #p-vblk,
+#sc-point:has(#pt-audio:checked) #p-vblk,
+#sc-point:has(#pt-agent:checked) #p-vblk,
+#sc-point:has(#pt-video:checked) #p-ablk,
+#sc-point:has(#pt-audio:checked) #p-ablk,
+#sc-point:has(#pt-agent:checked) #p-ablk,
+#sc-point:has(#pt-band:checked)  #p-band {
+  outline: 2px solid var(--teal); outline-offset: -1px; box-shadow: 0 0 0 3px rgba(61,214,198,0.13);
+}
+#sc-point:has(#pt-video:checked) #p-vtag,
+#sc-point:has(#pt-audio:checked) #p-vtag,
+#sc-point:has(#pt-agent:checked) #p-vtag,
+#sc-point:has(#pt-video:checked) #p-atag,
+#sc-point:has(#pt-audio:checked) #p-atag,
+#sc-point:has(#pt-agent:checked) #p-atag,
+#sc-point:has(#pt-band:checked)  #p-btag { display: inline-block !important; }
+
+#sc-point:has(#pt-video:checked) #p-vdot,
+#sc-point:has(#pt-agent:checked) #p-vdot,
+#sc-point:has(#pt-audio:checked) #p-adot,
+#sc-point:has(#pt-band:checked)  #p-bdot { display: block !important; }
+
+#sc-point:has(#pt-video:checked) .state[data-s="pt-video"],
+#sc-point:has(#pt-audio:checked) .state[data-s="pt-audio"],
+#sc-point:has(#pt-band:checked)  .state[data-s="pt-band"],
+#sc-point:has(#pt-agent:checked) .state[data-s="pt-agent"] { display: block; }
+
+#sc-point:has(#pt-video:checked) label.stop[for="pt-video"],
+#sc-point:has(#pt-audio:checked) label.stop[for="pt-audio"],
+#sc-point:has(#pt-band:checked)  label.stop[for="pt-band"],
+#sc-point:has(#pt-agent:checked) label.stop[for="pt-agent"] { border-color: var(--teal); color: var(--teal); }
+
+/* --- scene 5: overlap --- */
+#sc-overlap:has(#op-tl:checked) #op-tl-btn,
+#sc-overlap:has(#op-cv:checked) #op-cv-btn { border-color: var(--teal); color: var(--teal); }
+
+#sc-overlap:has(#op-tl:checked) span.state[data-s="op-tl-r"],
+#sc-overlap:has(#op-cv:checked) span.state[data-s="op-cv-r"] { display: inline; }
+#sc-overlap:has(#op-tl:checked) div.state[data-s="op-tl-r"],
+#sc-overlap:has(#op-cv:checked) div.state[data-s="op-cv-r"] { display: block; }
+
+#sc-overlap:has(#ol-none:checked) .state[data-s="ol-none"],
+#sc-overlap:has(#ol-t1:checked)   .state[data-s="ol-t1"],
+#sc-overlap:has(#ol-t2:checked)   .state[data-s="ol-t2"],
+#sc-overlap:has(#ol-c:checked)    .state[data-s="ol-c"] { display: block; }
+
+#sc-overlap:has(#ol-t1:checked) #ol-b1,
+#sc-overlap:has(#ol-t2:checked) #ol-b2,
+#sc-overlap:has(#ol-c:checked)  #ol-b3 {
+  outline: 2px solid var(--teal); outline-offset: -1px; box-shadow: 0 0 0 3px rgba(61,214,198,0.13);
+}
+#sc-overlap:has(#ol-t1:checked) #ol-t1-tag,
+#sc-overlap:has(#ol-t2:checked) #ol-t2-tag,
+#sc-overlap:has(#ol-c:checked)  #ol-c-tag { display: inline-block !important; }
+
+#sc-overlap:has(#ol-t1:checked) #ol-c1,
+#sc-overlap:has(#ol-t2:checked) #ol-c2,
+#sc-overlap:has(#ol-c:checked)  #ol-c3 { border-color: var(--teal); background: #10201f; }
+
+#sc-overlap:has(#ol-none:checked) label.stop[for="ol-none"],
+#sc-overlap:has(#ol-t1:checked)   label.stop[for="ol-t1"],
+#sc-overlap:has(#ol-t2:checked)   label.stop[for="ol-t2"],
+#sc-overlap:has(#ol-c:checked)    label.stop[for="ol-c"],
+#sc-overlap:has(#op-tl:checked)   label.stop[for="op-tl"],
+#sc-overlap:has(#op-cv:checked)   label.stop[for="op-cv"] { border-color: var(--teal); color: var(--teal); }
+
+/* overlay edge handles are drawn on the picked block only, bound by id */
+#sc-overlap:has(#ol-t1:checked) #ol-b1::before,
+#sc-overlap:has(#ol-t2:checked) #ol-b2::before,
+#sc-overlap:has(#ol-c:checked)  #ol-b3::before {
+  content: ""; position: absolute; left: 2px; top: 3px; bottom: 3px; width: 6px;
+  background: repeating-linear-gradient(180deg, var(--handle) 0 2px, transparent 2px 4px);
+}
+#sc-overlap:has(#ol-t1:checked) #ol-b1::after,
+#sc-overlap:has(#ol-t2:checked) #ol-b2::after,
+#sc-overlap:has(#ol-c:checked)  #ol-b3::after {
+  content: ""; position: absolute; right: 2px; top: 3px; bottom: 3px; width: 6px;
+  background: repeating-linear-gradient(180deg, var(--handle) 0 2px, transparent 2px 4px);
+}
+
+/* the radios stay focusable so the sketch is reachable from the keyboard */
+.pick:focus-visible + label { outline: 2px solid var(--teal); outline-offset: 2px; }
+</style>
+
+</body>
+</html>
