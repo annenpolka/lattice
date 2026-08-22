@@ -91,16 +91,27 @@ let selected = current.is_some_and(|locus| {
 });
 ```
 
-`timeline-basic` fixture での実際のハイライト数:
+`timeline-basic` fixture で実測したハイライト数。選択は `track_row` の
+`border_color(if selected { 0xffffff } else { color })` による白枠なので、キャプチャのピクセルから数えられる
+(計測出力: `docs/artifacts/studio-selection-2026-08-22-clip-count.txt`)。
 
-| current locus | ハイライトされる timeline clip 数 |
-|---|---|
-| `demo:title:1` (Title) | 3 (video, audio, title — scene 一致で video/audio も入る) |
-| `scene:demo` (Scene) | 2 (video, audio — overlay は早期 return で外れる) |
+| current locus | 白枠になる timeline clip 数 | 内訳 |
+|---|---|---|
+| `sequence:main` (Sequence) | 0 | `scene_id` が `None` なのでどの clip にも一致しない |
+| `demo:title:1` (Title) | 3 | video, audio (scene 一致), title (id 一致)。callout は外れる |
+| `scene:demo` (Scene) | 2 | video, audio。overlay は早期 return で外れる |
 
-![Timeline, locus = title Hello](../artifacts/studio-interaction-2026-08-22-timeline-title-selection.png)
+基準 (Sequence locus, 0 個):
 
-![Timeline, locus = scene demo](../artifacts/studio-interaction-2026-08-22-timeline-scene-selection.png)
+![Timeline with a Sequence locus, no clip selected](../artifacts/studio-selection-2026-08-22-sequence-locus-0-clips.png)
+
+Title locus (3 個: Video と Audio と title `Hello`。白枠は重なった `Hold` callout で途切れており、その callout 自身は白枠を持たない):
+
+![Timeline with a Title locus, three clips selected](../artifacts/studio-selection-2026-08-22-title-locus-3-clips.png)
+
+Scene locus (2 個: Video と Audio のみ。title も callout も白枠なし):
+
+![Timeline with a Scene locus, two clips selected](../artifacts/studio-selection-2026-08-22-scene-locus-2-clips.png)
 
 つまり「1 locus → N 個の見た目」はもう起きている。ただし N の決まり方が track ごとに違い、その規則はどこにも表示されていない。
 
@@ -256,9 +267,22 @@ pub enum Origin { Source, Invocation { command }, Convention { name }, Builtin {
 
 `Title` 編集は Title/Scene/Source 以外の locus でも `scene_id` があれば `target_scene_locus()` に落ちる (`session.rs:1115-1117`)。`SetGain` / `SetFade` は source を試して scene に落ちる (`session.rs:1126-1128`)。
 
-結果として、`Gain -3 dB` を Title locus のまま押すと、ユーザが指していない場所に編集が着地する。ツールバーの 20 ボタンは常に有効に描かれ、合法性は commit 時に発見される。
+実測。`dense-project` fixture (4 scene、source は `clip-one` .. `clip-four`) で `sequence main` を指した状態、
+つまり `LocusKind::Sequence` / `scene_id: None` / source ではない locus で `Gain -3 dB` を押す。
 
-グローバル動詞ツールバーは locus モデルと構造的に相性が悪い。グローバル動詞は対象を要求し、locus が対象を供給できないとコードが対象を**発明する**。
+押す前 (locus は `sequence "main"`、origin は `builtin 'flow'`、`scene one` に gain 行はない):
+
+![VEL and Inspector before pressing Gain -3 dB](../artifacts/studio-toolbar-2026-08-22-before-gain-vel-inspector.png)
+
+押した後。locus は `sequence "main"` のまま動かず、`gain clip-one by -3` が
+**プロジェクト最初の source** である `scene one` の `clip-one` に着地している:
+
+![VEL and Inspector after pressing Gain -3 dB](../artifacts/studio-toolbar-2026-08-22-after-gain-vel-inspector.png)
+
+全画面版は `studio-toolbar-2026-08-22-before-gain-sequence-locus.png` と
+`...-after-gain-first-source.png`。ログは `studio-toolbar-2026-08-22-smoke.log`。
+
+ツールバーの 20 ボタンは常に有効に描かれ、合法性は commit 時に発見される。グローバル動詞ツールバーは locus モデルと構造的に相性が悪い。グローバル動詞は対象を要求し、locus が対象を供給できないとコードが対象を**発明する**。
 
 ### H2. `explain` が一度も表示されない
 
@@ -311,8 +335,26 @@ let _ = clip_id;
 
 Trim / Reorder ジェスチャは scene を指す。overlay ジェスチャは `point_clip` で clip を指す (`interaction.rs:266`, `285`)。つまり timeline のクリックが返す locus の粒度が track ごとに違い、その規則は表示されない。
 
-スモークログでも、3.2s の Video クリップをクリックした結果 locus は `demo:video:3` ではなく `scene:demo` になっている
-(`docs/artifacts/studio-interaction-2026-08-22-smoke.log`)。
+実測。`dense-project` で `sequence main` を指した状態から Video track の 3 番目の clip (`three:video:3`) をクリックする。
+
+クリック前 (locus は `sequence "main"`):
+
+![Before clicking the Video clip](../artifacts/studio-videoclick-2026-08-22-before-sequence-locus.png)
+
+クリック後。locus は `three:video:3` でも `source:clip-three` でもなく `scene "three"` になる。
+SEQUENCE ツリーのハイライトも `scene three` に付き、Inspector の見出しも `scene "three"`:
+
+![After clicking the Video clip](../artifacts/studio-videoclick-2026-08-22-after-scene-locus.png)
+
+`semantic_state` でも同じ遷移が出る (`docs/artifacts/studio-videoclick-2026-08-22-smoke.log`):
+
+```text
+timeline-pointer-begin  -> sequence sequence:main main
+timeline-pointer-commit -> scene    scene:three   three
+```
+
+この後画面は claim「1 Scene locus → 2 clip」も同時に再現していて、16 clip のうち
+`three:video:3` と `three:audio:4` だけが白枠になり、`title Three` と `Cue 3` は白枠を持たない。
 
 ### H8. Inspector の Title text が locus ラベルを吸い込む
 
