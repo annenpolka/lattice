@@ -54,6 +54,10 @@ pub enum TimelineHit {
 #[derive(Clone, Debug, PartialEq)]
 pub enum TimelineGesture {
     None,
+    /// Empty-rail coordinate point. Drag past the threshold becomes scrub.
+    Point {
+        start_x: f64,
+    },
     Scrub {
         start_playhead: Time,
         start_x: f64,
@@ -142,6 +146,21 @@ pub fn clip_kind_from_track(kind: &str, track: &str) -> ClipKind {
 }
 
 #[must_use]
+/// Clips whose body contains `x`. Used for overlap on one track.
+pub fn clips_at_x(clips: &[HitClip], x: f64, viewport: TimelineViewport) -> Vec<HitClip> {
+    clips
+        .iter()
+        .filter(|clip| {
+            let left = viewport.x_at_time(clip.start);
+            let right = viewport.x_at_time(clip.end());
+            let lo = left.min(right);
+            let hi = left.max(right);
+            x >= lo && x <= hi
+        })
+        .cloned()
+        .collect()
+}
+
 pub fn hit_test(clips: &[HitClip], x: f64, viewport: TimelineViewport) -> TimelineHit {
     let mut best_trim: Option<(f64, TimelineHit)> = None;
     let mut body: Option<(bool, TimelineHit)> = None;

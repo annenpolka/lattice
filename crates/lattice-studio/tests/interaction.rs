@@ -606,8 +606,14 @@ scene a {
     session.cancel_timeline_pointer();
     session.begin_timeline_pointer_on(x, true, "Audio").unwrap();
     assert!(
+        matches!(session.gesture(), TimelineGesture::Point { .. }),
+        "audio rail click begins a coordinate point: {:?}",
+        session.gesture()
+    );
+    session.update_timeline_pointer(x + 20.0, true).unwrap();
+    assert!(
         matches!(session.gesture(), TimelineGesture::Scrub { .. }),
-        "audio rail is scrub only: {:?}",
+        "audio rail drag becomes scrub: {:?}",
         session.gesture()
     );
 }

@@ -1,14 +1,15 @@
 //! Pointer begin / update / commit / cancel against a Studio session.
 
-use lattice_engine::{Engine, EngineError, LocusId, SemanticEdit, Time, TimeSpan};
+use lattice_engine::{Engine, EngineError, LocusId, LocusKind, SemanticEdit, Time, TimeSpan};
 
 use crate::gesture::{
     ClipKind, CursorKind, Edge, GestureOutcome, HitClip, SNAP_THRESHOLD_PX, TimelineGesture,
-    TimelineHit, clip_kind_from_track, crossed_drag_threshold, cursor_for_hit, hit_test,
-    nearest_frame, overlay_duration_valid, preview_overlay_move, preview_overlay_resize,
+    TimelineHit, clip_kind_from_track, clips_at_x, crossed_drag_threshold, cursor_for_hit,
+    hit_test, nearest_frame, overlay_duration_valid, preview_overlay_move, preview_overlay_resize,
     preview_trim, reorder_index, snap_time,
 };
 use crate::session::StudioSession;
+use crate::verb::{Projection, UnresolvedPointing, refuse_edit};
 use crate::viewport::clamp_interaction_time;
 
 pub fn begin(
@@ -19,13 +20,11 @@ pub fn begin(
 ) -> Result<(), EngineError> {
     session.last_gesture_error = None;
     session.snap_time = None;
+    session.touch_projection(Projection::Timeline);
     let clips = hit_clips_on_track(session, track)?;
     let hit = hit_test(&clips, x, session.viewport);
     session.gesture = match hit {
-        TimelineHit::Rail => TimelineGesture::Scrub {
-            start_playhead: session.playhead,
-            start_x: x,
-        },
+        TimelineHit::Rail => TimelineGesture::Point { start_x: x },
         TimelineHit::Trim {
             clip_id,
             edge,
@@ -63,6 +62,16 @@ pub fn update(session: &mut StudioSession, x: f64, snap_off: bool) -> Result<(),
     session.snap_time = None;
     match session.gesture.clone() {
         TimelineGesture::None => Ok(()),
+        TimelineGesture::Point { start_x } => {
+            if crossed_drag_threshold(start_x, x) {
+                session.gesture = TimelineGesture::Scrub {
+                    start_playhead: session.playhead,
+                    start_x,
+                };
+                update_scrub(session, x, snap_off);
+            }
+            Ok(())
+        }
         TimelineGesture::Scrub { .. } => {
             update_scrub(session, x, snap_off);
             Ok(())
@@ -198,8 +207,13 @@ pub fn commit(
     session.snap_time = None;
     match gesture {
         TimelineGesture::None => Ok(GestureOutcome::Idle),
+        TimelineGesture::Point { .. } => {
+            let time = session.viewport.time_at_x(x);
+            session.point_from_timeline_time(time)?;
+            Ok(GestureOutcome::Clicked)
+        }
         TimelineGesture::Scrub { .. } => {
-            let _ = session.point_from_timeline_time(session.playhead);
+            // Playhead is not here. Scrub must not re-point.
             Ok(GestureOutcome::Scrubbed)
         }
         TimelineGesture::Trim {
@@ -211,8 +225,8 @@ pub fn commit(
             scene_id,
             ..
         } => {
-            point_scene(session, &scene_id);
-            let _ = clip_id;
+            session.point_source_for_clip(&clip_id)?;
+            let _ = scene_id;
             if preview_in == original_in && preview_out == original_out {
                 return Ok(GestureOutcome::Clicked);
             }
@@ -226,15 +240,28 @@ pub fn commit(
             .map(|()| GestureOutcome::Applied)
         }
         TimelineGesture::Reorder {
+            clip_id,
             scene_id,
             original_index,
             proposed_index,
             moved,
             ..
         } => {
-            point_scene(session, &scene_id);
+            let _ = scene_id;
             if !moved || proposed_index == original_index {
+                session.point_source_for_clip(&clip_id)?;
                 return Ok(GestureOutcome::Clicked);
+            }
+            let here = session.current_locus()?;
+            if here
+                .as_ref()
+                .is_none_or(|locus| locus.kind != LocusKind::Scene)
+            {
+                let spoken =
+                    refuse_edit(here.as_ref(), &SemanticEdit::ReorderScene { before: None });
+                session.last_spoken = Some(spoken.clone());
+                session.last_gesture_error = Some(spoken);
+                return Ok(GestureOutcome::Failed);
             }
             let names = scene_names(session);
             if names.is_empty() {
@@ -263,10 +290,11 @@ pub fn commit(
             scene_offset,
             ..
         } => {
-            point_clip(session, &clip_id);
             if !moved || preview == original {
+                point_overlay_or_overlap(session, &clip_id, x)?;
                 return Ok(GestureOutcome::Clicked);
             }
+            point_clip(session, &clip_id);
             if !overlay_duration_valid(preview) {
                 session.last_gesture_error = Some("duration must not be negative".into());
                 return Ok(GestureOutcome::Failed);
@@ -282,10 +310,11 @@ pub fn commit(
             scene_offset,
             ..
         } => {
-            point_clip(session, &clip_id);
             if preview == original {
+                point_overlay_or_overlap(session, &clip_id, x)?;
                 return Ok(GestureOutcome::Clicked);
             }
+            point_clip(session, &clip_id);
             if !overlay_duration_valid(preview) {
                 session.last_gesture_error = Some("duration must not be negative".into());
                 return Ok(GestureOutcome::Failed);
@@ -341,7 +370,7 @@ pub fn cursor_at_on_track(session: &StudioSession, x: f64, track: Option<&str>) 
                 CursorKind::Grabbing
             }
             TimelineGesture::Scrub { .. } => CursorKind::Scrub,
-            TimelineGesture::None => CursorKind::Select,
+            TimelineGesture::Point { .. } | TimelineGesture::None => CursorKind::Select,
         };
     }
     let Ok(clips) = hit_clips_on_track(session, track) else {
@@ -662,12 +691,43 @@ fn scene_names(session: &StudioSession) -> Vec<String> {
         .unwrap_or_default()
 }
 
-fn point_scene(session: &mut StudioSession, scene_id: &str) {
-    session.current = Some(LocusId::new(scene_id));
+fn point_clip(session: &mut StudioSession, clip_id: &str) {
+    session.unresolved = None;
+    session.current = Some(LocusId::new(clip_id));
 }
 
-fn point_clip(session: &mut StudioSession, clip_id: &str) {
-    session.current = Some(LocusId::new(clip_id));
+fn point_overlay_or_overlap(
+    session: &mut StudioSession,
+    clip_id: &str,
+    x: f64,
+) -> Result<(), EngineError> {
+    let clips = hit_clips_on_track(session, Some("Text"))?;
+    let at = clips_at_x(&clips, x, session.viewport);
+    if at.len() <= 1 {
+        point_clip(session, clip_id);
+        return Ok(());
+    }
+    let loci = session.loci()?;
+    let candidates: Vec<_> = at
+        .iter()
+        .filter_map(|clip| {
+            loci.iter()
+                .find(|locus| locus.id.as_str() == clip.id || locus.node_id == clip.id)
+                .cloned()
+        })
+        .collect();
+    if candidates.len() <= 1 {
+        point_clip(session, clip_id);
+        return Ok(());
+    }
+    session.current = None;
+    session.unresolved = Some(UnresolvedPointing {
+        projection: Projection::Timeline,
+        time: Some(session.viewport.time_at_x(x)),
+        candidates,
+    });
+    session.last_spoken = Some(session.utterance().spoken_text());
+    Ok(())
 }
 
 fn local_at(timeline_start: Time, scene_offset: Time) -> Time {
