@@ -1,0 +1,1971 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lattice Studio — Flash Chrome Interactive Sketch (PR #34)</title>
+  <style>
+    :root {
+      --bg-base: #0f1117;
+      --bg-panel: #161922;
+      --bg-surface: #1e222d;
+      --bg-subtle: #262c3a;
+      --bg-highlight: #323b4e;
+      --border-color: #2b3242;
+      --border-focus: #4e6ef2;
+      --text-main: #f0f3f8;
+      --text-muted: #8e99af;
+      --text-dim: #5c667a;
+      --accent-blue: #4e6ef2;
+      --accent-blue-hover: #6382ff;
+      --accent-green: #2ecc71;
+      --accent-orange: #f39c12;
+      --accent-purple: #9b59b6;
+      --accent-cyan: #00d2d3;
+      --accent-red: #e74c3c;
+      --pill-bg: #1e2330;
+      --track-video: #2c3e50;
+      --track-video-clip: #34495e;
+      --track-title: #7d3c98;
+      --track-title-clip: #8e44ad;
+      --track-audio: #117864;
+      --track-audio-clip: #16a085;
+      --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      --font-mono: "JetBrains Mono", "SF Mono", Menlo, Consolas, Monaco, monospace;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+    }
+
+    body {
+      font-family: var(--font-sans);
+      background-color: var(--bg-base);
+      color: var(--text-main);
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      font-size: 13px;
+    }
+
+    /* Scene Tour & Guide Bar */
+    .scene-guide-bar {
+      background: linear-gradient(90deg, #181d29 0%, #1f2535 100%);
+      border-bottom: 1px solid #364157;
+      padding: 8px 16px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 12px;
+      z-index: 1000;
+      flex-shrink: 0;
+    }
+
+    .scene-guide-badge {
+      background: #344260;
+      color: #9ab4f7;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-family: var(--font-mono);
+      font-weight: 600;
+      font-size: 11px;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .scene-buttons {
+      display: flex;
+      gap: 6px;
+      flex: 1;
+      overflow-x: auto;
+    }
+
+    .scene-btn {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-color);
+      color: var(--text-muted);
+      padding: 4px 10px;
+      border-radius: 4px;
+      font-size: 11.5px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.15s ease;
+      white-space: nowrap;
+    }
+
+    .scene-btn:hover {
+      background: var(--bg-subtle);
+      color: var(--text-main);
+      border-color: #434f68;
+    }
+
+    .scene-btn.active {
+      background: #27344f;
+      color: #79a1ff;
+      border-color: var(--accent-blue);
+      font-weight: 600;
+      box-shadow: 0 0 8px rgba(78, 110, 242, 0.25);
+    }
+
+    .scene-description-banner {
+      background: rgba(30, 39, 58, 0.85);
+      border-bottom: 1px solid #2e384d;
+      padding: 6px 16px;
+      font-size: 12px;
+      color: #c0ccdf;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-shrink: 0;
+    }
+
+    .scene-description-banner strong {
+      color: #63a4ff;
+    }
+
+    .guide-hint {
+      color: #8c9bb4;
+      font-family: var(--font-mono);
+      font-size: 11px;
+    }
+
+    /* Flash Top Toolbar (Thin Session Strip) */
+    .flash-top-strip {
+      background: var(--bg-panel);
+      border-bottom: 1px solid var(--border-color);
+      height: 42px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 12px;
+      flex-shrink: 0;
+      gap: 16px;
+      z-index: 50;
+    }
+
+    .strip-cluster {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    /* 1. Identity & File Lifecycle */
+    .brand-mark {
+      font-size: 14px;
+      color: var(--accent-blue);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-weight: 700;
+      letter-spacing: -0.2px;
+    }
+
+    .brand-icon {
+      color: #7091ff;
+      font-size: 13px;
+    }
+
+    .file-pill {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      background: var(--bg-subtle);
+      padding: 3px 8px;
+      border-radius: 4px;
+      border: 1px solid var(--border-color);
+      font-family: var(--font-mono);
+      font-size: 11.5px;
+      color: var(--text-muted);
+    }
+
+    .file-name {
+      color: var(--text-main);
+    }
+
+    .dirty-dot {
+      color: var(--accent-orange);
+      font-size: 14px;
+      line-height: 1;
+    }
+
+    .btn-ghost {
+      background: transparent;
+      border: 1px solid transparent;
+      color: var(--text-muted);
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 11.5px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      transition: all 0.12s;
+    }
+
+    .btn-ghost:hover {
+      background: var(--bg-subtle);
+      color: var(--text-main);
+      border-color: var(--border-color);
+    }
+
+    .btn-ghost:active {
+      background: var(--bg-highlight);
+    }
+
+    .kbd-hint {
+      font-size: 10px;
+      color: var(--text-dim);
+      background: rgba(0,0,0,0.25);
+      padding: 1px 4px;
+      border-radius: 3px;
+      border: 1px solid #363e52;
+    }
+
+    /* 2. A/V Transport Clock */
+    .transport-controls {
+      display: flex;
+      align-items: center;
+      background: var(--bg-surface);
+      border: 1px solid var(--border-color);
+      border-radius: 5px;
+      padding: 2px;
+      gap: 2px;
+    }
+
+    .transport-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-main);
+      width: 28px;
+      height: 24px;
+      border-radius: 3px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      font-size: 12px;
+      transition: background 0.1s;
+    }
+
+    .transport-btn:hover {
+      background: var(--bg-highlight);
+      color: #fff;
+    }
+
+    .transport-btn.play-btn {
+      width: auto;
+      padding: 0 8px;
+      font-weight: 600;
+      font-size: 11.5px;
+      gap: 4px;
+      background: var(--bg-subtle);
+    }
+
+    .transport-btn.play-btn:hover {
+      background: var(--accent-blue);
+    }
+
+    .timecode-display {
+      font-family: var(--font-mono);
+      font-size: 12px;
+      background: #11141b;
+      padding: 4px 10px;
+      border-radius: 4px;
+      border: 1px solid #232a39;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      color: #41ffb1;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .timecode-total {
+      color: var(--text-dim);
+    }
+
+    /* 3. Engine Compilation & History */
+    .btn-engine {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-color);
+      color: var(--text-main);
+      padding: 4px 10px;
+      border-radius: 4px;
+      font-size: 11.5px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      transition: all 0.12s;
+    }
+
+    .btn-engine:hover {
+      background: var(--bg-subtle);
+      border-color: #3d475d;
+    }
+
+    .btn-engine.resolve-btn {
+      border-color: #35476a;
+      color: #8bb3ff;
+      background: #192233;
+    }
+
+    .btn-engine.resolve-btn:hover {
+      background: #212e47;
+      border-color: var(--accent-blue);
+      color: #fff;
+    }
+
+    /* 4. Runtime & Device Telemetry */
+    .telemetry-group {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .renderer-toggle {
+      display: flex;
+      background: #12151c;
+      border: 1px solid var(--border-color);
+      border-radius: 4px;
+      padding: 1px;
+    }
+
+    .renderer-pill {
+      background: transparent;
+      border: none;
+      color: var(--text-dim);
+      font-size: 11px;
+      padding: 3px 7px;
+      border-radius: 3px;
+      cursor: pointer;
+      font-family: var(--font-mono);
+      font-weight: 500;
+      transition: all 0.1s;
+    }
+
+    .renderer-pill.active {
+      background: #2b3548;
+      color: #79a8ff;
+      font-weight: 600;
+    }
+
+    .status-pill {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      background: #131b17;
+      border: 1px solid #1c3d2a;
+      color: #4cd18d;
+      padding: 3px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-family: var(--font-mono);
+    }
+
+    .status-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: #2ecc71;
+      box-shadow: 0 0 6px rgba(46, 204, 113, 0.6);
+    }
+
+    .copy-json-btn {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-color);
+      color: var(--text-muted);
+      padding: 3px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-family: var(--font-mono);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .copy-json-btn:hover {
+      background: var(--bg-subtle);
+      color: var(--text-main);
+    }
+
+    /* Main Studio Grid */
+    .studio-workspace {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 240px 1fr 320px;
+      grid-template-rows: 1fr 220px;
+      gap: 1px;
+      background: var(--border-color);
+      min-height: 0;
+      position: relative;
+    }
+
+    .panel {
+      background: var(--bg-panel);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .panel-header {
+      background: var(--bg-surface);
+      padding: 6px 12px;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--text-muted);
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-shrink: 0;
+    }
+
+    /* Left Panel: Sequence Tree */
+    .tree-view {
+      padding: 8px;
+      overflow-y: auto;
+      flex: 1;
+    }
+
+    .tree-node {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 8px;
+      border-radius: 4px;
+      cursor: pointer;
+      color: var(--text-muted);
+      font-size: 12px;
+      margin-bottom: 2px;
+      transition: background 0.1s;
+    }
+
+    .tree-node:hover {
+      background: var(--bg-subtle);
+      color: var(--text-main);
+    }
+
+    .tree-node.active {
+      background: #222c3f;
+      color: #8bb3ff;
+      font-weight: 500;
+    }
+
+    .tree-node.indent-1 { padding-left: 20px; }
+    .tree-node.indent-2 { padding-left: 36px; }
+
+    .node-icon {
+      font-size: 11px;
+      width: 14px;
+      text-align: center;
+      color: var(--text-dim);
+    }
+
+    .node-kind {
+      font-size: 10px;
+      text-transform: uppercase;
+      padding: 1px 4px;
+      border-radius: 3px;
+      font-family: var(--font-mono);
+      background: rgba(255,255,255,0.06);
+    }
+
+    .node-kind.source { color: #8ec5fc; background: #1a2f4c; }
+    .node-kind.scene { color: #f9ca24; background: #3d3112; }
+    .node-kind.title { color: #d980fa; background: #3d1c47; }
+    .node-kind.callout { color: #00d2d3; background: #0c3939; }
+
+    /* Center Top: Canvas Viewport */
+    .canvas-panel {
+      grid-column: 2;
+      grid-row: 1;
+      display: flex;
+      flex-direction: column;
+      background: #090a0e;
+    }
+
+    .viewport-container {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .canvas-frame {
+      width: 100%;
+      max-width: 680px;
+      aspect-ratio: 16 / 9;
+      background: #141721;
+      border: 1px solid #2e3649;
+      border-radius: 4px;
+      position: relative;
+      overflow: hidden;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+      cursor: crosshair;
+    }
+
+    /* Video Simulation Content */
+    .video-backdrop {
+      width: 100%;
+      height: 100%;
+      background: radial-gradient(circle at 70% 30%, #1f293d 0%, #0d121c 70%, #06090f 100%);
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+    }
+
+    .gameplay-hud {
+      position: absolute;
+      top: 12px;
+      left: 14px;
+      color: #e74c3c;
+      font-family: var(--font-mono);
+      font-weight: 700;
+      font-size: 11px;
+      letter-spacing: 1px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      pointer-events: none;
+    }
+
+    .gameplay-hud .hp-bar {
+      width: 100px;
+      height: 8px;
+      background: #331515;
+      border-radius: 2px;
+      overflow: hidden;
+    }
+
+    .gameplay-hud .hp-fill {
+      width: 78%;
+      height: 100%;
+      background: #e74c3c;
+    }
+
+    .video-click-target-hint {
+      position: absolute;
+      bottom: 12px;
+      left: 12px;
+      background: rgba(14, 18, 27, 0.85);
+      border: 1px solid rgba(142, 197, 252, 0.3);
+      color: #8ec5fc;
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 10.5px;
+      font-family: var(--font-mono);
+      pointer-events: none;
+    }
+
+    /* Title Overlay on Canvas */
+    .canvas-overlay-title {
+      position: absolute;
+      top: 32%;
+      left: 28%;
+      width: 44%;
+      height: 36%;
+      border: 1.5px dashed var(--accent-purple);
+      background: rgba(142, 68, 173, 0.12);
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: move;
+      z-index: 10;
+      transition: border-color 0.1s, box-shadow 0.1s;
+    }
+
+    .canvas-overlay-title.active {
+      border: 2px solid #b33771;
+      box-shadow: 0 0 12px rgba(179, 55, 113, 0.4);
+      background: rgba(179, 55, 113, 0.18);
+    }
+
+    .overlay-rendered-text {
+      font-family: 'Impact', 'Arial Black', sans-serif;
+      font-size: 26px;
+      color: #ffffff;
+      text-shadow: 0 2px 8px rgba(0,0,0,0.8), 0 0 12px rgba(217, 128, 250, 0.6);
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      pointer-events: none;
+    }
+
+    /* 4-Corner Resize Handles */
+    .corner-handle {
+      position: absolute;
+      width: 9px;
+      height: 9px;
+      background: #ffffff;
+      border: 1.5px solid #8e44ad;
+      border-radius: 2px;
+      z-index: 20;
+    }
+
+    .corner-handle.tl { top: -5px; left: -5px; cursor: nwse-resize; }
+    .corner-handle.tr { top: -5px; right: -5px; cursor: nesw-resize; }
+    .corner-handle.bl { bottom: -5px; left: -5px; cursor: nesw-resize; }
+    .corner-handle.br { bottom: -5px; right: -5px; cursor: nwse-resize; }
+
+    /* Projection-Local Overlap Popover */
+    .projection-local-popover {
+      position: absolute;
+      top: 48%;
+      left: 45%;
+      background: #181d28;
+      border: 1px solid #4a5a78;
+      border-radius: 6px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.7), 0 0 1px rgba(255,255,255,0.2);
+      padding: 6px;
+      z-index: 100;
+      width: 220px;
+      animation: popIn 0.12s cubic-bezier(0, 0, 0.2, 1);
+      display: none;
+    }
+
+    @keyframes popIn {
+      from { transform: scale(0.95); opacity: 0; }
+      to { transform: scale(1); opacity: 1; }
+    }
+
+    .popover-header {
+      font-size: 10px;
+      text-transform: uppercase;
+      font-family: var(--font-mono);
+      color: #7d8ea8;
+      padding: 3px 6px 5px;
+      border-bottom: 1px solid #2b3548;
+      margin-bottom: 4px;
+      display: flex;
+      justify-content: space-between;
+    }
+
+    .popover-candidate {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 6px 8px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 11.5px;
+      color: var(--text-main);
+      transition: background 0.1s;
+    }
+
+    .popover-candidate:hover {
+      background: #253046;
+      color: #92b7ff;
+    }
+
+    .popover-candidate .cand-kind {
+      font-size: 9.5px;
+      font-family: var(--font-mono);
+      padding: 1px 5px;
+      border-radius: 3px;
+    }
+
+    /* Right Panel: Inspector */
+    .inspector-panel {
+      grid-column: 3;
+      grid-row: 1 / span 2;
+      border-left: 1px solid var(--border-color);
+      display: flex;
+      flex-direction: column;
+      background: var(--bg-panel);
+    }
+
+    .inspector-content {
+      padding: 12px;
+      overflow-y: auto;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .locus-meta-box {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      padding: 10px;
+    }
+
+    .locus-meta-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 6px;
+      font-size: 11.5px;
+    }
+
+    .locus-meta-row:last-child { margin-bottom: 0; }
+
+    .locus-meta-label {
+      color: var(--text-dim);
+      font-family: var(--font-mono);
+      font-size: 10.5px;
+    }
+
+    .locus-meta-val {
+      font-family: var(--font-mono);
+      font-size: 11.5px;
+      color: var(--text-main);
+      font-weight: 600;
+    }
+
+    .prop-group {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .prop-group-title {
+      font-size: 10.5px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--text-dim);
+      font-weight: 700;
+      font-family: var(--font-mono);
+    }
+
+    .prop-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      font-size: 12px;
+    }
+
+    .prop-label {
+      color: var(--text-muted);
+      flex: 1;
+    }
+
+    .prop-input {
+      background: #11141b;
+      border: 1px solid var(--border-color);
+      color: var(--text-main);
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 11.5px;
+      font-family: var(--font-mono);
+      width: 130px;
+    }
+
+    .prop-input:focus {
+      outline: none;
+      border-color: var(--accent-blue);
+    }
+
+    .slider-control {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex: 1.6;
+    }
+
+    .slider-control input[type="range"] {
+      flex: 1;
+      accent-color: var(--accent-blue);
+      cursor: pointer;
+    }
+
+    .slider-val {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      width: 54px;
+      text-align: right;
+      color: #92b7ff;
+    }
+
+    .direct-manip-badge {
+      background: rgba(78, 110, 242, 0.12);
+      border: 1px solid rgba(78, 110, 242, 0.25);
+      border-radius: 4px;
+      padding: 8px 10px;
+      font-size: 11px;
+      color: #9ab4f7;
+      line-height: 1.4;
+    }
+
+    .direct-manip-badge strong {
+      color: #ffffff;
+    }
+
+    /* Utterance Disclosure Bar (Bottom of Inspector / Dock) */
+    .utterance-dock {
+      background: #12151d;
+      border-top: 1px solid var(--border-color);
+      padding: 10px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      flex-shrink: 0;
+    }
+
+    .utterance-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 10px;
+      font-family: var(--font-mono);
+      text-transform: uppercase;
+      color: var(--text-dim);
+    }
+
+    .utterance-mode-tag {
+      background: #232c3f;
+      color: #79a8ff;
+      padding: 1px 6px;
+      border-radius: 3px;
+      font-weight: 600;
+    }
+
+    .utterance-grid {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      font-family: var(--font-mono);
+      font-size: 11px;
+    }
+
+    .utterance-line {
+      display: flex;
+      gap: 6px;
+      line-height: 1.3;
+    }
+
+    .u-key {
+      color: #6a7791;
+      width: 52px;
+      flex-shrink: 0;
+      font-weight: 600;
+    }
+
+    .u-val {
+      color: #d1d8e6;
+      word-break: break-word;
+    }
+
+    .u-val.legal {
+      color: #4cd18d;
+    }
+
+    .u-val.spoken {
+      color: #ffd166;
+      font-style: italic;
+    }
+
+    /* Bottom: Timeline */
+    .timeline-panel {
+      grid-column: 1 / span 2;
+      grid-row: 2;
+      border-top: 1px solid var(--border-color);
+      display: flex;
+      flex-direction: column;
+      background: var(--bg-panel);
+      position: relative;
+    }
+
+    .timeline-ruler {
+      height: 24px;
+      background: #13161f;
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      align-items: center;
+      position: relative;
+      padding-left: 140px;
+      font-family: var(--font-mono);
+      font-size: 9.5px;
+      color: var(--text-dim);
+    }
+
+    .ruler-ticks {
+      display: flex;
+      width: 100%;
+      height: 100%;
+      align-items: flex-end;
+    }
+
+    .ruler-tick {
+      flex: 1;
+      border-left: 1px solid #232a3a;
+      height: 6px;
+      padding-left: 4px;
+      line-height: 1;
+      position: relative;
+    }
+
+    .ruler-tick.major {
+      height: 12px;
+      border-left-color: #3b465d;
+      color: var(--text-muted);
+    }
+
+    .timeline-body {
+      flex: 1;
+      display: flex;
+      position: relative;
+      overflow-x: auto;
+      overflow-y: hidden;
+    }
+
+    .timeline-headers {
+      width: 140px;
+      background: var(--bg-surface);
+      border-right: 1px solid var(--border-color);
+      display: flex;
+      flex-direction: column;
+      flex-shrink: 0;
+      z-index: 5;
+    }
+
+    .track-header {
+      height: 48px;
+      padding: 0 10px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--border-color);
+      font-size: 11px;
+      font-weight: 500;
+      color: var(--text-muted);
+    }
+
+    .timeline-tracks-area {
+      flex: 1;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      background: #0d1017;
+    }
+
+    .track-lane {
+      height: 48px;
+      border-bottom: 1px solid #1c2230;
+      position: relative;
+      display: flex;
+      align-items: center;
+      padding: 4px 0;
+    }
+
+    /* Timeline Clips */
+    .timeline-clip {
+      position: absolute;
+      height: 38px;
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      padding: 0 8px;
+      font-size: 11.5px;
+      font-weight: 500;
+      color: #ffffff;
+      cursor: pointer;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.4);
+      transition: outline 0.1s, box-shadow 0.1s;
+      overflow: visible;
+    }
+
+    .timeline-clip.clip-source {
+      left: 10px;
+      width: 82%;
+      background: linear-gradient(90deg, #243348 0%, #2e4360 100%);
+      border: 1px solid #3c567a;
+    }
+
+    .timeline-clip.clip-source.active {
+      border: 1.5px solid #63a4ff;
+      box-shadow: 0 0 10px rgba(99, 164, 255, 0.4);
+    }
+
+    .timeline-clip.clip-title {
+      left: 18%;
+      width: 42%;
+      background: linear-gradient(90deg, #5b2c6f 0%, #7d3c98 100%);
+      border: 1px solid #9b59b6;
+    }
+
+    .timeline-clip.clip-title.active {
+      border: 1.5px solid #d980fa;
+      box-shadow: 0 0 10px rgba(217, 128, 250, 0.4);
+    }
+
+    .timeline-clip.clip-audio {
+      left: 10px;
+      width: 82%;
+      background: linear-gradient(90deg, #0e4b3e 0%, #117864 100%);
+      border: 1px solid #16a085;
+    }
+
+    .timeline-clip.clip-audio.active {
+      border: 1.5px solid #2ecc71;
+      box-shadow: 0 0 10px rgba(46, 204, 113, 0.4);
+    }
+
+    /* Edge Trim Handles */
+    .edge-trim-handle {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      width: 8px;
+      background: rgba(255, 255, 255, 0.15);
+      cursor: ew-resize;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 10;
+      transition: background 0.1s;
+    }
+
+    .edge-trim-handle:hover {
+      background: #79a8ff;
+    }
+
+    .edge-trim-handle.left { left: 0; border-top-left-radius: 4px; border-bottom-left-radius: 4px; }
+    .edge-trim-handle.right { right: 0; border-top-right-radius: 4px; border-bottom-right-radius: 4px; }
+
+    /* Top Corner Fade Handles */
+    .fade-corner-handle {
+      position: absolute;
+      top: 0;
+      width: 10px;
+      height: 10px;
+      background: #ffffff;
+      border-radius: 2px;
+      cursor: pointer;
+      z-index: 15;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.6);
+    }
+
+    .fade-corner-handle.in { left: 2px; }
+    .fade-corner-handle.out { right: 2px; }
+
+    /* Inline Audio Gain Line */
+    .audio-gain-line {
+      position: absolute;
+      left: 0;
+      right: 0;
+      height: 2px;
+      background: #2ecc71;
+      top: 50%;
+      cursor: ns-resize;
+      box-shadow: 0 0 4px rgba(46, 204, 113, 0.8);
+    }
+
+    .audio-gain-node {
+      position: absolute;
+      left: 35%;
+      top: -4px;
+      width: 10px;
+      height: 10px;
+      background: #ffffff;
+      border: 2px solid #2ecc71;
+      border-radius: 50%;
+    }
+
+    /* Playhead Indicator */
+    .timeline-playhead {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      left: 28%;
+      width: 1px;
+      background: #41ffb1;
+      z-index: 50;
+      pointer-events: none;
+    }
+
+    .playhead-head {
+      position: absolute;
+      top: -24px;
+      left: -6px;
+      width: 13px;
+      height: 18px;
+      background: #41ffb1;
+      clip-path: polygon(0% 0%, 100% 0%, 100% 65%, 50% 100%, 0% 65%);
+    }
+
+    /* Toast Notification for Locks / Actions */
+    .toast-container {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      z-index: 2000;
+    }
+
+    .toast {
+      background: #1e2638;
+      border: 1px solid #3b4968;
+      color: #f0f3f8;
+      padding: 10px 14px;
+      border-radius: 6px;
+      font-size: 12px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.6);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      animation: toastSlide 0.2s cubic-bezier(0, 0, 0.2, 1);
+    }
+
+    @keyframes toastSlide {
+      from { transform: translateY(12px); opacity: 0; }
+      to { transform: translateY(0); opacity: 1; }
+    }
+
+    .toast.success { border-color: #2ecc71; color: #a3f7c4; }
+    .toast.info { border-color: #4e6ef2; color: #a9c0ff; }
+    .toast.warn { border-color: #f39c12; color: #fed38f; }
+
+    /* Modal / Context Menu Simulation */
+    .context-menu {
+      position: absolute;
+      background: #181c26;
+      border: 1px solid #354056;
+      border-radius: 5px;
+      padding: 4px;
+      min-width: 180px;
+      z-index: 1000;
+      box-shadow: 0 8px 20px rgba(0,0,0,0.6);
+      display: none;
+    }
+
+    .context-menu-item {
+      padding: 6px 10px;
+      font-size: 12px;
+      border-radius: 3px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      color: var(--text-main);
+    }
+
+    .context-menu-item:hover {
+      background: var(--accent-blue);
+      color: #ffffff;
+    }
+
+    .context-menu-item .shortcut {
+      color: var(--text-dim);
+      font-size: 10.5px;
+      font-family: var(--font-mono);
+    }
+
+    .context-menu-item:hover .shortcut {
+      color: rgba(255,255,255,0.8);
+    }
+  </style>
+</head>
+<body>
+
+  <!-- 1. Interactive Scenario Switcher (Top Tour Guide) -->
+  <header class="scene-guide-bar">
+    <div class="scene-guide-badge">
+      <span>FLASH CHROME SKETCH</span>
+    </div>
+    <div class="scene-buttons">
+      <button class="scene-btn active" onclick="activateScene('session-strip')">
+        <span>1. Thin Session Strip (No Verb Bank)</span>
+      </button>
+      <button class="scene-btn" onclick="activateScene('source-here')">
+        <span>2. Source Here (Gain / Fade / Trim)</span>
+      </button>
+      <button class="scene-btn" onclick="activateScene('scene-here')">
+        <span>3. Scene Here (Split / Delete via Keys/Context)</span>
+      </button>
+      <button class="scene-btn" onclick="activateScene('video-click')">
+        <span>4. Video Click = Source Clip</span>
+      </button>
+      <button class="scene-btn" onclick="activateScene('overlap-local')">
+        <span>5. Overlap Projection-Local</span>
+      </button>
+    </div>
+  </header>
+
+  <div class="scene-description-banner" id="sceneBanner">
+    <div>
+      <span id="sceneDescription"><strong>Scene 1: Session strip without verb bank</strong> — Top bar has 4 clean clusters (Lifecycle, Transport, Engine, Telemetry). No locus-taking buttons.</span>
+    </div>
+    <div class="guide-hint">
+      Shortcuts active: <kbd>Space</kbd> Play, <kbd>[</kbd>/<kbd>]</kbd> Trim, <kbd>S</kbd>/<kbd>Cmd+K</kbd> Split, <kbd>Backspace</kbd> Delete
+    </div>
+  </div>
+
+  <!-- 2. Flash Chrome Top Strip (Thin Session Strip) -->
+  <nav class="flash-top-strip" id="flashTopStrip">
+    <!-- Cluster 1: Identity & File Lifecycle -->
+    <div class="strip-cluster">
+      <div class="brand-mark">
+        <span class="brand-icon">◆</span>
+        <span>Lattice Studio</span>
+      </div>
+      <div class="file-pill">
+        <span class="file-name">gameplay-commentary/main.vel</span>
+        <span class="dirty-dot" title="Modified / Dirty">•</span>
+      </div>
+      <button class="btn-ghost" onclick="showToast('Open Video dialog opened', 'info')">
+        <span>Open Video…</span>
+      </button>
+      <button class="btn-ghost" onclick="showToast('Saved main.vel to disk', 'success')">
+        <span>Save</span>
+        <span class="kbd-hint">Ctrl+S</span>
+      </button>
+    </div>
+
+    <!-- Cluster 2: A/V Transport Clock -->
+    <div class="strip-cluster">
+      <div class="transport-controls">
+        <button class="transport-btn" onclick="seekStart()" title="Seek to Start (⏮)">⏮</button>
+        <button class="transport-btn play-btn" id="playBtn" onclick="togglePlay()">
+          <span id="playIcon">▶</span>
+          <span id="playText">Play</span>
+        </button>
+      </div>
+      <div class="timecode-display">
+        <span id="currentTimecode">00:01.240</span>
+        <span class="timecode-total">/ 00:08.500</span>
+      </div>
+    </div>
+
+    <!-- Cluster 3: Engine Compilation & History -->
+    <div class="strip-cluster">
+      <button class="btn-engine resolve-btn" onclick="triggerResolve()">
+        <span>⚡ Resolve</span>
+        <span class="kbd-hint">Ctrl+R</span>
+      </button>
+      <button class="btn-ghost" onclick="showToast('Undo working session edit', 'info')" title="Undo (Ctrl+Z)">
+        <span>↶ Undo</span>
+      </button>
+      <button class="btn-ghost" onclick="showToast('Redo working session edit', 'info')" title="Redo (Ctrl+Y)">
+        <span>↷ Redo</span>
+      </button>
+    </div>
+
+    <!-- Cluster 4: Runtime & Device Telemetry -->
+    <div class="strip-cluster telemetry-group">
+      <div class="renderer-toggle">
+        <button class="renderer-pill active" id="pillCpu" onclick="setRenderer('CPU')">CPU</button>
+        <button class="renderer-pill" id="pillDx12" onclick="setRenderer('GPU DX12')">DX12</button>
+      </div>
+      <div class="status-pill" title="Audio Device: 48kHz 2ch PCM Active">
+        <div class="status-dot"></div>
+        <span>48kHz OK</span>
+      </div>
+      <button class="copy-json-btn" onclick="copyLocusJson()" title="Copy active locus JSON to clipboard">
+        <span>📋 Copy locus JSON</span>
+      </button>
+    </div>
+  </nav>
+
+  <!-- 3. Main Studio Workspace Layout -->
+  <main class="studio-workspace">
+    
+    <!-- Left: Sequence Tree -->
+    <aside class="panel">
+      <div class="panel-header">
+        <span>Sequence Tree</span>
+        <span style="font-size: 10px; color: var(--text-dim);">main.vel</span>
+      </div>
+      <div class="tree-view">
+        <div class="tree-node" onclick="setLocus('scene', 'demo', 'main.vel:3')">
+          <span class="node-icon">▾</span>
+          <span class="node-kind scene">scene</span>
+          <span>demo</span>
+        </div>
+        <div class="tree-node indent-1 active" id="treeNodeFight" onclick="setLocus('source', 'fight', 'main.vel:4')">
+          <span class="node-icon">•</span>
+          <span class="node-kind source">source</span>
+          <span>clip fight</span>
+        </div>
+        <div class="tree-node indent-1" id="treeNodeTitle" onclick="setLocus('title', 'Hello', 'main.vel:16')">
+          <span class="node-icon">•</span>
+          <span class="node-kind title">title</span>
+          <span>title Hello</span>
+        </div>
+        <div class="tree-node indent-1" onclick="setLocus('callout', 'zone', 'main.vel:22')">
+          <span class="node-icon">•</span>
+          <span class="node-kind callout">callout</span>
+          <span>callout zone</span>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Center Top: Canvas Viewport -->
+    <section class="panel canvas-panel">
+      <div class="panel-header">
+        <span>Canvas / Preview</span>
+        <span style="font-size: 10px; color: #79a8ff;">1920×1080 (Normalized Space)</span>
+      </div>
+      <div class="viewport-container">
+        <div class="canvas-frame" id="canvasFrame">
+          
+          <!-- Simulated Video Backdrop (Lock: Video-Click Points Source Clip) -->
+          <div class="video-backdrop" id="videoBackdrop" onclick="handleCanvasVideoClick(event)">
+            <div class="gameplay-hud">
+              <span>BOSS FIGHT</span>
+              <div class="hp-bar"><div class="hp-fill"></div></div>
+            </div>
+            
+            <div class="video-click-target-hint">
+              <span>[Click video surface → commits source:fight]</span>
+            </div>
+
+            <!-- Title Overlay on Canvas -->
+            <div class="canvas-overlay-title" id="canvasTitleOverlay" onclick="handleTitleOverlayClick(event)">
+              <div class="corner-handle tl" onmousedown="event.stopPropagation()"></div>
+              <div class="corner-handle tr" onmousedown="event.stopPropagation()"></div>
+              <div class="corner-handle bl" onmousedown="event.stopPropagation()"></div>
+              <div class="corner-handle br" onmousedown="event.stopPropagation()"></div>
+              <span class="overlay-rendered-text" id="canvasTitleText">HELLO</span>
+            </div>
+
+            <!-- Projection-Local Overlap Popover (Lock: Overlap Projection-Local) -->
+            <div class="projection-local-popover" id="projectionPopover">
+              <div class="popover-header">
+                <span>Pick Ambiguous Locus</span>
+                <span style="cursor: pointer;" onclick="hidePopover(event)">✕</span>
+              </div>
+              <div class="popover-candidate" onclick="resolveOverlapCandidate('title', 'Hello', 'main.vel:16', event)">
+                <span>title:Hello</span>
+                <span class="cand-kind node-kind title">Title</span>
+              </div>
+              <div class="popover-candidate" onclick="resolveOverlapCandidate('source', 'fight', 'main.vel:4', event)">
+                <span>clip:fight</span>
+                <span class="cand-kind node-kind source">Source</span>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Right: Inspector & Utterance Dock -->
+    <aside class="panel inspector-panel">
+      <div class="panel-header">
+        <span>Inspector</span>
+        <span id="inspectorLocusBadge" class="node-kind source">SOURCE</span>
+      </div>
+
+      <div class="inspector-content" id="inspectorContent">
+        <!-- Locus Metadata Box -->
+        <div class="locus-meta-box">
+          <div class="locus-meta-row">
+            <span class="locus-meta-label">COMMITTED</span>
+            <span class="locus-meta-val" id="metaLocusId">clip fight</span>
+          </div>
+          <div class="locus-meta-row">
+            <span class="locus-meta-label">FILE SPAN</span>
+            <span class="locus-meta-val" id="metaFileSpan" style="color: #9ab4f7;">main.vel:4</span>
+          </div>
+          <div class="locus-meta-row">
+            <span class="locus-meta-label">ORIGIN</span>
+            <span class="locus-meta-val" id="metaOrigin" style="color: var(--text-dim);">invocation `clip`</span>
+          </div>
+        </div>
+
+        <!-- Dynamic Panels by Locus Type -->
+        
+        <!-- Source Properties (Gain, Fade, Range) -->
+        <div id="sourceProps" class="prop-group">
+          <span class="prop-group-title">Audio & Fade Routing</span>
+          <div class="prop-row">
+            <span class="prop-label">Gain</span>
+            <div class="slider-control">
+              <input type="range" id="gainSlider" min="-24" max="12" step="0.5" value="-3.0" oninput="updateGain(this.value)">
+              <span class="slider-val" id="gainVal">-3.0 dB</span>
+            </div>
+          </div>
+          <div class="prop-row">
+            <span class="prop-label">Fade In (s)</span>
+            <input type="text" class="prop-input" id="fadeInInput" value="0.50s" onchange="showToast('Fade in updated to ' + this.value, 'info')">
+          </div>
+          <div class="prop-row">
+            <span class="prop-label">Fade Out (s)</span>
+            <input type="text" class="prop-input" id="fadeOutInput" value="0.50s" onchange="showToast('Fade out updated to ' + this.value, 'info')">
+          </div>
+
+          <span class="prop-group-title" style="margin-top: 8px;">Source Range</span>
+          <div class="prop-row">
+            <span class="prop-label">In Point</span>
+            <input type="text" class="prop-input" value="00:00.000" readonly>
+          </div>
+          <div class="prop-row">
+            <span class="prop-label">Out Point</span>
+            <input type="text" class="prop-input" value="00:08.500" readonly>
+          </div>
+
+          <div class="direct-manip-badge" style="margin-top: 6px;">
+            <strong>Affordance Routing:</strong><br>
+            • Gain: Inspector slider or Timeline inline handle<br>
+            • Fade: Clip top corners or duration fields<br>
+            • Trim: Clip left/right edges or <kbd>[</kbd> / <kbd>]</kbd>
+          </div>
+        </div>
+
+        <!-- Title Properties (Lock: Title fields ONLY on Title) -->
+        <div id="titleProps" class="prop-group" style="display: none;">
+          <span class="prop-group-title">Title Parameters</span>
+          <div class="prop-row">
+            <span class="prop-label">Text</span>
+            <input type="text" class="prop-input" id="titleTextInput" value="HELLO" oninput="updateTitleText(this.value)">
+          </div>
+          <div class="prop-row">
+            <span class="prop-label">Font Family</span>
+            <input type="text" class="prop-input" value="Impact" readonly>
+          </div>
+          <div class="prop-row">
+            <span class="prop-label">Font Size</span>
+            <input type="text" class="prop-input" value="72px">
+          </div>
+          <div class="prop-row">
+            <span class="prop-label">Normalized Pos</span>
+            <input type="text" class="prop-input" value="0.50, 0.50" readonly>
+          </div>
+
+          <div class="direct-manip-badge" style="margin-top: 6px;">
+            <strong>Affordance Routing:</strong><br>
+            • Position: Drag Canvas overlay body<br>
+            • Resize: Drag 4-corner handles<br>
+            • Text/Font: Inspector fields only
+          </div>
+        </div>
+
+        <!-- Scene Properties (Split & Delete Routing) -->
+        <div id="sceneProps" class="prop-group" style="display: none;">
+          <span class="prop-group-title">Scene Operations</span>
+          <div class="prop-row">
+            <span class="prop-label">Scene ID</span>
+            <input type="text" class="prop-input" value="demo" readonly>
+          </div>
+          <div class="prop-row">
+            <span class="prop-label">Temporal Span</span>
+            <input type="text" class="prop-input" value="00:00.000 - 00:08.500" readonly>
+          </div>
+
+          <div class="direct-manip-badge" style="margin-top: 6px;">
+            <strong>Affordance Routing:</strong><br>
+            • Split: Press <kbd>S</kbd> / <kbd>Cmd+K</kbd> at playhead or Timeline context menu<br>
+            • Delete: Press <kbd>Backspace</kbd> / <kbd>Delete</kbd><br>
+            • Reorder: Drag scene in Timeline<br>
+            <em>(No top toolbar buttons needed!)</em>
+          </div>
+
+          <button class="btn-engine" style="margin-top: 8px; width: 100%; justify-content: center;" onclick="splitSceneAtPlayhead()">
+            ✂ Split Scene at Playhead (S)
+          </button>
+        </div>
+
+      </div>
+
+      <!-- Utterance Dock (Disclosure-Only Semantic Witness Bar) -->
+      <footer class="utterance-dock">
+        <div class="utterance-header">
+          <span>Utterance Witness</span>
+          <span class="utterance-mode-tag">DISCLOSURE-ONLY</span>
+        </div>
+        <div class="utterance-grid">
+          <div class="utterance-line">
+            <span class="u-key">HERE:</span>
+            <span class="u-val" id="uHere">source clip:fight (main.vel:4)</span>
+          </div>
+          <div class="utterance-line">
+            <span class="u-key">LEGAL:</span>
+            <span class="u-val legal" id="uLegal">trim, set-gain, set-fade</span>
+          </div>
+          <div class="utterance-line">
+            <span class="u-key">ROUTED:</span>
+            <span class="u-val" id="uRouted">Timeline Edges, Audio Inspector, Corner Handles</span>
+          </div>
+          <div class="utterance-line">
+            <span class="u-key">SPOKEN:</span>
+            <span class="u-val spoken" id="uSpoken">"trim source range [in..out] via edge handles or [ / ] shortcuts"</span>
+          </div>
+        </div>
+      </footer>
+    </aside>
+
+    <!-- Bottom: Timeline -->
+    <section class="panel timeline-panel">
+      <div class="timeline-ruler">
+        <div class="ruler-ticks">
+          <div class="ruler-tick major">00:00.000</div>
+          <div class="ruler-tick"></div>
+          <div class="ruler-tick major">00:02.000</div>
+          <div class="ruler-tick"></div>
+          <div class="ruler-tick major">00:04.000</div>
+          <div class="ruler-tick"></div>
+          <div class="ruler-tick major">00:06.000</div>
+          <div class="ruler-tick"></div>
+          <div class="ruler-tick major">00:08.000</div>
+        </div>
+      </div>
+
+      <div class="timeline-body">
+        <div class="timeline-headers">
+          <div class="track-header">Track 0 [Video]</div>
+          <div class="track-header">Track 1 [Title]</div>
+          <div class="track-header">Track 2 [Audio]</div>
+        </div>
+
+        <div class="timeline-tracks-area" id="timelineTracksArea" oncontextmenu="handleTimelineContextMenu(event)">
+          
+          <!-- Playhead -->
+          <div class="timeline-playhead" id="timelinePlayhead">
+            <div class="playhead-head"></div>
+          </div>
+
+          <!-- Video Track Lane -->
+          <div class="track-lane">
+            <div class="timeline-clip clip-source active" id="timelineClipFight" onclick="setLocus('source', 'fight', 'main.vel:4', event)">
+              <div class="edge-trim-handle left" title="Drag to trim In point" onmousedown="event.stopPropagation(); showToast('Trim In Handle dragged', 'info')"></div>
+              <div class="fade-corner-handle in" title="Drag to adjust Fade In" onmousedown="event.stopPropagation(); showToast('Fade In Handle dragged', 'info')"></div>
+              <span>clip:fight (Source)</span>
+              <div class="fade-corner-handle out" title="Drag to adjust Fade Out" onmousedown="event.stopPropagation(); showToast('Fade Out Handle dragged', 'info')"></div>
+              <div class="edge-trim-handle right" title="Drag to trim Out point" onmousedown="event.stopPropagation(); showToast('Trim Out Handle dragged', 'info')"></div>
+            </div>
+          </div>
+
+          <!-- Title Track Lane -->
+          <div class="track-lane">
+            <div class="timeline-clip clip-title" id="timelineClipTitle" onclick="setLocus('title', 'Hello', 'main.vel:16', event)">
+              <div class="edge-trim-handle left" onmousedown="event.stopPropagation()"></div>
+              <span id="timelineTitleLabel">title:Hello (Title)</span>
+              <div class="edge-trim-handle right" onmousedown="event.stopPropagation()"></div>
+            </div>
+          </div>
+
+          <!-- Audio Track Lane -->
+          <div class="track-lane">
+            <div class="timeline-clip clip-audio" id="timelineClipAudio" onclick="setLocus('source', 'fight', 'main.vel:4', event)">
+              <span>PCM 48kHz — fight.wav</span>
+              <div class="audio-gain-line" id="audioGainLine" title="Drag to adjust Gain (dB)">
+                <div class="audio-gain-node"></div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Context Menu for Timeline -->
+  <div class="context-menu" id="timelineContextMenu">
+    <div class="context-menu-item" onclick="splitSceneAtPlayhead()">
+      <span>Split Scene at Playhead</span>
+      <span class="shortcut">S / Cmd+K</span>
+    </div>
+    <div class="context-menu-item" onclick="deleteCurrentLocus()">
+      <span>Delete Selected</span>
+      <span class="shortcut">Backspace</span>
+    </div>
+    <div class="context-menu-item" onclick="showToast('Set In point to playhead', 'info')">
+      <span>Set In Point</span>
+      <span class="shortcut">[</span>
+    </div>
+    <div class="context-menu-item" onclick="showToast('Set Out point to playhead', 'info')">
+      <span>Set Out Point</span>
+      <span class="shortcut">]</span>
+    </div>
+  </div>
+
+  <!-- Toast Container -->
+  <div class="toast-container" id="toastContainer"></div>
+
+  <!-- Interactive Logic -->
+  <script>
+    // State Store
+    const state = {
+      locusKind: 'source', // 'source' | 'scene' | 'title' | 'callout' | 'none'
+      locusId: 'fight',
+      span: 'main.vel:4',
+      isPlaying: false,
+      currentTime: 1.24,
+      totalTime: 8.5,
+      gain: -3.0,
+      fadeIn: 0.5,
+      fadeOut: 0.5,
+      titleText: 'HELLO',
+      renderer: 'CPU'
+    };
+
+    // Scene Tour Setup
+    const scenes = {
+      'session-strip': {
+        title: 'Scene 1: Session strip without verb bank',
+        desc: 'Top bar has 4 clean clusters (Lifecycle, Transport, Engine, Telemetry). All locus-taking verbs (Set In/Out, Split, Delete, Gain, Fade) are permanently removed from top chrome.',
+        action: () => {
+          setLocus('source', 'fight', 'main.vel:4');
+          highlightElement('flashTopStrip');
+        }
+      },
+      'source-here': {
+        title: 'Scene 2: Source here (gain/fade via inspector slider / timeline handles)',
+        desc: 'When Source is committed, Gain/Fade controls appear in Inspector and direct-manipulation handles appear on the Timeline clip. No top toolbar button needed.',
+        action: () => {
+          setLocus('source', 'fight', 'main.vel:4');
+          highlightElement('sourceProps');
+          highlightElement('timelineClipFight');
+        }
+      },
+      'scene-here': {
+        title: 'Scene 3: Scene here (split/delete via keys/context, not a top bank)',
+        desc: 'When Scene is committed, Split and Delete are routed to keyboard shortcuts (S, Cmd+K, Backspace) and context menu. Engine validates legality against playhead.',
+        action: () => {
+          setLocus('scene', 'demo', 'main.vel:3');
+          highlightElement('sceneProps');
+        }
+      },
+      'video-click': {
+        title: 'Scene 4: Video click = source clip (Lock)',
+        desc: 'Clicking the video canvas or video track directly names `source:clip` identity without silent promotion to containing `scene`.',
+        action: () => {
+          handleCanvasVideoClick({ stopPropagation: () => {} });
+          highlightElement('videoBackdrop');
+        }
+      },
+      'overlap-local': {
+        title: 'Scene 5: Overlap stays Projection-Local (Lock)',
+        desc: 'Clicking overlapping elements (Title + Video) opens a localized popover candidate picker at the click point. No global modal is triggered.',
+        action: () => {
+          showProjectionPopoverAtCenter();
+        }
+      }
+    };
+
+    function activateScene(sceneKey) {
+      document.querySelectorAll('.scene-btn').forEach(btn => btn.classList.remove('active'));
+      const buttons = Array.from(document.querySelectorAll('.scene-btn'));
+      const idx = ['session-strip', 'source-here', 'scene-here', 'video-click', 'overlap-local'].indexOf(sceneKey);
+      if (idx >= 0 && buttons[idx]) buttons[idx].classList.add('active');
+
+      const sc = scenes[sceneKey];
+      if (sc) {
+        document.getElementById('sceneDescription').innerHTML = `<strong>${sc.title}</strong> — ${sc.desc}`;
+        sc.action();
+      }
+    }
+
+    function highlightElement(id) {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.style.transition = 'outline 0.2s, box-shadow 0.2s';
+      el.style.outline = '2px solid #63a4ff';
+      el.style.boxShadow = '0 0 16px rgba(99, 164, 255, 0.4)';
+      setTimeout(() => {
+        el.style.outline = '';
+        el.style.boxShadow = '';
+      }, 1400);
+    }
+
+    // Set Active Locus (One Locus / One Legal Set / One Utterance)
+    function setLocus(kind, id, span, event) {
+      if (event) event.stopPropagation();
+      state.locusKind = kind;
+      state.locusId = id;
+      state.span = span;
+
+      // Update Inspector Badge & Meta
+      const badge = document.getElementById('inspectorLocusBadge');
+      badge.className = `node-kind ${kind}`;
+      badge.textContent = kind.toUpperCase();
+
+      document.getElementById('metaLocusId').textContent = `${kind} ${id}`;
+      document.getElementById('metaFileSpan').textContent = span;
+      document.getElementById('metaOrigin').textContent = `invocation \`${kind}\``;
+
+      // Dynamic Property Visibility (Lock: Title fields ONLY on Title)
+      document.getElementById('sourceProps').style.display = (kind === 'source') ? 'flex' : 'none';
+      document.getElementById('titleProps').style.display = (kind === 'title') ? 'flex' : 'none';
+      document.getElementById('sceneProps').style.display = (kind === 'scene') ? 'flex' : 'none';
+
+      // Update Tree Nodes
+      document.querySelectorAll('.tree-node').forEach(node => node.classList.remove('active'));
+      if (kind === 'source' && id === 'fight') document.getElementById('treeNodeFight')?.classList.add('active');
+      if (kind === 'title' && id === 'Hello') document.getElementById('treeNodeTitle')?.classList.add('active');
+
+      // Update Canvas Overlays
+      const titleOverlay = document.getElementById('canvasTitleOverlay');
+      if (kind === 'title') {
+        titleOverlay.classList.add('active');
+      } else {
+        titleOverlay.classList.remove('active');
+      }
+
+      // Update Timeline Clips
+      document.getElementById('timelineClipFight').classList.toggle('active', kind === 'source');
+      document.getElementById('timelineClipTitle').classList.toggle('active', kind === 'title');
+      document.getElementById('timelineClipAudio').classList.toggle('active', kind === 'source');
+
+      // Update Utterance (Disclosure-Only)
+      updateUtterance(kind, id, span);
+    }
+
+    function updateUtterance(kind, id, span) {
+      const uHere = document.getElementById('uHere');
+      const uLegal = document.getElementById('uLegal');
+      const uRouted = document.getElementById('uRouted');
+      const uSpoken = document.getElementById('uSpoken');
+
+      uHere.textContent = `${kind} ${id} (${span})`;
+
+      if (kind === 'source') {
+        uLegal.textContent = 'trim, set-gain, set-fade';
+        uRouted.textContent = 'Timeline Edges, Audio Inspector, Corner Handles';
+        uSpoken.textContent = '"trim source range [in..out] via edge handles or [ / ] shortcuts"';
+      } else if (kind === 'title') {
+        uLegal.textContent = 'title, set-position, resize-overlay, delete';
+        uRouted.textContent = 'Canvas Drag, Corner Handles, Inspector Text';
+        uSpoken.textContent = '"Drag canvas overlay to move. Drag corners to resize. Edit text in Inspector."';
+      } else if (kind === 'scene') {
+        uLegal.textContent = 'split, delete, reorder-scene';
+        uRouted.textContent = 'Keyboard (S, Backspace), Timeline Context Menu';
+        uSpoken.textContent = '"split scene at playhead time t via shortcut S / Cmd+K"';
+      } else if (kind === 'callout') {
+        uLegal.textContent = 'callout, set-position, resize-overlay, delete';
+        uRouted.textContent = 'Canvas Drag, Inspector';
+        uSpoken.textContent = '"move callout overlay in normalized canvas space"';
+      } else {
+        uLegal.textContent = 'none';
+        uRouted.textContent = 'none';
+        uSpoken.textContent = '"No locus committed. Click on clip, title, or scene to target operations."';
+      }
+    }
+
+    // Canvas Video Click (Lock: Video Click Points Source Clip)
+    function handleCanvasVideoClick(e) {
+      if (e) e.stopPropagation();
+      setLocus('source', 'fight', 'main.vel:4');
+      showToast('Video surface clicked → Committed source:fight (No silent promotion to scene)', 'info');
+      hidePopover();
+    }
+
+    // Title Overlay Click
+    function handleTitleOverlayClick(e) {
+      if (e) e.stopPropagation();
+      setLocus('title', 'Hello', 'main.vel:16');
+      showToast('Title overlay clicked → Committed title:Hello', 'info');
+      hidePopover();
+    }
+
+    // Projection-Local Overlap Simulation
+    function showProjectionPopoverAtCenter() {
+      const popover = document.getElementById('projectionPopover');
+      popover.style.display = 'block';
+      showToast('Overlap touched → Projection-local candidate card opened', 'warn');
+    }
+
+    function resolveOverlapCandidate(kind, id, span, event) {
+      if (event) event.stopPropagation();
+      setLocus(kind, id, span);
+      hidePopover();
+      showToast(`Overlap resolved locally to ${kind}:${id}`, 'success');
+    }
+
+    function hidePopover(e) {
+      if (e) e.stopPropagation();
+      document.getElementById('projectionPopover').style.display = 'none';
+    }
+
+    // Property Updates
+    function updateGain(val) {
+      state.gain = val;
+      document.getElementById('gainVal').textContent = `${parseFloat(val).toFixed(1)} dB`;
+      // Update inline gain line height
+      const normalizedTop = 50 - (parseFloat(val) * 1.5);
+      document.getElementById('audioGainLine').style.top = `${Math.max(10, Math.min(90, normalizedTop))}%`;
+    }
+
+    function updateTitleText(text) {
+      state.titleText = text;
+      document.getElementById('canvasTitleText').textContent = text || '(EMPTY)';
+      document.getElementById('timelineTitleLabel').textContent = `title:${text} (Title)`;
+    }
+
+    // Transport Simulation
+    function togglePlay() {
+      state.isPlaying = !state.isPlaying;
+      const playIcon = document.getElementById('playIcon');
+      const playText = document.getElementById('playText');
+      if (state.isPlaying) {
+        playIcon.textContent = '⏸';
+        playText.textContent = 'Pause';
+        startPlaybackLoop();
+      } else {
+        playIcon.textContent = '▶';
+        playText.textContent = 'Play';
+      }
+    }
+
+    let playTimer = null;
+    function startPlaybackLoop() {
+      if (playTimer) clearInterval(playTimer);
+      playTimer = setInterval(() => {
+        if (!state.isPlaying) {
+          clearInterval(playTimer);
+          return;
+        }
+        state.currentTime += 0.05;
+        if (state.currentTime > state.totalTime) {
+          state.currentTime = 0;
+        }
+        updateTimecodeUI();
+      }, 50);
+    }
+
+    function seekStart() {
+      state.currentTime = 0;
+      updateTimecodeUI();
+      showToast('Transport: Seek to 00:00.000', 'info');
+    }
+
+    function updateTimecodeUI() {
+      const mins = Math.floor(state.currentTime / 60);
+      const secs = (state.currentTime % 60).toFixed(3);
+      const formatted = `00:${secs < 10 ? '0' : ''}${secs}`;
+      document.getElementById('currentTimecode').textContent = formatted;
+
+      // Update playhead position on timeline
+      const pct = (state.currentTime / state.totalTime) * 82 + 10;
+      document.getElementById('timelinePlayhead').style.left = `${pct}%`;
+    }
+
+    // Engine & Telemetry Actions
+    function triggerResolve() {
+      showToast('Engine: Generated media & fonts resolved into lattice.lock.json', 'success');
+    }
+
+    function setRenderer(renderer) {
+      state.renderer = renderer;
+      document.getElementById('pillCpu').classList.toggle('active', renderer === 'CPU');
+      document.getElementById('pillDx12').classList.toggle('active', renderer !== 'CPU');
+      showToast(`Renderer switched explicitly to: ${renderer}`, 'info');
+    }
+
+    function copyLocusJson() {
+      const jsonPayload = {
+        locus: {
+          kind: state.locusKind,
+          id: state.locusId,
+          span: state.span
+        },
+        engine_legal_edits: document.getElementById('uLegal').textContent.split(', '),
+        utterance_spoken: document.getElementById('uSpoken').textContent
+      };
+      navigator.clipboard?.writeText(JSON.stringify(jsonPayload, null, 2));
+      showToast('Copied Locus JSON to clipboard (Agent parity confirmed)', 'success');
+    }
+
+    // Keyboard Shortcuts & Verbs
+    function splitSceneAtPlayhead() {
+      if (state.locusKind === 'scene' || state.locusKind === 'source') {
+        showToast(`Split committed at ${document.getElementById('currentTimecode').textContent}`, 'success');
+      } else {
+        showToast('Fail-closed: Split requires an active Scene or Source clip locus', 'warn');
+      }
+      hideContextMenu();
+    }
+
+    function deleteCurrentLocus() {
+      if (state.locusKind === 'none') {
+        showToast('Fail-closed: Delete is no-op when no locus is committed', 'warn');
+      } else {
+        showToast(`Deleted ${state.locusKind}:${state.locusId} from project`, 'success');
+        setLocus('none', 'none', 'none');
+      }
+      hideContextMenu();
+    }
+
+    // Context Menu Handling
+    function handleTimelineContextMenu(e) {
+      e.preventDefault();
+      const menu = document.getElementById('timelineContextMenu');
+      menu.style.display = 'block';
+      menu.style.left = `${e.clientX}px`;
+      menu.style.top = `${e.clientY}px`;
+    }
+
+    function hideContextMenu() {
+      document.getElementById('timelineContextMenu').style.display = 'none';
+    }
+
+    window.addEventListener('click', () => {
+      hideContextMenu();
+    });
+
+    window.addEventListener('keydown', (e) => {
+      if (e.target.tagName === 'INPUT') return;
+
+      if (e.code === 'Space') {
+        e.preventDefault();
+        togglePlay();
+      } else if (e.key === 's' || e.key === 'S' || ((e.metaKey || e.ctrlKey) && e.key === 'k')) {
+        e.preventDefault();
+        splitSceneAtPlayhead();
+      } else if (e.key === 'Backspace' || e.key === 'Delete') {
+        e.preventDefault();
+        deleteCurrentLocus();
+      } else if (e.key === '[') {
+        e.preventDefault();
+        if (state.locusKind === 'source') {
+          showToast(`Set In Point at ${document.getElementById('currentTimecode').textContent}`, 'info');
+        } else {
+          showToast('Fail-closed: Trim requires an active source binding', 'warn');
+        }
+      } else if (e.key === ']') {
+        e.preventDefault();
+        if (state.locusKind === 'source') {
+          showToast(`Set Out Point at ${document.getElementById('currentTimecode').textContent}`, 'info');
+        } else {
+          showToast('Fail-closed: Trim requires an active source binding', 'warn');
+        }
+      } else if (e.key === 'Escape') {
+        hidePopover();
+        hideContextMenu();
+      }
+    });
+
+    // Toast Notification System
+    function showToast(msg, type = 'info') {
+      const container = document.getElementById('toastContainer');
+      const toast = document.createElement('div');
+      toast.className = `toast ${type}`;
+      toast.textContent = msg;
+      container.appendChild(toast);
+      setTimeout(() => {
+        toast.style.opacity = '0';
+        toast.style.transform = 'translateY(8px)';
+        toast.style.transition = 'all 0.2s';
+        setTimeout(() => toast.remove(), 200);
+      }, 2600);
+    }
+
+    // Initialize Default State
+    setLocus('source', 'fight', 'main.vel:4');
+  </script>
+</body>
+</html>
