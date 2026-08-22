@@ -395,6 +395,7 @@ fn apply_gain(
         && let Some(span) =
             modifier_value_span(inv, "by").or_else(|| inv.args.get(1).map(Expr::span))
     {
+        let span = include_leading_minus(source, span);
         return Ok(apply_splices(source, vec![(span, db.to_string())]));
     }
     let insert_at = Span::new(
@@ -815,6 +816,35 @@ fn string_arg_span(inv: &Invocation) -> Option<Span> {
         Some(Expr::String { span, .. }) => Some(*span),
         _ => None,
     }
+}
+
+/// Include a unary minus immediately before `span` so `gain … by -3` + `SetGain { -3 }`
+/// cannot splice into `by --3`. The VEL quantity span should already cover the sign;
+/// this is the Engine-side belt for any leftover exclusive-sign span.
+fn include_leading_minus(source: &str, span: Span) -> Span {
+    let start = usize::try_from(span.start).unwrap_or(0);
+    if start == 0 {
+        return span;
+    }
+    let Some(prefix) = source.get(..start) else {
+        return span;
+    };
+    let trimmed = prefix.trim_end_matches([' ', '\t']);
+    if trimmed.as_bytes().last() == Some(&b'-')
+        && trimmed
+            .len()
+            .checked_sub(1)
+            .is_none_or(|i| !trimmed.as_bytes()[i].is_ascii_digit())
+    {
+        let minus_at = u32::try_from(trimmed.len() - 1).unwrap_or(span.start);
+        return Span::new(
+            minus_at,
+            span.end,
+            span.line,
+            span.column.saturating_sub(span.start.saturating_sub(minus_at)),
+        );
+    }
+    span
 }
 
 fn modifier_value_span(inv: &Invocation, name: &str) -> Option<Span> {
