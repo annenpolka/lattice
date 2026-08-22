@@ -1,0 +1,16 @@
+{
+  "locus": {
+    "error": "edit: unknown locus freeze:source:clip"
+  },
+  "playhead": "0s",
+  "duration": "5s",
+  "playing": false,
+  "interaction": "idle",
+  "gesture": {
+    "kind": "none"
+  },
+  "drag": null,
+  "last_gesture_error": null,
+  "reason": "tree-select",
+  "focused": "studio"
+}

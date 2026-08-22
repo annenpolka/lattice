@@ -2,11 +2,27 @@
 
 Observed at `main` `60ce42f51ce64c3db05ce693b1605b249828038e` (PR #2 `feat/alpha-studio`). This is an implementation report, not a UI proposal. No Studio UI code was changed.
 
-Screenshots below are the Linux `--ui-fixture timeline-basic` window already recorded against this Alpha shell (`docs/screenshots/chi64-open-window.png`, `docs/screenshots/chi67-this-head-after.png`). They show the current chrome, not a target layout.
+## Capture evidence (this branch)
 
-![Title locus shared across SEQUENCE / VEL / Inspector / Timeline](../screenshots/studio-observe-a-title-locus.png)
+Linux X11 + lavapipe. Window grab is `ffmpeg -window_id` of the Studio `_NET_WM_PID` client. Clicks use `smoke_geom` + verified client origin, except Inspector Review (visible button). These shots prove only the four chrome claims below. They are not a layout proposal.
 
-![Scene locus; Inspector still shows a Title text field; header still says Scene demo](../screenshots/studio-observe-a-scene-locus.png)
+| Claim | Shot | Keep / add |
+|---|---|---|
+| 1. Header stuck as `{file} · Scene demo` | [`studio-observe-a-title-locus.png`](../screenshots/studio-observe-a-title-locus.png) | kept (already on branch) |
+| 2. Inspector Title text when locus is not a title | [`studio-observe-a-scene-locus.png`](../screenshots/studio-observe-a-scene-locus.png) | kept (scene locus, Title text = `demo`) |
+| 3. SEQUENCE `freeze:{source.id}` click → inspect fail | [`studio-observe-a-freeze-click.png`](../screenshots/studio-observe-a-freeze-click.png) | added this run |
+| 4a. Empty Review (button only, no proposal surface) | [`studio-observe-a-title-locus.png`](../screenshots/studio-observe-a-title-locus.png) | kept (before) |
+| 4b. Title-only propose, no picture | [`studio-observe-a-review-title-propose.png`](../screenshots/studio-observe-a-review-title-propose.png) | added this run |
+
+Claim 3 state after the freeze click ([`studio-observe-a-freeze-click.state.json`](../artifacts/studio-observe-a-freeze-click.state.json)): `locus.error = "edit: unknown locus freeze:source:clip"`. The window paints `layout failed` / `no timeline`. That is inspect-fail, not a rebound (rebind is `replace_working` only).
+
+![1 + 4a. Header `main.vel · Scene demo`; Inspector has Review button but no Review surface](../screenshots/studio-observe-a-title-locus.png)
+
+![2. Scene locus selected; Inspector still shows Title text `demo`](../screenshots/studio-observe-a-scene-locus.png)
+
+![4b. Review after Inspector Review: `set title text "Hello"`, VEL diff, Apply/Reject, no picture](../screenshots/studio-observe-a-review-title-propose.png)
+
+![3. Click SEQUENCE `freeze freeze` (`freeze:source:clip`): layout failed](../screenshots/studio-observe-a-freeze-click.png)
 
 ## What is already real
 
@@ -184,7 +200,7 @@ Grounded in code and the screenshots above. Not a backlog dressed as vision.
 
 ### Locus / tree / inspector
 
-- Synthetic freeze rows: `TreeNode { id: format!("freeze:{}", source.id), selected: false }` (`layout.rs`). Click still calls `point_at` with that string. `Engine::inspect` will not find it; `rebind_current` then jumps to first title/scene.
+- Synthetic freeze rows: `TreeNode { id: format!("freeze:{}", source.id), selected: false }` (`layout.rs`). Click still calls `point_at` with that string. Captured: `inspect` fails (`unknown locus freeze:source:clip`), `layout()` errors, the window paints `layout failed`. `rebind_current` is not on `point_at`; it runs after `replace_working` only.
 - Media / sequence / placement loci exist in Engine (`loci_from_project`) but SEQUENCE only lists sequence/scene/source/title/callout/speech. No media browser.
 - Inspector always paints "Title text" + Apply/Review, then copies `locus.label` into `title_draft` (`adopt_locus_label`). On a scene, the field shows `demo` (screenshot 2). Apply still goes through `SemanticEdit::Title` (Engine can insert a title on a scene; the chrome does not say that).
 - `propose_title_text` is the only Review entry from the window. Engine can propose any `SemanticEdit`; the UI does not.
