@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Semantic compass · Studio interaction sketch</title>
+  <link rel="stylesheet" href="sketch.css" />
+</head>
+<body data-scene="a" data-here="title" data-playhead="0" data-narrow="false">
+  <a class="skip" href="#compass">Skip to compass</a>
+
+  <header class="mast">
+    <div class="brand">
+      <svg class="mark" viewBox="0 0 32 32" aria-hidden="true">
+        <circle cx="16" cy="16" r="15" fill="none" stroke="currentColor" stroke-width="1.2" />
+        <path d="M16 3 L18.2 13.8 L29 16 L18.2 18.2 L16 29 L13.8 18.2 L3 16 L13.8 13.8 Z" />
+      </svg>
+      <div>
+        <p class="eyebrow">Lattice Studio · interaction sketch</p>
+        <h1>Semantic compass</h1>
+      </div>
+    </div>
+    <p class="thesis">
+      One committed <code>LocusId</code> is <strong>here</strong>.
+      Playhead, draft, and probe are readings around that center — not second selections.
+    </p>
+  </header>
+
+  <nav class="walk" aria-label="Scene walk">
+    <a href="#a" data-go="a" class="is-current">A Open</a>
+    <a href="#b" data-go="b">B Point video</a>
+    <a href="#c" data-go="c">C Scrub</a>
+    <a href="#d" data-go="d">D Overlap</a>
+    <a href="#e" data-go="e">E Verbs</a>
+    <a href="#f" data-go="f">F Freeze</a>
+    <a href="#g" data-go="g">G Review</a>
+    <a href="#h" data-go="h">H Narrow</a>
+  </nav>
+
+  <p class="caption" id="scene-caption"></p>
+
+  <main id="compass">
+    <section class="rose-wrap" aria-labelledby="here-label">
+      <div class="rose" id="rose">
+        <svg viewBox="0 0 240 240" aria-hidden="true">
+          <circle class="ring" cx="120" cy="120" r="112" />
+          <circle class="ring faint" cx="120" cy="120" r="86" />
+          <g class="ticks">
+            <path d="M120 8 L120 28" />
+            <path d="M120 212 L120 232" />
+            <path d="M8 120 L28 120" />
+            <path d="M212 120 L232 120" />
+            <path d="M36 36 L50 50" />
+            <path d="M190 36 L176 50" />
+            <path d="M36 204 L50 190" />
+            <path d="M190 204 L176 190" />
+          </g>
+        </svg>
+        <div class="here" id="here-card">
+          <p class="k" id="here-label">committed LocusId</p>
+          <p class="id" id="here-id"></p>
+          <p class="name" id="here-name"></p>
+          <p class="kind" id="here-kind"></p>
+        </div>
+      </div>
+      <p class="rose-note">Center is the only semantic address. Nothing else in this sketch is a selection.</p>
+    </section>
+
+    <section class="session" aria-label="Session state">
+      <article class="sess playhead">
+        <p class="k">playhead · not here</p>
+        <p class="v" id="playhead-readout">0.0s</p>
+        <p class="s">transient clock · <code>evaluate_at</code></p>
+      </article>
+      <article class="sess draft" id="draft-card">
+        <p class="k">draft · not here</p>
+        <p class="v" id="draft-readout">none</p>
+        <p class="s">optional <code>EditProposal</code></p>
+      </article>
+      <article class="sess probe" id="probe-card">
+        <p class="k">probe · not here</p>
+        <p class="v" id="probe-readout">none</p>
+        <p class="s">ephemeral candidates</p>
+      </article>
+    </section>
+
+    <div class="readings">
+      <section class="card ledger" aria-labelledby="ledger-h">
+        <h2 id="ledger-h">Projection ledger</h2>
+        <p class="hint">Present, structurally absent, or currently unavailable. Navigate is optional.</p>
+        <ul id="ledger-list"></ul>
+      </section>
+
+      <section class="card observe" aria-labelledby="observe-h">
+        <h2 id="observe-h">Observation</h2>
+        <p class="hint"><code>evaluate_at(playhead)</code> — a picture, not a projection field of the locus.</p>
+        <div class="frame" id="observe-frame">
+          <button type="button" class="footage" id="footage" data-action="point-scene" title="Identified video clip" aria-label="Identified video clip, scene demo"></button>
+          <span class="clip-plate" id="clip-plate">identified video clip</span>
+          <button type="button" class="overlay-title" id="overlay-title" hidden data-action="point-title">Checkpoint</button>
+          <div class="overlay-hold" id="overlay-hold" hidden>held</div>
+          <div class="absence" id="observe-absence" hidden></div>
+        </div>
+      </section>
+
+      <section class="card temporal" aria-labelledby="temporal-h">
+        <h2 id="temporal-h">Temporal reading</h2>
+        <p class="hint">Local time → TimeMap → content time. Rate zero is a freeze, not a row.</p>
+        <pre id="temporal-readout"></pre>
+      </section>
+
+      <section class="card verbs" aria-labelledby="verbs-h">
+        <h2 id="verbs-h">Legal verbs</h2>
+        <p class="hint">Engine-named <code>SemanticEdit</code>s from here. Fail-closed. No fallback off-here.</p>
+        <div id="verb-compare" hidden class="verb-compare"></div>
+        <ul id="verb-list"></ul>
+      </section>
+    </div>
+
+    <section class="card review" id="review-card" hidden aria-labelledby="review-h">
+      <h2 id="review-h">Review · EditProposal</h2>
+      <p class="hint">Revision-bound preview of one transition. Current source is unchanged until Apply. Direct commit stays legal.</p>
+      <div class="review-switch">
+        <button type="button" data-action="review-both">Both proposals</button>
+        <button type="button" data-action="review-title">Title text only</button>
+        <button type="button" data-action="review-position">SetPosition only</button>
+        <button type="button" data-action="review-direct">Direct Title text</button>
+      </div>
+      <div class="review-grid" id="review-body"></div>
+    </section>
+
+    <section class="card probe-sheet" id="probe-sheet" hidden aria-labelledby="probe-h">
+      <h2 id="probe-h">Coordinate probe</h2>
+      <p class="hint">Unresolved pointing. Candidates are session state. Choosing one commits the shared locus.</p>
+      <ul id="probe-list"></ul>
+      <button type="button" class="ghost" data-action="cancel-probe">Cancel probe</button>
+    </section>
+
+    <section class="timeline" aria-label="Timeline projection">
+      <div class="tl-head">
+        <h2>Timeline projection</h2>
+        <p>
+          <span class="hit scrub">Audio rail · scrub</span>
+          <span class="hit point">Clip body · point</span>
+          <span class="hit probe">Bare coordinate · probe</span>
+        </p>
+      </div>
+      <div class="tl-body">
+        <div class="ruler" id="ruler" data-action="probe-coord" title="Coordinate without item identity">
+          <span>0s</span><span>2s</span><span>4s</span><span>6s</span><span>8s</span><span>10s</span>
+        </div>
+        <div class="rail video">
+          <span class="lane">Video</span>
+          <button type="button" class="clip scene" style="left:0%;width:100%" data-action="point-scene" id="clip-scene">
+            scene demo · 0s–10s
+          </button>
+          <button type="button" class="clip title" style="left:10%;width:30%" data-action="point-title" id="clip-title">
+            title Checkpoint
+          </button>
+          <button type="button" class="freeze-mark" style="left:52%;width:15%" data-action="explain-freeze" id="freeze-mark" title="TimeMap hold — not a locus">
+            freeze hold
+          </button>
+        </div>
+        <div class="rail audio" id="audio-rail" data-action="scrub-audio" title="Scrub moves the clock only">
+          <span class="lane">Audio</span>
+          <span class="clip source" style="left:0%;width:100%">source fight</span>
+          <span class="speech" style="left:52%;width:15%">speech</span>
+        </div>
+        <div class="playhead-line" id="playhead-line"></div>
+      </div>
+    </section>
+
+    <section class="card source" id="source-card" aria-labelledby="source-h">
+      <h2 id="source-h">Source reading</h2>
+      <p class="hint">VEL is the mutable string. Provenance is present. Navigate does not gate editing.</p>
+      <pre id="source-readout"></pre>
+    </section>
+
+    <section class="card narrow-ledger" id="narrow-card" hidden aria-labelledby="narrow-h">
+      <h2 id="narrow-h">At ~800px</h2>
+      <ul id="narrow-list"></ul>
+    </section>
+  </main>
+
+  <footer>
+    <p>Sketch of the semantic compass. Not Studio chrome, not a pane inventory, not an Engine.</p>
+    <p>Seek is the only ordinary coupling: it moves the clock and retains here. Scrub never points. Locus change never auto-seeks.</p>
+  </footer>
+
+  <script src="sketch.js"></script>
+</body>
+</html>
