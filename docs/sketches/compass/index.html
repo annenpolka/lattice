@@ -121,8 +121,9 @@
       <h2 id="review-h">Review · EditProposal</h2>
       <p class="hint">Revision-bound preview of one transition. Current source is unchanged until Apply. Direct commit stays legal.</p>
       <div class="review-switch">
-        <button type="button" data-action="review-title">After Title text</button>
-        <button type="button" data-action="review-position">After SetPosition</button>
+        <button type="button" data-action="review-both">Both proposals</button>
+        <button type="button" data-action="review-title">Title text only</button>
+        <button type="button" data-action="review-position">SetPosition only</button>
         <button type="button" data-action="review-direct">Direct Title text</button>
       </div>
       <div class="review-grid" id="review-body"></div>
@@ -151,7 +152,7 @@
         <div class="rail video">
           <span class="lane">Video</span>
           <button type="button" class="clip scene" style="left:0%;width:100%" data-action="point-scene" id="clip-scene">
-            scene demo
+            scene demo · 0s–10s
           </button>
           <button type="button" class="clip title" style="left:10%;width:30%" data-action="point-title" id="clip-title">
             title Checkpoint

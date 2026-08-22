@@ -256,7 +256,13 @@
     var lines = [];
     lines.push("clock " + fmt(t));
     if (hereKey === "title") {
-      lines.push("item local " + (t - 1).toFixed(1) + "s of title span 1.0s–4.0s");
+      if (t < 1) {
+        lines.push("item local not yet in span 1.0s–4.0s");
+      } else if (t >= 4) {
+        lines.push("item local after span 1.0s–4.0s");
+      } else {
+        lines.push("item local " + (t - 1).toFixed(1) + "s of title span 1.0s–4.0s");
+      }
       lines.push(active(LOCI.title, t) ? "content: title text is observable" : "content: outside-playhead");
     } else if (hereKey === "scene") {
       lines.push("item local " + fmt(t) + " of scene demo 0s–10s");
@@ -403,35 +409,11 @@
     }
   }
 
-  function renderReview() {
-    var card = $("review-card");
-    var show = state.scene === "g";
-    card.hidden = !show;
-    if (!show) return;
-    var kind = state.reviewKind;
-    var direct = kind === "direct";
-    document.querySelectorAll(".review-switch button").forEach(function (btn) {
-      btn.classList.toggle(
-        "is-on",
-        (kind === "title" && btn.getAttribute("data-action") === "review-title") ||
-          (kind === "position" && btn.getAttribute("data-action") === "review-position") ||
-          (kind === "direct" && btn.getAttribute("data-action") === "review-direct")
-      );
-    });
-    var body = $("review-body");
-    if (direct) {
-      body.innerHTML =
-        "<article><h3>Direct</h3><p>Same verb <code>Title</code>, same target <code>demo:title:checkpoint</code>, same definition scope.</p><p>Committed immediately through the Engine. One rewrite, one compile, one Undo. Review was not opened.</p><p class=\"meta\">Source now holds Hold the line. No proposal remains.</p></article>" +
-        "<article><h3>Policy</h3><p>Proposal versus direct is a workflow choice, not an edit-kind gate. Title text and SetPosition may take either path.</p></article>";
-      state.draft = null;
-      state.applied = "direct-title";
-      return;
-    }
-    var p = proposals()[kind];
-    state.draft = p;
-    var stale = state.applied === "direct-title";
-    body.innerHTML =
-      "<article><h3>Proposal</h3><p><code>locus_id</code> " +
+  function proposalCard(p, heading) {
+    return (
+      "<article><h3>" +
+      heading +
+      "</h3><p><code>locus_id</code> " +
       p.locus_id +
       "</p><p><code>base_revision</code> " +
       p.base_revision +
@@ -441,12 +423,62 @@
       p.scope +
       " · " +
       p.effect +
-      "</p></article>" +
-      "<article><h3>Current observation</h3><p>" +
+      "</p><p>" +
       p.observation +
       "</p><pre>" +
       p.diff +
-      "</pre>" +
+      "</pre></article>"
+    );
+  }
+
+  function renderReview() {
+    var card = $("review-card");
+    var show = state.scene === "g";
+    card.hidden = !show;
+    if (!show) {
+      if (state.scene !== "g") state.draft = null;
+      return;
+    }
+    var kind = state.reviewKind;
+    $("review-body").setAttribute("data-cols", kind === "both" ? "3" : "2");
+    document.querySelectorAll(".review-switch button").forEach(function (btn) {
+      var act = btn.getAttribute("data-action");
+      btn.classList.toggle(
+        "is-on",
+        (kind === "both" && act === "review-both") ||
+          (kind === "title" && act === "review-title") ||
+          (kind === "position" && act === "review-position") ||
+          (kind === "direct" && act === "review-direct")
+      );
+    });
+    var body = $("review-body");
+    var all = proposals();
+    if (kind === "direct") {
+      body.innerHTML =
+        "<article><h3>Direct</h3><p>Same verb <code>Title</code>, same target <code>demo:title:checkpoint</code>, same definition scope.</p><p>Committed immediately through the Engine. One rewrite, one compile, one Undo. Review was not opened.</p><p class=\"meta\">Source now holds Hold the line. No proposal remains.</p></article>" +
+        "<article><h3>Policy</h3><p>Proposal versus direct is a workflow choice, not an edit-kind gate. Title text and SetPosition may take either path.</p></article>";
+      state.draft = null;
+      state.applied = "direct-title";
+      return;
+    }
+    if (kind === "both") {
+      state.draft = all.title;
+      body.innerHTML =
+        proposalCard(all.title, "After Title text") +
+        proposalCard(all.position, "After SetPosition") +
+        (state.applied === "direct-title"
+          ? '<article><h3>Apply</h3><p class="meta">stale-proposal · base_revision no longer matches current source. Studio does not retarget.</p></article>'
+          : '<article><h3>Apply is not a gate</h3><p>Either proposal keeps current source until Apply. Direct Title text remains legal.</p><div class="review-actions"><button type="button" class="apply" data-action="apply-proposal">Apply Title text</button><button type="button" class="reject" data-action="reject-proposal">Reject</button></div></article>');
+      return;
+    }
+    var p = all[kind];
+    state.draft = p;
+    var stale = state.applied === "direct-title";
+    body.innerHTML =
+      proposalCard(p, "Proposal") +
+      "<article><h3>Current observation</h3><p>" +
+      p.observation +
+      "</p>" +
       (stale
         ? '<p class="meta">stale-proposal · base_revision no longer matches current source. Studio does not retarget.</p>'
         : '<div class="review-actions"><button type="button" class="apply" data-action="apply-proposal">Apply</button><button type="button" class="reject" data-action="reject-proposal">Reject</button></div>') +
@@ -515,12 +547,6 @@
     $("playhead-line").style.left = "calc(64px + (100% - 64px) * " + t / 10 + ")";
     $("clip-title").classList.toggle("is-here", state.here === "title");
     $("clip-scene").classList.toggle("is-here", state.here === "scene");
-    $("draft-card").classList.toggle("is-on", !!state.draft);
-    $("draft-readout").textContent = state.draft
-      ? state.reviewKind === "position"
-        ? "SetPosition"
-        : "Title text"
-      : "none";
     $("temporal-readout").textContent = temporalFor(state.here, t, state.freezeOpen);
     $("source-readout").textContent = VEL[state.here] || VEL.scene;
     $("freeze-mark").classList.toggle("is-open", state.freezeOpen);
@@ -533,6 +559,12 @@
     renderReview();
     renderProbe();
     renderNarrow();
+    $("draft-card").classList.toggle("is-on", !!state.draft);
+    $("draft-readout").textContent = state.draft
+      ? state.reviewKind === "position"
+        ? "SetPosition"
+        : "Title text"
+      : "none";
   }
 
   function enterScene(scene) {
@@ -565,7 +597,7 @@
     } else if (scene === "g") {
       state.here = "title";
       state.playhead = 2.4;
-      state.reviewKind = "title";
+      state.reviewKind = "both";
     } else if (scene === "h") {
       state.here = "title";
       state.playhead = 0;
@@ -651,6 +683,11 @@
     }
     if (action === "explain-freeze") {
       state.freezeOpen = !state.freezeOpen;
+      render();
+      return;
+    }
+    if (action === "review-both") {
+      state.reviewKind = "both";
       render();
       return;
     }

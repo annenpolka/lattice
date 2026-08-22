@@ -286,9 +286,10 @@ code {
   color: transparent;
   font-size: 0;
   background:
-    radial-gradient(circle at 30% 40%, #3a4a32 0%, transparent 42%),
-    linear-gradient(160deg, #1a2218, #0b0d10 60%);
-  opacity: 0.35;
+    radial-gradient(circle at 28% 42%, #4a6a3a 0%, transparent 38%),
+    radial-gradient(circle at 70% 30%, #2a3a48 0%, transparent 30%),
+    linear-gradient(160deg, #243028, #10140f 55%, #0b0d10);
+  opacity: 0.22;
   cursor: pointer;
 }
 .footage.is-live { opacity: 1; }
@@ -415,6 +416,7 @@ code {
   grid-template-columns: 1fr 1fr;
   gap: 10px;
 }
+.review-grid[data-cols="3"] { grid-template-columns: 1fr 1fr 1fr; }
 .review-grid article {
   background: var(--panel-2);
   border: 1px solid var(--line);
@@ -537,6 +539,8 @@ button.clip.scene {
   background: #1c1e18;
   color: #c8c2b0;
   border-color: #3a3c32;
+  text-align: left;
+  padding-right: 40%;
 }
 .rail .source {
   background: #15202a;
