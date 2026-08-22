@@ -233,7 +233,7 @@
       top: 14%;
       width: 28%;
     }
-    .overlay.moved { left: 14%; bottom: 22%; }
+    .overlay.moved { left: 6%; bottom: 42%; width: 34%; }
     .handle {
       position: absolute;
       width: 10px;
@@ -323,9 +323,10 @@
     .title-box:focus { outline: 1px solid var(--commit); }
     .insp-actions { display: flex; flex-wrap: wrap; gap: 6px; }
     .review {
-      margin-top: 12px;
-      padding-top: 8px;
-      border-top: 1px solid var(--line);
+      margin: 8px 0 10px;
+      padding: 8px;
+      border: 1px solid var(--line);
+      background: #10151c;
     }
     .review h3 { color: var(--muted); }
     .review .state { color: var(--amber); margin: 4px 0; }
@@ -676,6 +677,7 @@
     function inventory(kind) {
       const rows = [];
       const ph = fmt(state.playhead);
+      const compact = !!state.review;
       if (kind === "title") {
         rows.push(["Source span", LOCI.title.span]);
         rows.push(["Timeline range", "1.00s–4.00s"]);
@@ -685,8 +687,10 @@
             : ["Visual", "not visible at " + ph + "; active 1.00s–4.00s", true]
         );
         rows.push(["TimeMap / freeze", "absent — titles are not sources", true]);
-        rows.push(["Scene / sequence", "scene demo · sequence main"]);
-        rows.push(["Canvas", "evaluate_at at " + ph + " — not a locus field", true]);
+        if (!compact) {
+          rows.push(["Scene / sequence", "scene demo · sequence main"]);
+          rows.push(["Canvas", "evaluate_at at " + ph + " — not a locus field", true]);
+        }
       } else if (kind === "callout") {
         rows.push(["Source span", LOCI.callout.span]);
         rows.push(["Timeline range", "2.00s–3.00s"]);
@@ -768,7 +772,7 @@
       if (!state.review) return "";
       if (state.review === "title-pending") {
         return (
-          '<div class="review">' +
+          '<div class="review" id="review-slot">' +
           "<h3>Review</h3>" +
           '<p class="state">Pending · Engine proposal · base_revision must still match</p>' +
           '<p class="field">SetTitleText on <b>title:hello</b> · scope: definition</p>' +
@@ -784,7 +788,7 @@
       }
       if (state.review === "title-committed") {
         return (
-          '<div class="review">' +
+          '<div class="review" id="review-slot">' +
           "<h3>Review</h3>" +
           '<p class="state committed">Committed evidence · already rewritten</p>' +
           '<p class="field">SetTitleText on <b>title:hello</b> · scope: definition</p>' +
@@ -798,7 +802,7 @@
         );
       }
       return (
-        '<div class="review">' +
+        '<div class="review" id="review-slot">' +
         "<h3>Review</h3>" +
         '<p class="state committed">Committed evidence · already rewritten</p>' +
         '<p class="field">SetPosition on <b>title:hello</b> · scope: this placement</p>' +
@@ -905,9 +909,12 @@
 
     function inspectorHtml() {
       const locus = LOCI[state.locus];
+      const heading =
+        state.locus === "title" ? 'title "' + state.titleText + '"' : locus.heading;
       let html = "";
-      html += '<div class="insp-id here">' + locus.heading + "</div>";
+      html += '<div class="insp-id here">' + heading + "</div>";
       html += '<div class="insp-kind">' + locus.origin + " · " + locus.id + "</div>";
+      html += reviewHtml();
       html += '<div class="insp-block"><h3>Provenance</h3>';
       html += '<div class="field">Defined in <b>' + locus.defined + "</b></div>";
       html += '<div class="field absent">Always present. Not a checkpoint.</div>';
@@ -918,8 +925,13 @@
       html += '<div class="insp-block"><h3>Projections</h3>' + inventory(state.locus) + "</div>";
       html += '<div class="insp-block"><h3>Legal verbs</h3>' + verbs(state.locus) + "</div>";
       html += titleFields();
-      html += reviewHtml();
       return html;
+    }
+
+    function scrollReviewIntoView(root) {
+      const pane = root.querySelector(".inspector .pane-body");
+      const slot = root.querySelector("#review-slot");
+      if (pane && slot) pane.scrollTop = Math.max(0, slot.offsetTop - 8);
     }
 
     function treeRow(kind, depth, label) {
@@ -939,7 +951,8 @@
       const lines = VEL.map(function (line) {
         const here = line.marks && line.marks.indexOf(state.locus) !== -1;
         const cls = here ? "vel-line here" : "vel-line";
-        return '<div class="' + cls + '" data-point="' + (line.marks ? line.marks[0] : "") + '">' + (line.t || " ") + "</div>";
+        const text = line.n === 16 ? '  title "' + state.titleText + '" {' : line.t;
+        return '<div class="' + cls + '" data-point="' + (line.marks ? line.marks[0] : "") + '">' + (text || " ") + "</div>";
       }).join("");
       return (
         '<div class="vel-status">locus at ' +
@@ -1071,6 +1084,7 @@
         "</div></div>";
 
       bind(studio);
+      scrollReviewIntoView(studio);
     }
 
     function bind(root) {
