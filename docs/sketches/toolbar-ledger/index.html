@@ -393,7 +393,17 @@
       border: 1px solid var(--line);
     }
     .rail.scene { top: 4px; }
-    .rail.source { top: 40px; }
+    .rail.source { top: 44px; }
+    .rail::after {
+      position: absolute;
+      left: 8px;
+      top: 6px;
+      font-size: 10px;
+      color: var(--dim);
+      pointer-events: none;
+    }
+    .rail.scene::after { content: "scene"; }
+    .rail.source::after { content: "source"; }
     .span {
       position: absolute;
       top: 3px;
@@ -406,13 +416,15 @@
       overflow: hidden;
     }
     .span.scene {
+      top: 7px;
       left: 8%;
       width: 62%;
-      background: #243044;
-      color: #c5d2e8;
-      border: 1px solid #3a4a62;
+      background: #2a3d5c;
+      color: #d5e4ff;
+      border: 1px solid #6a8cc8;
     }
     .span.source {
+      top: 47px;
       left: 12%;
       width: 48%;
       background: #2a3a28;
@@ -727,16 +739,37 @@
       tlNote: document.getElementById("tlNote")
     };
 
-    function setScene(name) {
+    function applyShot() {
+      const params = new URLSearchParams(location.search);
+      const hash = (location.hash || "").replace("#", "");
+      const scene = params.get("scene") || hash || "strip";
+      setScene(scene, { silent: true });
+      const shot = params.get("shot");
+      if (shot === "gain-invoke") beginInvoke("set-gain");
+      if (shot === "split-invoke") beginInvoke("split");
+      if (shot === "video-refuse") {
+        state.here = "source";
+        refuse("needs-scene", "関連 scene · intro では legal。here は source clip のまま。Navigate。");
+      }
+      if (shot === "overlap-pick") pick("scene");
+    }
+
+    function setScene(name, opts) {
       state.scene = name;
       state.invoke = null;
-      state.toast = null;
+      if (!opts || !opts.keepToast) state.toast = null;
       if (name === "strip" || name === "source" || name === "video") state.here = "source";
       if (name === "scene") state.here = "scene";
       if (name === "overlap") state.here = "unresolved";
       document.querySelectorAll(".scenes button").forEach((b) => {
         b.setAttribute("aria-current", b.dataset.scene === name ? "true" : "false");
       });
+      if (!opts || !opts.silent) {
+        const url = new URL(location.href);
+        url.search = "";
+        url.hash = name;
+        history.replaceState(null, "", url);
+      }
       render();
     }
 
@@ -916,7 +949,7 @@
       }
     });
 
-    render();
+    applyShot();
   </script>
 </body>
 </html>
