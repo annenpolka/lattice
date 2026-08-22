@@ -54,6 +54,7 @@ fn interaction_mode(session: &StudioSession) -> &'static str {
     }
     match session.gesture() {
         TimelineGesture::None => "idle",
+        TimelineGesture::Point { .. } => "point",
         TimelineGesture::Scrub { .. } => "scrub",
         TimelineGesture::Trim { .. } => "trim",
         TimelineGesture::Reorder { .. } => "reorder",
@@ -65,6 +66,7 @@ fn interaction_mode(session: &StudioSession) -> &'static str {
 fn gesture_value(gesture: &TimelineGesture) -> Value {
     match gesture {
         TimelineGesture::None => json!({ "kind": "none" }),
+        TimelineGesture::Point { start_x } => json!({ "kind": "point", "start_x": start_x }),
         TimelineGesture::Scrub { start_playhead, .. } => {
             json!({ "kind": "scrub", "start_playhead": start_playhead.to_string() })
         }
@@ -150,7 +152,9 @@ fn drag_value(session: &StudioSession) -> Value {
         });
     }
     match session.gesture() {
-        TimelineGesture::None | TimelineGesture::Scrub { .. } => Value::Null,
+        TimelineGesture::None | TimelineGesture::Point { .. } | TimelineGesture::Scrub { .. } => {
+            Value::Null
+        }
         TimelineGesture::Trim {
             clip_id,
             preview_in,

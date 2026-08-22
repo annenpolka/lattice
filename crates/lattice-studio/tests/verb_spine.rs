@@ -91,6 +91,36 @@ fn video_clip_click_points_source_not_scene() {
 }
 
 #[test]
+fn overlap_failed_point_uses_timeline_hit_path() {
+    let mut session = overlap_session();
+    let at = Time::from_decimal_seconds(2, 4, 1).unwrap();
+    let x = session.x_at_time(at);
+    session.begin_timeline_pointer_on(x, true, "Audio").unwrap();
+    assert!(
+        matches!(
+            session.gesture(),
+            lattice_studio::TimelineGesture::Point { .. }
+        ),
+        "empty-rail click begins a coordinate point: {:?}",
+        session.gesture()
+    );
+    session.commit_timeline_pointer(x).unwrap();
+    let unresolved = session
+        .unresolved_pointing()
+        .expect("production hit path must open unresolved pointing");
+    assert_eq!(unresolved.projection, Projection::Timeline);
+    let kinds: Vec<_> = unresolved
+        .candidates
+        .iter()
+        .map(|locus| locus.kind)
+        .collect();
+    assert!(kinds.contains(&LocusKind::Title), "{kinds:?}");
+    assert!(kinds.contains(&LocusKind::Source), "{kinds:?}");
+    assert!(kinds.contains(&LocusKind::Scene), "{kinds:?}");
+    assert!(session.current_locus().unwrap().is_none());
+}
+
+#[test]
 fn overlap_candidates_appear_on_timeline_not_modal() {
     let mut session = overlap_session();
     let here_before = session.current_locus().unwrap().map(|locus| locus.id);

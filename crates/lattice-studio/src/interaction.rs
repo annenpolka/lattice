@@ -24,10 +24,7 @@ pub fn begin(
     let clips = hit_clips_on_track(session, track)?;
     let hit = hit_test(&clips, x, session.viewport);
     session.gesture = match hit {
-        TimelineHit::Rail => TimelineGesture::Scrub {
-            start_playhead: session.playhead,
-            start_x: x,
-        },
+        TimelineHit::Rail => TimelineGesture::Point { start_x: x },
         TimelineHit::Trim {
             clip_id,
             edge,
@@ -65,6 +62,16 @@ pub fn update(session: &mut StudioSession, x: f64, snap_off: bool) -> Result<(),
     session.snap_time = None;
     match session.gesture.clone() {
         TimelineGesture::None => Ok(()),
+        TimelineGesture::Point { start_x } => {
+            if crossed_drag_threshold(start_x, x) {
+                session.gesture = TimelineGesture::Scrub {
+                    start_playhead: session.playhead,
+                    start_x,
+                };
+                update_scrub(session, x, snap_off);
+            }
+            Ok(())
+        }
         TimelineGesture::Scrub { .. } => {
             update_scrub(session, x, snap_off);
             Ok(())
@@ -200,6 +207,11 @@ pub fn commit(
     session.snap_time = None;
     match gesture {
         TimelineGesture::None => Ok(GestureOutcome::Idle),
+        TimelineGesture::Point { .. } => {
+            let time = session.viewport.time_at_x(x);
+            session.point_from_timeline_time(time)?;
+            Ok(GestureOutcome::Clicked)
+        }
         TimelineGesture::Scrub { .. } => {
             // Playhead is not here. Scrub must not re-point.
             Ok(GestureOutcome::Scrubbed)
@@ -358,7 +370,7 @@ pub fn cursor_at_on_track(session: &StudioSession, x: f64, track: Option<&str>) 
                 CursorKind::Grabbing
             }
             TimelineGesture::Scrub { .. } => CursorKind::Scrub,
-            TimelineGesture::None => CursorKind::Select,
+            TimelineGesture::Point { .. } | TimelineGesture::None => CursorKind::Select,
         };
     }
     let Ok(clips) = hit_clips_on_track(session, track) else {

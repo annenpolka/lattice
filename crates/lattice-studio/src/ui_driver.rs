@@ -741,21 +741,47 @@ scene demo {
 
     #[gpui::test]
     fn overlap_candidates_are_on_timeline_and_toolbar_speaks(cx: &mut TestAppContext) {
-        let mut session = overlap_session();
-        session
-            .point_from_timeline_time(lattice_engine::Time::from_decimal_seconds(2, 4, 1).unwrap())
-            .unwrap();
-        let title = session
-            .unresolved_pointing()
-            .unwrap()
-            .candidates
-            .iter()
-            .find(|locus| locus.kind == lattice_engine::LocusKind::Title)
-            .unwrap()
-            .id
-            .clone();
+        let session = overlap_session();
         let (view, cx) = add_studio(cx, session);
         let mut ui = UiDriver::new(cx);
+        let ratio = ui.read(&view, |view, _| {
+            let at = lattice_engine::Time::from_decimal_seconds(2, 4, 1).unwrap();
+            let width = view.session.viewport().width_pixels();
+            (view.session.x_at_time(at) / width) as f32
+        });
+        ui.click_at("timeline.track.Audio", ratio, 0.5);
+        let (kinds, title) = ui.read(&view, |view, _| {
+            let unresolved = view
+                .session
+                .unresolved_pointing()
+                .expect("empty-rail click must open unresolved pointing");
+            assert_eq!(unresolved.projection, lattice_studio::Projection::Timeline);
+            let kinds: Vec<_> = unresolved
+                .candidates
+                .iter()
+                .map(|locus| locus.kind)
+                .collect();
+            let title = unresolved
+                .candidates
+                .iter()
+                .find(|locus| locus.kind == lattice_engine::LocusKind::Title)
+                .expect("title candidate")
+                .id
+                .clone();
+            (kinds, title)
+        });
+        assert!(
+            kinds.contains(&lattice_engine::LocusKind::Title),
+            "{kinds:?}"
+        );
+        assert!(
+            kinds.contains(&lattice_engine::LocusKind::Source),
+            "{kinds:?}"
+        );
+        assert!(
+            kinds.contains(&lattice_engine::LocusKind::Scene),
+            "{kinds:?}"
+        );
         let _ = ui.bounds("timeline.candidates");
         ui.click(format!("timeline.candidate.{}", title.as_str()));
         assert_eq!(

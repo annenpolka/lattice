@@ -84,7 +84,7 @@ The playhead is transient editor state, not a locus. Scrubbing maps the latest p
 
 Clip-edge trim commits `SemanticEdit::Trim`. Scene body drag commits identity-based `SemanticEdit::ReorderScene` only when here is already that scene. Timeline title/callout body or edge drags commit timing edits. Canvas title/callout body drag projects the same locus into normalized Canvas Space and commits `SemanticEdit::SetPosition`; GPUI pixels never enter Core or VEL. Failed commit discards ephemeral geometry and restores the compiled layout.
 
-A video clip click points the source clip and keeps its identity. It does not promote here to the containing scene. A coordinate point that names several loci stays unresolved and lists candidates on the touched projection only; picking a card commits one shared `LocusId`. Scrub and playhead move do not re-point.
+A video clip click points the source clip and keeps its identity. It does not promote here to the containing scene. An empty-rail click is a coordinate point: `point_from_timeline_time` runs on commit. A coordinate that names several loci stays unresolved and lists candidates on the touched projection only; picking a card commits one shared `LocusId`. Ruler drag, `begin_timeline_scrub`, and playhead move do not re-point. Empty-rail drag past the threshold becomes scrub.
 
 ## Verb license
 

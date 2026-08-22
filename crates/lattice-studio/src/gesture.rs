@@ -54,6 +54,10 @@ pub enum TimelineHit {
 #[derive(Clone, Debug, PartialEq)]
 pub enum TimelineGesture {
     None,
+    /// Empty-rail coordinate point. Drag past the threshold becomes scrub.
+    Point {
+        start_x: f64,
+    },
     Scrub {
         start_playhead: Time,
         start_x: f64,
