@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Projection-Local Verbs · Lattice Studio sketch</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body data-scene="hub">
+  <header class="sketch-bar">
+    <div class="brand">
+      <div class="kicker">Lattice Studio · interaction sketch</div>
+      <h1>Projection-Local Verbs <em>legal verbs live on the instrument you touch</em></h1>
+    </div>
+    <nav class="walk" aria-label="Scene walk">
+      <a href="#hub" data-go="hub">Model</a>
+      <a href="#a" data-go="a">A Open</a>
+      <a href="#b" data-go="b">B Video</a>
+      <a href="#c" data-go="c">C Scrub</a>
+      <a href="#d" data-go="d">D Overlap</a>
+      <a href="#e" data-go="e">E Verbs</a>
+      <a href="#f" data-go="f">F Freeze</a>
+      <a href="#g" data-go="g">G Review</a>
+      <a href="#h" data-go="h">H Narrow</a>
+    </nav>
+  </header>
+
+  <main class="hub">
+    <p class="lede">
+      <strong>Here</strong> is one session <span class="mono">LocusId</span>.
+      Touching a projection names that locus <em>and</em> restricts verbs to what
+      that projection can commit. License is
+      <strong>touched projection ∩ Engine-legal</strong>.
+      There is no Inspector and no toolbar verb home.
+      Chrome weight cannot grant a verb the touched projection does not own.
+    </p>
+    <section class="policy">
+      <article>
+        <div class="k">Playhead</div>
+        <h2>Time, not a subject</h2>
+        <p>Scrub moves only the playhead. It does not rewrite VEL, does not Undo, and does not re-point here. Canvas is still <span class="mono">evaluate_at(playhead)</span>.</p>
+      </article>
+      <article>
+        <div class="k">Overlap</div>
+        <h2>Failed point stays visible</h2>
+        <p>If one pixel names several loci, the touched projection lists candidates with reason and scope. Choosing one commits the shared <span class="mono">LocusId</span>.</p>
+      </article>
+      <article>
+        <div class="k">Absence</div>
+        <h2>The missing instrument speaks</h2>
+        <p>Empty Canvas is not one state. Freeze is TimeMap rate 0 on the source — not a selectable row. Off-screen source stays reachable by Navigate.</p>
+      </article>
+    </section>
+    <section class="cards">
+      <a href="#a">
+        <div class="letter">A</div>
+        <h3>Open</h3>
+        <p>Title is here. Playhead is 0s. Title is active 1s–4s. Canvas names that mismatch and offers a local seek.</p>
+      </a>
+      <a href="#b">
+        <div class="letter">B</div>
+        <h3>Video clip click</h3>
+        <p>The scene body names scene demo. Timeline offers scene-order verbs, not a title form and not SetPosition.</p>
+      </a>
+      <a href="#c">
+        <div class="letter">C</div>
+        <h3>Scrub Audio rail</h3>
+        <p>Playhead crosses the title span. Here stays put. The Audio rail is scrub only — no time-scoped audio edit exists.</p>
+      </a>
+      <a href="#d">
+        <div class="letter">D</div>
+        <h3>Overlap time</h3>
+        <p>Title, scene, and source sit under the playhead. Pointing fails. The candidate list lives on that Timeline, then one LocusId.</p>
+      </a>
+      <a href="#e">
+        <div class="letter">E</div>
+        <h3>Scene vs Title verbs</h3>
+        <p>Timeline does not offer SetPosition. Canvas does not offer ReorderScene. Refused verbs are named on the projection that cannot commit them.</p>
+      </a>
+      <a href="#f">
+        <div class="letter">F</div>
+        <h3>Freeze</h3>
+        <p>Rate 0 is explained on the source TimeMap. The synthetic freeze row has no verb surface and is not a hit target.</p>
+      </a>
+      <a href="#g">
+        <div class="letter">G</div>
+        <h3>Review</h3>
+        <p>Two EditProposal projections: definition text, and SetPosition from the Canvas that licenses it. Apply / Reject only.</p>
+      </a>
+      <a href="#h">
+        <div class="letter">H</div>
+        <h3>Narrow ~800px</h3>
+        <p>What stays, what goes, what is named absent. Width does not license verbs. Source off-screen remains Navigate, not gone.</p>
+      </a>
+    </section>
+  </main>
+
+  <div class="studio-wrap">
+    <div class="studio">
+      <section class="facts" aria-label="Session facts">
+        <div class="fact here">
+          <div class="k">Here · one LocusId</div>
+          <div class="v" data-bind="here-label">title Hello</div>
+          <div class="s mono" data-bind="here-id">loc_title_hello</div>
+        </div>
+        <div class="fact when">
+          <div class="k">When · playhead</div>
+          <div class="v" data-bind="when-label">0.00s</div>
+          <div class="s" data-bind="when-note">not a verb subject</div>
+        </div>
+        <div class="fact touch">
+          <div class="k">Touched projection</div>
+          <div class="v" data-bind="touch-label">Canvas</div>
+          <div class="s" data-bind="touch-note">verbs licensed only here ∩ Engine</div>
+        </div>
+      </section>
+
+      <section class="transport" aria-label="Transport and status">
+        <div class="group">
+          <span class="chip">Play</span>
+          <span class="chip">Pause</span>
+          <span class="chip time" data-bind="clock">0.00s</span>
+          <span class="note-strip">Transport moves the playhead. It does not name a locus.</span>
+        </div>
+        <div class="group">
+          <span class="chip quiet">renderer cpu</span>
+          <span class="chip quiet">audio ready</span>
+        </div>
+      </section>
+
+      <section class="width-callouts only-h" data-show-block="h">
+        <article class="stays">
+          <h3>Stays</h3>
+          <ul>
+            <li>Here / when / touched</li>
+            <li>Transport and status</li>
+            <li>Canvas · evaluate_at</li>
+            <li>Timeline · point, scrub, mutate</li>
+            <li>Local verbs on the touched projection</li>
+          </ul>
+        </article>
+        <article class="goes">
+          <h3>Goes off-screen</h3>
+          <ul>
+            <li>Source / VEL column</li>
+            <li>Review (not open)</li>
+            <li>Side-by-side projection inventory</li>
+          </ul>
+        </article>
+        <article class="named">
+          <h3>Named absent</h3>
+          <ul>
+            <li>Source projection off-screen — Navigate to main.vel:16</li>
+            <li>No Inspector: this model has no global verb home to drop</li>
+            <li>Simultaneous highlight is not required</li>
+          </ul>
+        </article>
+      </section>
+
+      <section class="stage">
+        <!-- Default canvas / source for A B C D F H -->
+        <article class="proj hide-e hide-g-stage" data-proj="canvas" id="proj-canvas">
+          <header class="ph">
+            <span class="name">Canvas</span>
+            <span class="role">evaluate_at(playhead) · not a locus field</span>
+          </header>
+          <div class="canvas-body">
+            <div class="absence" data-show="a h" id="canvas-absence">
+              <h3>No picture at 0.00s</h3>
+              <p>title Hello is here. Active <strong>1s–4s</strong>. This projection is <span class="mono">evaluate_at(playhead)</span>. The locus range does not contain the playhead. That is not a broken Canvas, not initializing, and not missing media.</p>
+              <div class="local-verbs">
+                <button class="verb" type="button" data-seek="1">
+                  <span class="scope">this projection · temporary</span>
+                  seek playhead to 1s–4s
+                </button>
+                <span class="denied">
+                  <span class="scope">not on Canvas at 0s</span>
+                  SetPosition — no visual fields at this time
+                </span>
+              </div>
+            </div>
+            <div class="picture" data-show="b c d" id="canvas-picture">
+              <div class="horizon"></div>
+              <div class="title-card" data-show="c d">Hello</div>
+            </div>
+            <div class="picture" data-show="f">
+              <div class="horizon"></div>
+              <div class="freeze-hold"></div>
+              <div class="hold-tag">held frame · TimeMap rate 0</div>
+            </div>
+          </div>
+        </article>
+
+        <article class="proj quiet hide-e hide-g-stage hide-h" data-proj="source" id="proj-source">
+          <header class="ph">
+            <span class="name">Source · VEL</span>
+            <span class="role">definition fields · Navigate</span>
+          </header>
+          <div class="source-body" data-show-block="a c d h">
+            <div>scene <span class="kw">demo</span> {</div>
+            <div>  game[<span class="num">10s..20s</span>] as fight</div>
+            <div></div>
+            <div class="hit" data-show-block="a c d">
+              <div>  title <span class="str">"Hello"</span> {</div>
+              <div>    at <span class="num">1s</span> for <span class="num">3s</span></div>
+              <div>  }</div>
+            </div>
+            <div>}</div>
+            <div class="local-verbs" style="margin-top:12px" data-show="a c d">
+              <span class="verb"><span class="scope">definition</span> Title { text }</span>
+              <span class="denied"><span class="scope">not on source</span> SetPosition — pixels are not in Core</span>
+            </div>
+          </div>
+          <div class="source-body" data-show-block="b">
+            <div class="hit">
+              <div>scene <span class="kw">demo</span> {</div>
+              <div>  game[<span class="num">10s..20s</span>] as fight</div>
+            </div>
+            <div>  title <span class="str">"Hello"</span> { … }</div>
+            <div>}</div>
+            <p class="cmt">Quiet identity. Scene was named on Timeline. This span is Navigate, not a second locus.</p>
+          </div>
+          <div class="timemap" data-show-block="f">
+            <div class="identity-tick"><i></i> source fight · loc_source_fight</div>
+            <div class="seg"><span>0s–5.2s</span><span class="bar"></span><span>rate 1</span></div>
+            <div class="seg rate0">
+              <span>5.2s–6.7s</span><span class="bar"></span><span class="lab2">rate 0</span>
+            </div>
+            <div class="seg"><span>6.7s–10s</span><span class="bar"></span><span>rate 1</span></div>
+            <div class="not-a-target">
+              Freeze is this rate-0 segment. It is not a locus, has no <span class="mono">LocusId</span>, and has no verb surface. Pointer down here does not point and does not mutate.
+            </div>
+            <div class="local-verbs">
+              <span class="denied"><span class="scope">not a verb</span> no Core Freeze · no synthetic freeze:source:clip</span>
+            </div>
+          </div>
+        </article>
+
+        <!-- E compare -->
+        <article class="proj touched" data-show="e">
+          <header class="ph">
+            <span class="name">Timeline · scene body</span>
+            <span class="role">touched now</span>
+          </header>
+          <div class="compare-col">
+            <h3>scene demo is here</h3>
+            <p class="mono">loc_scene_demo</p>
+            <p>License = Timeline ∩ Engine-legal for a scene. The scene body may begin ReorderScene through a named drag that is not scrub and not trim.</p>
+            <div class="verb-stack">
+              <span class="verb"><span class="scope">scene order</span> ReorderScene</span>
+              <span class="verb"><span class="scope">this scene</span> Delete</span>
+              <span class="denied"><span class="scope">not on Timeline</span> SetPosition — Canvas overlay</span>
+              <span class="denied"><span class="scope">not on Timeline</span> Title { text } — source span</span>
+              <span class="denied"><span class="scope">not this locus</span> SetGain — source projection</span>
+            </div>
+          </div>
+        </article>
+        <article class="proj touched" data-show="e">
+          <header class="ph">
+            <span class="name">Canvas overlay</span>
+            <span class="role">touched now</span>
+          </header>
+          <div class="compare-col">
+            <h3>title Hello is here</h3>
+            <p class="mono">loc_title_hello</p>
+            <p>License = Canvas ∩ Engine-legal for this placement. Overlay body is SetPosition; corner is ResizeOverlay. Definition text is Navigate to source, not implied by the rectangle.</p>
+            <div class="picture" style="position:relative;height:88px;border-radius:8px;overflow:hidden">
+              <div class="horizon"></div>
+              <div class="title-card" style="font-size:18px;left:14%;bottom:18%">Hello</div>
+            </div>
+            <div class="verb-stack">
+              <span class="verb"><span class="scope">this placement</span> SetPosition</span>
+              <span class="verb"><span class="scope">this placement</span> ResizeOverlay</span>
+              <span class="denied"><span class="scope">not on Canvas</span> ReorderScene — Timeline scene body</span>
+              <span class="denied"><span class="scope">not on Canvas</span> Title { text } — source span</span>
+            </div>
+          </div>
+        </article>
+
+        <!-- G reviews -->
+        <article class="proj touched" data-show="g">
+          <header class="ph">
+            <span class="name">Review · EditProposal</span>
+            <span class="role">after Title { text } from source</span>
+          </header>
+          <div class="review">
+            <div class="scope-line">scope · definition &nbsp;·&nbsp; loc_title_hello</div>
+            <h3>Change the words</h3>
+            <div class="mini-pic"><div class="horizon"></div><div class="title-card">Hold the line</div></div>
+            <pre>SemanticEdit::Title { text: "Hold the line" }</pre>
+            <pre class="diff"><span class="del">- title "Hello" {</span>
+<span class="add">+ title "Hold the line" {</span>
+    at 1s for 3s
+  }</pre>
+            <div class="review-actions">
+              <span class="apply">Apply</span>
+              <span class="reject">Reject</span>
+            </div>
+            <p class="note-strip">Review applies or rejects this proposal. It does not begin a new Canvas gesture.</p>
+          </div>
+        </article>
+        <article class="proj touched" data-show="g">
+          <header class="ph">
+            <span class="name">Review · EditProposal</span>
+            <span class="role">after SetPosition from Canvas</span>
+          </header>
+          <div class="review">
+            <div class="scope-line">scope · this placement &nbsp;·&nbsp; loc_title_hello</div>
+            <h3>Move this rectangle</h3>
+            <div class="mini-pic"><div class="horizon"></div><div class="title-card ephemeral">Hello</div></div>
+            <pre>SemanticEdit::SetPosition { x: 0.42, y: 0.71 }</pre>
+            <pre class="diff">  title "Hello" {
+    at 1s for 3s
+<span class="add">+   position 0.42 0.71</span>
+  }</pre>
+            <div class="review-actions">
+              <span class="apply">Apply</span>
+              <span class="reject">Reject</span>
+            </div>
+            <p class="note-strip">Everyday move already committed on pointer-up. Review is evidence, not a gate.</p>
+          </div>
+        </article>
+      </section>
+
+      <section class="timeline hide-e hide-g-stage" id="timeline" data-proj="timeline">
+        <header class="ph">
+          <span class="name">Timeline</span>
+          <span class="role" data-bind="tl-role">ruler / rail background = scrub · clip body = point · handle = mutate</span>
+        </header>
+        <div class="tracks" id="tracks">
+          <div class="ruler" data-scrub>
+            <span style="left:0%">0s</span>
+            <span style="left:10%">1s</span>
+            <span style="left:20%">2s</span>
+            <span style="left:30%">3s</span>
+            <span style="left:40%">4s</span>
+            <span style="left:52%">5.2s</span>
+            <span style="left:70%">7s</span>
+            <span style="left:100%">10s</span>
+            <div class="playhead" data-playhead></div>
+          </div>
+          <div class="rail">
+            <div class="lab">Video<small>scene body</small></div>
+            <div class="lane">
+              <button class="clip scene" type="button" data-point="scene" style="left:0%;width:100%" title="Point scene demo">
+                scene demo · fight
+              </button>
+              <div class="playhead" data-playhead></div>
+            </div>
+          </div>
+          <div class="rail">
+            <div class="lab">Title<small>placement</small></div>
+            <div class="lane">
+              <button class="clip title" type="button" data-point="title" style="left:10%;width:30%" title="Point title Hello">
+                <span class="handle in" data-mutate="trim"></span>
+                Hello
+                <span class="handle out" data-mutate="trim"></span>
+              </button>
+              <div class="playhead" data-playhead></div>
+            </div>
+          </div>
+          <div class="rail">
+            <div class="lab">Audio<small>scrub only</small></div>
+            <div class="lane" data-scrub="audio" id="audio-rail">
+              <div class="wave"></div>
+              <div class="playhead" data-playhead></div>
+            </div>
+          </div>
+        </div>
+        <div class="hit-legend">
+          <span><b>scrub</b> ruler · unmarked rail · Audio background</span>
+          <span><b>point</b> scene body · title clip interior</span>
+          <span><b>mutate</b> title in/out handle · scene reorder affordance</span>
+          <span>No region does two of those.</span>
+        </div>
+        <div class="local-verbs" style="padding:0 12px 12px" data-show="b">
+          <span class="verb"><span class="scope">scene order</span> ReorderScene</span>
+          <span class="verb"><span class="scope">this scene</span> Delete</span>
+          <span class="denied"><span class="scope">not on Timeline</span> SetPosition</span>
+          <span class="denied"><span class="scope">not this locus</span> Title { text }</span>
+        </div>
+        <div class="candidates" data-show-block="d">
+          <h3>This point named several loci</h3>
+          <p class="why">Title, scene, and source all contain 2.40s. Silent specificity ranking is rejected. Choose the verb subject on this Timeline. The list is not project state and not a per-view selection.</p>
+          <div class="cand-list">
+            <button class="cand" type="button" data-pick="title">
+              <div class="kind">title · this placement</div>
+              <div class="nm">Hello</div>
+              <div class="sc">loc_title_hello<br />Trim / Title { at, duration } on this rail. Definition text via Navigate to source.</div>
+            </button>
+            <button class="cand" type="button" data-pick="scene">
+              <div class="kind">scene · scene order</div>
+              <div class="nm">demo</div>
+              <div class="sc">loc_scene_demo<br />ReorderScene on the scene body. Not SetPosition. Not title fallback.</div>
+            </button>
+            <button class="cand" type="button" data-pick="source">
+              <div class="kind">source · source</div>
+              <div class="nm">fight</div>
+              <div class="sc">loc_source_fight<br />SetGain has no time scope. This rail does not mint an audio trim.</div>
+            </button>
+          </div>
+        </div>
+        <div class="after-choice" data-show-block="d">
+          Choosing one card commits <strong class="mono" data-bind="choice-id">one LocusId</strong> to Canvas, Timeline, Source, Review, and agent context.
+          <span data-bind="choice-note">The failed point stays visible until that choice.</span>
+        </div>
+      </section>
+
+      <div class="only-h" data-show-block="h">
+        <p class="nav-row">
+          <span class="k">Named absent</span>
+          Source projection is off-screen at ~800px.
+          <span class="linkish">Navigate to main.vel:16</span>
+          remains. The mutable source is not inexplicable. Width did not grant or revoke a verb.
+        </p>
+      </div>
+
+      <nav class="nav-row" aria-label="Navigate">
+        <span class="k">Navigate</span>
+        <span>not a second locus · discover projections this surface lacks</span>
+        <span class="linkish">go to source</span>
+        <span class="linkish">go to range 1s–4s</span>
+        <span class="linkish">go to picture</span>
+        <span class="linkish">agent: locus + instruction</span>
+      </nav>
+
+      <aside class="caption">
+        <div class="letter" data-bind="cap-letter">A</div>
+        <h2 data-bind="cap-title">Open</h2>
+        <p data-bind="cap-body"></p>
+      </aside>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
