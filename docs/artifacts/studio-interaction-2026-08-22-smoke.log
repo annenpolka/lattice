@@ -1,0 +1,34 @@
+==== studio-linux-smoke 2026-08-22T01:35:04+00:00 fixture=timeline-basic preview=off audio=off display=:1 path=existing-x11 vulkan=default ====
+1787362504.754 pid=12523 tid=ThreadId(1) start exe=/workspace/target/debug/lattice-studio cwd=/workspace vel=/tmp/lattice-studio-ui-fixtures/timeline-basic/main.vel fixture=timeline-basic log=/workspace/target/studio-linux-smoke/run.2o02NQ/studio.log preview=off autoplay=off smoke=40000ms rustc=0.1.0
+1787362504.754 pid=12523 tid=ThreadId(1) renderer requested=require_cpu
+1787362504.754 pid=12523 tid=ThreadId(1) compile/open /tmp/lattice-studio-ui-fixtures/timeline-basic/main.vel
+1787362505.559 pid=12523 tid=ThreadId(1) ui fixture=timeline-basic
+1787362505.559 pid=12523 tid=ThreadId(1) semantic_state {"locus":{"id":"demo:title:1","kind":"title","label":"Hello"},"playhead":"0s","duration":"4s","playing":false,"interaction":"idle","gesture":{"kind":"none"},"drag":null,"last_gesture_error":null,"fixture":"timeline-basic","reason":"open"}
+1787362505.559 pid=12523 tid=ThreadId(1) open ok dirty=false playhead=Time { num: 0, den: 1 } diagnostics=0
+1787362505.559 pid=12523 tid=ThreadId(1) smoke timeout 40000ms
+1787362505.559 pid=12523 tid=ThreadId(1) Application::run
+1787362505.741 pid=12523 tid=ThreadId(1) open_window
+1787362505.839 pid=12523 tid=ThreadId(1) StudioView::new
+1787362505.839 pid=12523 tid=ThreadId(1) preview worker spawned
+1787362505.839 pid=12523 tid=ThreadId(1) audio monitor explicitly disabled
+1787362505.839 pid=12523 tid=ThreadId(1) first paint preview=none
+1787362505.839 pid=12523 tid=ThreadId(1) semantic_state {"locus":{"id":"demo:title:1","kind":"title","label":"Hello"},"playhead":"0s","duration":"4s","playing":false,"interaction":"idle","gesture":{"kind":"none"},"drag":null,"last_gesture_error":null,"fixture":"timeline-basic","reason":"first-paint"}
+1787362506.002 pid=12523 tid=ThreadId(1) open_window ok
+1787362506.002 pid=12523 tid=ThreadId(1) activate
+1787362506.004 pid=12523 tid=ThreadId(1) smoke_geom {"play":{"x":1115.0,"y":67.0,"w":51.0,"h":30.0},"ruler":{"x":72.0,"y":685.0,"w":640.0,"h":23.0},"rail":{"x":72.0,"w":640.0},"tracks":[{"name":"Video","x":72.0,"y":723.0,"w":640.0,"h":22.0},{"name":"Audio","x":72.0,"y":755.0,"w":640.0,"h":22.0},{"name":"Text","x":72.0,"y":787.0,"w":640.0,"h":22.0}],"tree":[{"id":"sequence:main","kind":"sequence","label":"main","x":16.0,"y":150.0,"w":183.0,"h":23.0},{"id":"scene:demo","kind":"scene","label":"demo","x":30.0,"y":173.0,"w":183.0,"h":22.0},{"id":"source:clip","kind":"source","label":"clip","x":44.0,"y":196.0,"w":183.0,"h":23.0},{"id":"demo:title:1","kind":"title","label":"Hello","x":44.0,"y":218.0,"w":183.0,"h":23.0},{"id":"demo:callout:2","kind":"callout","label":"Hold","x":44.0,"y":241.0,"w":183.0,"h":22.0}]}
+1787362510.173 pid=12523 tid=ThreadId(1) play samples AudioPlan+video playhead=0.00s Audio · monitor explicitly disabled
+1787362510.173 pid=12523 tid=ThreadId(1) semantic_state {"locus":{"id":"demo:title:1","kind":"title","label":"Hello"},"playhead":"0s","duration":"4s","playing":true,"interaction":"play","gesture":{"kind":"none"},"drag":null,"last_gesture_error":null,"fixture":"timeline-basic","reason":"play","focused":"studio"}
+1787362510.973 pid=12523 tid=ThreadId(1) gesture begin-scrub x=128.0 playhead=0.80s
+1787362510.973 pid=12523 tid=ThreadId(1) semantic_state {"locus":{"id":"demo:title:1","kind":"title","label":"Hello"},"playhead":"0.800019s","duration":"4s","playing":false,"interaction":"scrub","gesture":{"kind":"scrub","start_playhead":"0.733503s"},"drag":null,"last_gesture_error":null,"fixture":"timeline-basic","reason":"timeline-pointer-begin","focused":"studio"}
+1787362510.973 pid=12523 tid=ThreadId(1) preview queue timeline-clip
+1787362511.101 pid=12523 tid=ThreadId(1) gesture update x=512.0 playhead=3.20s
+1787362511.101 pid=12523 tid=ThreadId(1) semantic_state {"locus":{"id":"demo:title:1","kind":"title","label":"Hello"},"playhead":"3.200056s","duration":"4s","playing":false,"interaction":"scrub","gesture":{"kind":"scrub","start_playhead":"0.733503s"},"drag":null,"last_gesture_error":null,"fixture":"timeline-basic","reason":"timeline-pointer-update","focused":"studio"}
+1787362511.240 pid=12523 tid=ThreadId(1) gesture commit x=512.0 outcome=Scrubbed playhead=3.20s undo=0
+1787362511.240 pid=12523 tid=ThreadId(1) semantic_state {"locus":{"id":"demo:title:1","kind":"title","label":"Hello"},"playhead":"3.200056s","duration":"4s","playing":false,"interaction":"idle","gesture":{"kind":"none"},"drag":null,"last_gesture_error":null,"fixture":"timeline-basic","reason":"timeline-pointer-commit","focused":"studio"}
+1787362511.804 pid=12523 tid=ThreadId(1) gesture begin track=Video x=352.0 kind=Reorder { clip_id: "demo:video:3", scene_id: "scene:demo", original_index: 0, proposed_index: 0, start_x: 352.0064697265625, moved: false } playhead=3.20s
+1787362511.804 pid=12523 tid=ThreadId(1) semantic_state {"locus":{"id":"demo:title:1","kind":"title","label":"Hello"},"playhead":"3.200056s","duration":"4s","playing":false,"interaction":"reorder","gesture":{"kind":"reorder","source":"demo:video:3","target":"scene:demo","original_index":0,"proposed_index":0,"moved":false,"valid":true},"drag":{"kind":"reorder","source":"demo:video:3","target":0,"valid":true},"last_gesture_error":null,"fixture":"timeline-basic","reason":"timeline-pointer-begin","focused":"studio"}
+1787362511.875 pid=12523 tid=ThreadId(1) gesture commit x=352.0 outcome=Clicked playhead=3.20s undo=0
+1787362511.875 pid=12523 tid=ThreadId(1) semantic_state {"locus":{"id":"scene:demo","kind":"scene","label":"demo"},"playhead":"3.200056s","duration":"4s","playing":false,"interaction":"idle","gesture":{"kind":"none"},"drag":null,"last_gesture_error":null,"fixture":"timeline-basic","reason":"timeline-pointer-commit","focused":"studio"}
+1787362512.188 pid=12523 tid=ThreadId(1) preview queue tree
+1787362512.188 pid=12523 tid=ThreadId(1) semantic_state {"locus":{"id":"scene:demo","kind":"scene","label":"demo"},"playhead":"3.200056s","duration":"4s","playing":false,"interaction":"idle","gesture":{"kind":"none"},"drag":null,"last_gesture_error":null,"fixture":"timeline-basic","reason":"tree-select","focused":"studio"}
+1787362545.559 pid=12523 tid=ThreadId(2) smoke quit

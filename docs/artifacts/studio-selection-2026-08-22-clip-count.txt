@@ -1,0 +1,21 @@
+
+== run2-selection/a-sequence-locus.png
+  Video  demo:video:3                     x=72..712  selected=no
+  Audio  demo:audio:4                     x=72..712  selected=no
+  Text   demo:title:1 (title Hello)       x=232..712  selected=no
+  Text   demo:callout:2 (callout Hold)    x=392..552  selected=no
+  clips drawn as selected = 0
+
+== run2-selection/b-title-locus.png
+  Video  demo:video:3                     x=72..712  selected=YES
+  Audio  demo:audio:4                     x=72..712  selected=YES
+  Text   demo:title:1 (title Hello)       x=232..712  selected=YES
+  Text   demo:callout:2 (callout Hold)    x=392..552  selected=no
+  clips drawn as selected = 3
+
+== run2-selection/c-scene-locus.png
+  Video  demo:video:3                     x=72..712  selected=YES
+  Audio  demo:audio:4                     x=72..712  selected=YES
+  Text   demo:title:1 (title Hello)       x=232..712  selected=no
+  Text   demo:callout:2 (callout Hold)    x=392..552  selected=no
+  clips drawn as selected = 2
