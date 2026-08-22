@@ -62,8 +62,9 @@ Grouped by the layer that decides what the control means:
 | read-only projection | Copy locus JSON | `Engine::inspect` |
 | nothing (display) | `Renderer · …`, `Audio · …` | renderer / audio error channel |
 
-Five layers, one visual rank. Teal marks three unrelated things: selected mode
-(CPU), emphasis (Save, Resolve), and transport (Play).
+Five control layers plus a display channel, all at one visual rank. Teal marks
+three unrelated things: selected mode (CPU), emphasis (Save, Resolve), and
+transport (Play).
 
 ## 3. What the Engine offers that the row does not read
 
@@ -154,11 +155,12 @@ and is never read. The Engine spoke; the screen did not.
 ### 4.5 `Projection::Toolbar` is a category error
 
 `Projection` enumerates Timeline, Canvas, Source, Inspector, Review, Tree,
-Toolbar. The first six are views *of loci*: each has geometry over which you can
-point, and each can therefore be the surface a coordinate resolves on. The
-toolbar has no locus geometry. Nothing in the row calls `point_at`; in the view
-the only callers are the SEQUENCE tree node click and the overlap candidate
-pick, and the timeline clip hit path points through `point_video_clip`.
+Toolbar. The first six each *render the locus*: you are looking at the thing, and
+in Timeline, Canvas, and Tree you can point at it by coordinate, so a projection
+can be the surface an ambiguous point resolves on. The toolbar renders no locus
+at all. Nothing in the row calls `point_at`; in the view the only callers are the
+SEQUENCE tree node click and the overlap candidate pick, and the timeline clip
+hit path points through `point_video_clip`.
 
 Making it a peer variant has a visible consequence, because `commit_projection`
 returns it. Live, at `here = source:clip`:
@@ -204,7 +206,7 @@ the verb:
 
 - **Delete Selected Clip** — names a *selection*, which the model does not have,
   and names the wrong kind: `Delete` is legal on a Scene and targets a Scene.
-  Two independent errors in four words.
+  Two independent errors in three words.
 - **Split at Playhead** — names the parameter and hides the target. The playhead
   is "transient editor state, not a locus"; it is a fine argument to
   `Split { at }` and a poor subject for the label.
