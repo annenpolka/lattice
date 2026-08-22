@@ -82,7 +82,13 @@ Escape        → cancel: discard proposal, VEL unchanged, no Undo
 
 The playhead is transient editor state, not a locus. Scrubbing maps the latest pointer x through `TimelineViewport` (`time_at_x` / `x_at_time`). It does not rewrite VEL and does not push Undo. Preview extract runs off the UI path with generation coalescing: a stale frame never overwrites a newer request.
 
-Clip-edge trim commits `SemanticEdit::Trim`. Scene body drag commits identity-based `SemanticEdit::ReorderScene`. Timeline title/callout body or edge drags commit timing edits. Canvas title/callout body drag projects the same locus into normalized Canvas Space and commits `SemanticEdit::SetPosition`; GPUI pixels never enter Core or VEL. Failed commit discards ephemeral geometry and restores the compiled layout.
+Clip-edge trim commits `SemanticEdit::Trim`. Scene body drag commits identity-based `SemanticEdit::ReorderScene` only when here is already that scene. Timeline title/callout body or edge drags commit timing edits. Canvas title/callout body drag projects the same locus into normalized Canvas Space and commits `SemanticEdit::SetPosition`; GPUI pixels never enter Core or VEL. Failed commit discards ephemeral geometry and restores the compiled layout.
+
+A video clip click points the source clip and keeps its identity. It does not promote here to the containing scene. A coordinate point that names several loci stays unresolved and lists candidates on the touched projection only; picking a card commits one shared `LocusId`. Scrub and playhead move do not re-point.
+
+## Verb license
+
+One locus, one legal set, one utterance. The Engine names the legal `SemanticEdit`s (target, scope, effect) for here. A gesture on a projection says what it commits. When those sets differ, Studio speaks the difference and does not invent a target. Title-shaped Inspector fields appear only when here is Title. Freeze is a `TimeMap` reading, not a selectable row.
 
 Snapping uses a display-pixel threshold (not a fixed number of milliseconds). Alt temporarily disables snap. Selection remains the shared locus.
 

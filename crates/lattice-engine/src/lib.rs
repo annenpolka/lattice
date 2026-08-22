@@ -4,6 +4,7 @@ mod atomic;
 mod compile;
 mod edit;
 mod import;
+mod legal;
 mod locus;
 mod lower;
 mod resolve;
@@ -27,6 +28,7 @@ pub use lattice_media::{
     SampleSession, generate_av_fixture, map_timeline_to_source, mix_timeline_audio,
     plan_from_timeline, plan_from_timeline_with_spec, preview_frame, sample_frame,
 };
+pub use legal::{AbsenceReason, LegalEdit, is_legal_verb, legal_edits_for};
 pub use resolve::{
     CountingProvider, GenerateRequest, GeneratedMediaProvider, LocalToneProvider, Resolution,
     ResolveOptions, generated_request_key,

@@ -675,4 +675,140 @@ scene intro {
             }
         }
     }
+
+    fn overlap_session() -> lattice_studio::StudioSession {
+        let nonce = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("clock")
+            .as_nanos();
+        let root = std::env::temp_dir().join(format!("lattice-ui-overlap-{nonce}"));
+        std::fs::create_dir_all(&root).expect("dir");
+        lattice_media::generate_av_fixture(root.join("capture.mp4"), 8).expect("fixture");
+        let vel = root.join("main.vel");
+        std::fs::write(
+            &vel,
+            r#"project "overlap"
+convention commentary
+media game "capture.mp4"
+sequence main {
+  demo
+}
+scene demo {
+  game[0s..6s] as fight
+  title "Hello" {
+    at 2s for 3s
+  }
+}
+"#,
+        )
+        .expect("write");
+        lattice_studio::StudioSession::open(vel).expect("open")
+    }
+
+    #[gpui::test]
+    fn video_clip_click_keeps_source_and_hides_title_fields(cx: &mut TestAppContext) {
+        let mut session = overlap_session();
+        let clip_id = session
+            .layout()
+            .unwrap()
+            .timeline
+            .tracks
+            .iter()
+            .find(|track| track.name == "Video")
+            .unwrap()
+            .clips[0]
+            .id
+            .clone();
+        session.point_video_clip(&clip_id).unwrap();
+        let (view, cx) = add_studio(cx, session);
+        let mut ui = UiDriver::new(cx);
+        ui.click(format!("timeline.clip.{clip_id}"));
+        let (kind, title_fields, heading) = ui.read(&view, |view, _| {
+            let layout = view.session.layout().unwrap();
+            (
+                view.session
+                    .current_locus()
+                    .unwrap()
+                    .map(|locus| locus.kind),
+                layout.inspector.title_fields,
+                layout.inspector.heading,
+            )
+        });
+        assert_eq!(kind, Some(lattice_engine::LocusKind::Source));
+        assert!(!title_fields, "title fields only when here is Title");
+        assert!(heading.contains("source"), "{heading}");
+    }
+
+    #[gpui::test]
+    fn overlap_candidates_are_on_timeline_and_toolbar_speaks(cx: &mut TestAppContext) {
+        let mut session = overlap_session();
+        session
+            .point_from_timeline_time(lattice_engine::Time::from_decimal_seconds(2, 4, 1).unwrap())
+            .unwrap();
+        let title = session
+            .unresolved_pointing()
+            .unwrap()
+            .candidates
+            .iter()
+            .find(|locus| locus.kind == lattice_engine::LocusKind::Title)
+            .unwrap()
+            .id
+            .clone();
+        let (view, cx) = add_studio(cx, session);
+        let mut ui = UiDriver::new(cx);
+        let _ = ui.bounds("timeline.candidates");
+        ui.click(format!("timeline.candidate.{}", title.as_str()));
+        assert_eq!(
+            ui.read(&view, |view, _| {
+                view.session.current_locus().unwrap().unwrap().id
+            }),
+            title
+        );
+        assert!(ui.read(&view, |view, _| {
+            view.session.layout().unwrap().inspector.title_fields
+        }));
+
+        ui.click("toolbar.split");
+        let spoken = ui.read(&view, |view, _| {
+            view.last_render.clone().unwrap_or_default()
+        });
+        assert!(
+            spoken.contains("needs-scene") || spoken.contains("split"),
+            "{spoken}"
+        );
+        assert_eq!(
+            ui.read(&view, |view, _| {
+                view.session.current_locus().unwrap().unwrap().id
+            }),
+            title,
+            "toolbar must not retarget here"
+        );
+    }
+
+    #[gpui::test]
+    fn scene_inspector_has_no_title_selector(cx: &mut TestAppContext) {
+        let mut session = overlap_session();
+        let scene = session
+            .loci()
+            .unwrap()
+            .into_iter()
+            .find(|locus| locus.kind == lattice_engine::LocusKind::Scene)
+            .unwrap()
+            .id;
+        session.point_at(scene);
+        let (view, cx) = add_studio(cx, session);
+        let mut ui = UiDriver::new(cx);
+        assert!(ui.read(&view, |view, _| {
+            !view.session.layout().unwrap().inspector.title_fields
+        }));
+        ui.click("toolbar.gain-minus-3");
+        let spoken = ui.read(&view, |view, _| {
+            view.last_render.clone().unwrap_or_default()
+        });
+        assert!(
+            spoken.contains("needs-source-binding") || spoken.contains("source"),
+            "{spoken}"
+        );
+        let _ = ui.bounds("inspector.utterance");
+    }
 }

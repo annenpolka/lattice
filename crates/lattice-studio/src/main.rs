@@ -1092,11 +1092,18 @@ impl StudioView {
     }
 
     fn adopt_locus_label(&mut self) {
-        if let Ok(Some(locus)) = self.session.current_locus() {
-            self.title_draft = locus.label;
-            let end = self.title_draft.encode_utf16().count();
-            self.title_selection_utf16 = end..end;
-            self.title_marked_utf16 = None;
+        match self.session.current_locus() {
+            Ok(Some(locus)) if locus.kind == lattice_engine::LocusKind::Title => {
+                self.title_draft = locus.label;
+                let end = self.title_draft.encode_utf16().count();
+                self.title_selection_utf16 = end..end;
+                self.title_marked_utf16 = None;
+            }
+            _ => {
+                self.title_draft.clear();
+                self.title_selection_utf16 = 0..0;
+                self.title_marked_utf16 = None;
+            }
         }
     }
 
@@ -2431,14 +2438,14 @@ impl StudioView {
             }))
             .child(action_button("Set In", LINE, cx, move |this, cx| {
                 if let Err(err) = this.session.set_in_at_playhead() {
-                    trace::log(format!("set in: {err}"));
+                    this.speak_toolbar(err);
                 }
                 this.after_edit();
                 cx.notify();
             }))
             .child(action_button("Set Out", LINE, cx, move |this, cx| {
                 if let Err(err) = this.session.set_out_at_playhead() {
-                    trace::log(format!("set out: {err}"));
+                    this.speak_toolbar(err);
                 }
                 this.after_edit();
                 cx.notify();
@@ -2449,7 +2456,7 @@ impl StudioView {
                 cx,
                 move |this, cx| {
                     if let Err(err) = this.session.split_at_playhead() {
-                        trace::log(format!("split: {err}"));
+                        this.speak_toolbar(err);
                     }
                     this.after_edit();
                     cx.notify();
@@ -2461,7 +2468,7 @@ impl StudioView {
                 cx,
                 move |this, cx| {
                     if let Err(err) = this.session.delete_selected_clip() {
-                        trace::log(format!("delete clip: {err}"));
+                        this.speak_toolbar(err);
                     }
                     this.after_edit();
                     cx.notify();
@@ -2648,14 +2655,19 @@ impl StudioView {
                 },
             ))
             .child(action_button("Gain -3 dB", LINE, cx, move |this, cx| {
-                let _ = this.session.set_gain(-3);
+                if let Err(err) = this.session.set_gain(-3) {
+                    this.speak_toolbar(err);
+                }
                 this.after_edit();
                 cx.notify();
             }))
             .child(action_button("Fade", LINE, cx, move |this, cx| {
-                let _ = this
+                if let Err(err) = this
                     .session
-                    .set_fade(lattice_engine::Time::milliseconds(500));
+                    .set_fade(lattice_engine::Time::milliseconds(500))
+                {
+                    this.speak_toolbar(err);
+                }
                 this.after_edit();
                 cx.notify();
             }))
@@ -2703,6 +2715,16 @@ impl StudioView {
         self.invalidate_audio("edit");
         self.preview_dirty = true;
         self.queue_preview();
+    }
+
+    fn speak_toolbar(&mut self, err: impl std::fmt::Display) {
+        let spoken = self
+            .session
+            .last_spoken()
+            .map(ToOwned::to_owned)
+            .unwrap_or_else(|| err.to_string());
+        trace::log(format!("toolbar: {spoken}"));
+        self.last_render = Some(spoken);
     }
 
     fn track_at(&self, position: gpui::Point<gpui::Pixels>) -> Option<String> {
@@ -3258,113 +3280,78 @@ impl StudioView {
                     .child("Go to definition"),
             );
         }
-        let input_view = cx.entity();
-        let input_focus = self.title_focus.clone();
-        body = body
-            .child(div().mt_2().text_color(rgb(MUTED)).child("Title text"))
-            .child(
-                div()
-                    .id("title-draft")
-                    .debug_selector(|| "inspector.title".into())
-                    .relative()
-                    .track_focus(&self.title_focus)
-                    .px_2()
-                    .py_1()
-                    .border_1()
-                    .border_color(rgb(TEAL))
-                    .bg(rgb(0x0c0e12))
-                    .on_click(cx.listener(|this, _, window, cx| {
-                        this.title_focus.focus(window);
-                        cx.notify();
-                    }))
-                    .on_key_down(cx.listener(|this, event: &KeyDownEvent, _, cx| {
-                        handle_title_key(&mut this.title_draft, event);
-                        let end = this.title_draft.encode_utf16().count();
-                        this.title_selection_utf16 = end..end;
-                        this.title_marked_utf16 = None;
-                        cx.notify();
-                    }))
-                    .child(
-                        canvas(
-                            |_, _, _| (),
-                            move |bounds, (), window, cx| {
-                                window.handle_input(
-                                    &input_focus,
-                                    StudioTitleInputHandler {
-                                        view: input_view,
-                                        bounds,
-                                    },
-                                    cx,
-                                );
-                            },
+        if inspector.title_fields {
+            let input_view = cx.entity();
+            let input_focus = self.title_focus.clone();
+            body = body
+                .child(div().mt_2().text_color(rgb(MUTED)).child("Title text"))
+                .child(
+                    div()
+                        .id("title-draft")
+                        .debug_selector(|| "inspector.title".into())
+                        .relative()
+                        .track_focus(&self.title_focus)
+                        .px_2()
+                        .py_1()
+                        .border_1()
+                        .border_color(rgb(TEAL))
+                        .bg(rgb(0x0c0e12))
+                        .on_click(cx.listener(|this, _, window, cx| {
+                            this.title_focus.focus(window);
+                            cx.notify();
+                        }))
+                        .on_key_down(cx.listener(|this, event: &KeyDownEvent, _, cx| {
+                            handle_title_key(&mut this.title_draft, event);
+                            let end = this.title_draft.encode_utf16().count();
+                            this.title_selection_utf16 = end..end;
+                            this.title_marked_utf16 = None;
+                            cx.notify();
+                        }))
+                        .child(
+                            canvas(
+                                |_, _, _| (),
+                                move |bounds, (), window, cx| {
+                                    window.handle_input(
+                                        &input_focus,
+                                        StudioTitleInputHandler {
+                                            view: input_view,
+                                            bounds,
+                                        },
+                                        cx,
+                                    );
+                                },
+                            )
+                            .absolute()
+                            .size_full(),
                         )
-                        .absolute()
-                        .size_full(),
-                    )
-                    .child(if self.title_draft.is_empty() {
-                        "(type to edit title)".to_string()
-                    } else {
-                        self.title_draft.clone()
-                    }),
-            )
-            .child(
-                div()
-                    .flex()
-                    .gap_2()
-                    .mt_2()
-                    .child(action_button("Apply edit", TEAL, cx, move |this, cx| {
-                        let text = this.title_draft.clone();
-                        if this.session.apply_title_text(&text).is_ok() {
-                            this.adopt_locus_label();
-                            this.after_edit();
-                        }
-                        cx.notify();
-                    }))
-                    .child(action_button("Review", LINE, cx, move |this, cx| {
-                        let text = this.title_draft.clone();
-                        let _ = this.session.propose_title_text(text);
-                        cx.notify();
-                    })),
-            )
-            .child(
-                div()
-                    .id("render-preview")
-                    .debug_selector(|| "inspector.render-preview".into())
-                    .mt_2()
-                    .px_3()
-                    .py_1()
-                    .border_1()
-                    .border_color(rgb(TEAL))
-                    .cursor_pointer()
-                    .on_click(cx.listener(|this, _, _, cx| {
-                        match this.session.render_preview_with_renderer(this.renderer) {
-                            Ok(report) => {
-                                this.renderer_selection = Some(report.renderer.clone());
-                                if !this.preview_retry_required {
-                                    this.renderer_error = None;
-                                }
-                                this.last_render = Some(format!(
-                                    "wrote {} ({})",
-                                    report.output.display(),
-                                    report.renderer
-                                ));
+                        .child(if self.title_draft.is_empty() {
+                            "(type to edit title)".to_string()
+                        } else {
+                            self.title_draft.clone()
+                        }),
+                )
+                .child(
+                    div()
+                        .flex()
+                        .gap_2()
+                        .mt_2()
+                        .child(action_button("Apply edit", TEAL, cx, move |this, cx| {
+                            let text = this.title_draft.clone();
+                            if this.session.apply_title_text(&text).is_ok() {
+                                this.adopt_locus_label();
+                                this.after_edit();
+                            } else if let Some(spoken) = this.session.last_spoken() {
+                                this.last_render = Some(spoken.to_string());
                             }
-                            Err(err) => {
-                                trace::log(format!("render preview: {err}"));
-                                if !this.preview_retry_required {
-                                    this.renderer_error = Some(err.to_string());
-                                }
-                                this.last_render = Some(format!("render failed: {err}"));
-                            }
-                        }
-                        cx.notify();
-                    }))
-                    .child("Render preview.mp4"),
-            );
-        if let Some(path) = &self.last_render {
-            body = body.child(div().text_color(rgb(MUTED)).child(format!("wrote {path}")));
+                            cx.notify();
+                        }))
+                        .child(action_button("Review", LINE, cx, move |this, cx| {
+                            let text = this.title_draft.clone();
+                            let _ = this.session.propose_title_text(text);
+                            cx.notify();
+                        })),
+                );
         }
-
         if let Some(review) = review {
             body = body
                 .child(div().mt_3().text_color(rgb(TEAL)).child("Review"))
@@ -3378,7 +3365,105 @@ impl StudioView {
                         .child(review_button("Reject", 0xc45c5c, cx, false)),
                 );
         }
+        body = body.child(utterance_block(&inspector.utterance)).child(
+            div()
+                .id("render-preview")
+                .debug_selector(|| "inspector.render-preview".into())
+                .mt_2()
+                .px_3()
+                .py_1()
+                .border_1()
+                .border_color(rgb(TEAL))
+                .cursor_pointer()
+                .on_click(cx.listener(|this, _, _, cx| {
+                    match this.session.render_preview_with_renderer(this.renderer) {
+                        Ok(report) => {
+                            this.renderer_selection = Some(report.renderer.clone());
+                            if !this.preview_retry_required {
+                                this.renderer_error = None;
+                            }
+                            this.last_render = Some(format!(
+                                "wrote {} ({})",
+                                report.output.display(),
+                                report.renderer
+                            ));
+                        }
+                        Err(err) => {
+                            trace::log(format!("render preview: {err}"));
+                            if !this.preview_retry_required {
+                                this.renderer_error = Some(err.to_string());
+                            }
+                            this.last_render = Some(format!("render failed: {err}"));
+                        }
+                    }
+                    cx.notify();
+                }))
+                .child("Render preview.mp4"),
+        );
+        if let Some(path) = &self.last_render {
+            body = body.child(div().text_color(rgb(MUTED)).child(format!("wrote {path}")));
+        }
         pane("Inspector", px(240.0), body)
+    }
+
+    fn timeline_candidates(
+        &self,
+        layout: &lattice_studio::StudioLayout,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement {
+        let mut list = div()
+            .id("timeline-candidates")
+            .debug_selector(|| "timeline.candidates".into())
+            .flex()
+            .flex_col()
+            .gap_1()
+            .px_2()
+            .py_1();
+        if layout.timeline.candidates.is_empty() {
+            return list;
+        }
+        list = list.child(
+            div()
+                .text_color(rgb(TEAL))
+                .child("This Timeline point named several loci. Pick one. Here is unset."),
+        );
+        for candidate in &layout.timeline.candidates {
+            let id = candidate.locus_id.clone();
+            let verbs = if candidate.routed_verbs.is_empty() {
+                "no Timeline commit".into()
+            } else {
+                candidate.routed_verbs.join(", ")
+            };
+            list = list.child(
+                div()
+                    .id(SharedString::from(format!("timeline-candidate-{id}")))
+                    .debug_selector({
+                        let id = id.clone();
+                        move || format!("timeline.candidate.{id}")
+                    })
+                    .px_2()
+                    .py_1()
+                    .bg(rgb(0x1a1f28))
+                    .border_1()
+                    .border_color(rgb(TEAL))
+                    .cursor_pointer()
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        let _ = this
+                            .session
+                            .pick_point_candidate(lattice_engine::LocusId::new(id.clone()));
+                        this.adopt_locus_label();
+                        this.last_render = Some(this.session.utterance().spoken_text());
+                        this.refresh_preview("timeline-candidate");
+                        this.log_semantic_state("timeline-candidate", None);
+                        cx.notify();
+                    }))
+                    .child(format!(
+                        "{} \"{}\" · {} · {}",
+                        candidate.kind, candidate.label, candidate.scope, verbs
+                    )),
+            );
+        }
+        list
     }
 
     fn timeline_bar(
@@ -3454,6 +3539,7 @@ impl StudioView {
                         .child(format!("Timeline · {}", format_time(layout.playhead))),
                 ),
             )
+            .child(self.timeline_candidates(layout, cx))
             .child(tracks)
     }
 
@@ -3751,6 +3837,8 @@ fn tree_node(
             .cursor_pointer()
             .on_click(cx.listener(move |this, _, _, cx| {
                 this.session
+                    .touch_projection(lattice_studio::Projection::Tree);
+                this.session
                     .point_at(lattice_engine::LocusId::new(click_id.clone()));
                 this.adopt_locus_label();
                 this.refresh_preview("tree");
@@ -3826,6 +3914,43 @@ fn review_button(
 }
 
 #[cfg(feature = "window")]
+fn utterance_block(utterance: &lattice_studio::UtteranceView) -> impl IntoElement {
+    let mut block = div()
+        .id("inspector-utterance")
+        .debug_selector(|| "inspector.utterance".into())
+        .mt_3()
+        .flex()
+        .flex_col()
+        .gap_1();
+    block = block.child(
+        div()
+            .text_color(rgb(TEAL))
+            .child(format!("Here · {}", utterance.here)),
+    );
+    block = block.child(
+        div()
+            .text_color(rgb(MUTED))
+            .child(format!("pointing {}", utterance.pointing)),
+    );
+    if !utterance.legal.is_empty() {
+        block = block.child(
+            div()
+                .text_color(rgb(MUTED))
+                .child(format!("legal {}", utterance.legal.join(" · "))),
+        );
+    }
+    if !utterance.routed.is_empty() {
+        block = block.child(div().text_color(rgb(MUTED)).child(format!(
+            "this gesture commits {}",
+            utterance.routed.join(", ")
+        )));
+    }
+    for spoken in &utterance.spoken {
+        block = block.child(div().text_color(rgb(TEXT)).child(spoken.clone()));
+    }
+    block
+}
+
 fn handle_title_key(draft: &mut String, event: &KeyDownEvent) {
     let key = event.keystroke.key.as_str();
     if key == "backspace" {

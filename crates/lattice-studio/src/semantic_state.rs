@@ -20,6 +20,7 @@ pub fn snapshot(session: &StudioSession) -> Value {
         Ok(None) => Value::Null,
         Err(err) => json!({ "error": err.to_string() }),
     };
+    let utterance = session.utterance();
     json!({
         "locus": locus,
         "playhead": session.playhead().to_string(),
@@ -29,6 +30,15 @@ pub fn snapshot(session: &StudioSession) -> Value {
         "gesture": gesture_value(session.gesture()),
         "drag": drag_value(session),
         "last_gesture_error": session.last_gesture_error(),
+        "pointing": utterance.pointing,
+        "projection": session.touched_projection().as_str(),
+        "spoken": utterance.spoken.iter().map(|clause| &clause.text).collect::<Vec<_>>(),
+        "unresolved": session.unresolved_pointing().map(|point| {
+            json!({
+                "projection": point.projection.as_str(),
+                "candidates": point.candidates.iter().map(|locus| locus.id.as_str()).collect::<Vec<_>>(),
+            })
+        }),
     })
 }
 
