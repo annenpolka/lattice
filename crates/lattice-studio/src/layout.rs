@@ -375,39 +375,54 @@ fn inspector_from_session(
     }
 }
 
+fn placement_source_id(session: &StudioSession, clip_id: &str) -> Option<String> {
+    session
+        .compilation()
+        .project
+        .scenes
+        .iter()
+        .find_map(|scene| {
+            scene
+                .placements
+                .iter()
+                .find(|placement| placement.id == clip_id)
+                .and_then(|placement| placement.source_id.clone())
+        })
+}
+
+/// Same identity the Timeline handle uses: this exact source locus, not `LocusKind`.
+fn source_clip_matches_locus(locus: &Locus, clip_id: &str, source_id: Option<&str>) -> bool {
+    source_id == Some(locus.node_id.as_str())
+        || source_id == Some(locus.id.as_str())
+        || locus.id.as_str() == clip_id
+        || locus.node_id == clip_id
+}
+
 fn source_property_values(session: &StudioSession, locus: &Locus) -> (Option<i32>, Option<Time>) {
     if locus.kind != LocusKind::Source {
         return (None, None);
     }
     let Ok(timeline) = Engine::timeline(&session.compilation().project) else {
-        return (Some(0), Some(Time::ZERO));
+        return (None, None);
     };
+    let mut matched = false;
     let mut gain_db = None;
     let mut fade_in = None;
     for clip in &timeline.clips {
-        let source_id = session
-            .compilation()
-            .project
-            .scenes
-            .iter()
-            .find_map(|scene| {
-                scene
-                    .placements
-                    .iter()
-                    .find(|placement| placement.id == clip.id)
-                    .and_then(|placement| placement.source_id.clone())
-            });
-        let matches = source_id.as_deref() == Some(locus.node_id.as_str())
-            || source_id.as_deref() == Some(locus.id.as_str());
-        if !matches {
+        let source_id = placement_source_id(session, &clip.id);
+        if !source_clip_matches_locus(locus, &clip.id, source_id.as_deref()) {
             continue;
         }
+        matched = true;
         if clip.gain_db.is_some() {
             gain_db = clip.gain_db;
         }
         if clip.fade_in.is_some() {
             fade_in = clip.fade_in;
         }
+    }
+    if !matched {
+        return (None, None);
     }
     (gain_db.or(Some(0)), fade_in.or(Some(Time::ZERO)))
 }
@@ -472,26 +487,13 @@ fn timeline_view(
                 .map(|scene| scene.id.clone())
                 .unwrap_or_default();
             let overlay = matches!(kind.as_str(), "title" | "callout");
-            let source_id = session
-                .compilation()
-                .project
-                .scenes
-                .iter()
-                .find_map(|scene| {
-                    scene
-                        .placements
-                        .iter()
-                        .find(|placement| placement.id == clip.id)
-                        .and_then(|placement| placement.source_id.clone())
-                });
+            let source_id = placement_source_id(session, &clip.id);
             let selected = current.is_some_and(|locus| {
                 if overlay {
                     return locus.id.as_str() == clip.id || locus.node_id == clip.id;
                 }
                 if locus.kind == LocusKind::Source {
-                    return source_id.as_deref() == Some(locus.node_id.as_str())
-                        || locus.id.as_str() == clip.id
-                        || locus.node_id == clip.id;
+                    return source_clip_matches_locus(locus, &clip.id, source_id.as_deref());
                 }
                 if locus.kind == LocusKind::Scene {
                     return locus.scene_id.as_deref() == Some(scene_id.as_str())

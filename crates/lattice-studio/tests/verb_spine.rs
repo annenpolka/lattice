@@ -818,6 +818,81 @@ fn inspector_property_fields_bind_exact_source_locus_id() {
     assert_eq!(layout.inspector.fade_in, Some(Time::ZERO));
 }
 
+fn two_source_session() -> StudioSession {
+    let dir = unique_dir("two-source");
+    lattice_media::generate_av_fixture(dir.join("capture.mp4"), 8).unwrap();
+    let vel = dir.join("main.vel");
+    std::fs::write(
+        &vel,
+        r#"project "demo"
+convention commentary
+media game "capture.mp4"
+sequence main {
+  demo
+}
+scene demo {
+  game[0s..3s] as fight
+  game[3s..6s] as later
+  fade later {
+    at 0s for 0.5s
+  }
+  gain fight by -3
+  gain later by -6
+}
+"#,
+    )
+    .unwrap();
+    StudioSession::open(&vel).expect("open")
+}
+
+fn source_named(session: &StudioSession, name: &str) -> lattice_engine::Locus {
+    session
+        .loci()
+        .unwrap()
+        .into_iter()
+        .find(|locus| {
+            locus.kind == LocusKind::Source
+                && (locus.label == name
+                    || locus.node_id == name
+                    || locus.id.as_str() == name
+                    || locus.id.as_str().ends_with(&format!(":{name}")))
+        })
+        .unwrap_or_else(|| panic!("source {name}"))
+}
+
+#[test]
+fn inspector_property_fields_follow_exact_source_locus_not_kind() {
+    let mut session = two_source_session();
+    let fight = source_named(&session, "fight");
+    let later = source_named(&session, "later");
+    assert_ne!(fight.id, later.id, "two source bindings must stay distinct");
+
+    session.point_at(fight.id.clone());
+    let fight_layout = session.layout().unwrap();
+    assert_eq!(
+        fight_layout.inspector.locus_id.as_deref(),
+        Some(fight.id.as_str())
+    );
+    assert_eq!(fight_layout.inspector.gain_db, Some(-3));
+    assert_eq!(fight_layout.inspector.fade_in, Some(Time::ZERO));
+
+    session.point_at(later.id.clone());
+    let later_layout = session.layout().unwrap();
+    assert_eq!(
+        later_layout.inspector.locus_id.as_deref(),
+        Some(later.id.as_str())
+    );
+    assert_eq!(later_layout.inspector.gain_db, Some(-6));
+    assert_eq!(
+        later_layout.inspector.fade_in,
+        Some(Time::from_decimal_seconds(0, 5, 1).unwrap())
+    );
+    assert_ne!(
+        fight_layout.inspector.gain_db, later_layout.inspector.gain_db,
+        "fields must follow the pointed LocusId, not LocusKind::Source"
+    );
+}
+
 #[test]
 fn inspector_apply_gain_records_invoked_this_session() {
     let mut session = overlap_session();
