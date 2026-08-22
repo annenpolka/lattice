@@ -4,6 +4,7 @@ These files are the design conversations that produced Lattice. They are source 
 
 | File | Date | What it is |
 |---|---|---|
+| [2026-08-22-studio-interaction-semantic-compass-model.md](2026-08-22-studio-interaction-semantic-compass-model.md) | 2026-08-22 | Phase IV discussion input: one domain-derived interaction model separating semantic “here,” observation time, projections, and legal edit scope. |
 | [2026-08-12-ai-driven-video-editor.md](2026-08-12-ai-driven-video-editor.md) | 2026-08-12 | Earlier product sketch: script-canonical, utterance-first editor (the TakeGraph line of thought). |
 | [2026-08-18-video-editor-cost-and-vel-design.md](2026-08-18-video-editor-cost-and-vel-design.md) | 2026-08-18–19 | Costing, VEL language design, Lattice constitution, crate layout, and the initialization plan this repo follows. |
 
