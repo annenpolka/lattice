@@ -210,3 +210,40 @@ First paint: title here, Timeline routing. Toolbar refuses on title, then
 Sequence point of source (empty route, "committed on Toolbar"), Split refuse
 on source with Navigate, Sequence point of scene, Split commit (`demo_2`),
 Gain refuse on scene, Play inheriting the Toolbar stamp.
+
+## Phase III vote (chair frame)
+
+Chair narrows the claim: the current **fixed, always-visible bank of
+locus-taking `SemanticEdit` buttons** is not a coherent global verb surface.
+A **session strip may remain global**. This addendum votes that frame. It
+does not pick a shipping winner for orphan verbs.
+
+**Objects under vote**
+
+| Object | What it is on the live row | Vote |
+|---|---|---|
+| Locus-taking edit bank | Set In, Set Out, Split at Playhead, Delete Selected Clip, Gain -3 dB, Fade | **DELETE** |
+| Session strip | transport, renderer request, Save, Resolve, Open Video, Zoom, Copy locus JSON | **KEEP** as a non-verb global |
+
+No **STEAL** of the six buttons into another global verb home. That would
+recreate the bank. Orphan commit paths (`set-gain` / `set-fade` / `split` /
+`delete`) stay named leftovers, not a replacement object.
+
+**Six tests (interaction: commit vs speak)**
+
+| # | Test | Locus-taking bank | Session strip |
+|---|---|---|---|
+| 1 | Standing invitation for a locus-taking edit? | **Fail.** The six buttons are that invitation. They are offered before here is relevant. A standing invite that usually speaks refuse is not a gesture. | **Pass.** These clicks do not take a locus and do not `apply_edit`. |
+| 2 | Target / scope / effect / parameter / committing projection disclosed before commit? | **Fail.** The button names a verb (and sometimes a fixed parameter: −3 dB, playhead). Target, scope, effect, and the Toolbar stamp appear only after the click — refuse in `last_render` (`wrote …`), or utterance after `touched_projection = Toolbar`. Set In / Split do not show the mapped source time. | n/a as a verb surface. No locus-taking disclose to do. |
+| 3 | Engine only legality authority? | **Gate pass, surface fail.** `target_locus_for` uses Engine `is_legal_verb`. The bank does not override a refuse. It still authors a second invitation set the Engine never named for this here. | **Pass.** No legality set. Renderer / Resolve / Save are phase or session acts. |
+| 4 | One here, fail-closed, no target search / promotion? | **Commit path pass.** Title/source/scene clicks spoke and did not retarget (Claim 2, 3, 4). Video-click and overlap locks were not reopened. **Invitation fail:** the bank is offered as if here were optional. | **Pass.** Play / Seek / Scrub / Save do not search a target. Seek leftover: playhead only. |
+| 5 | Every legal edit has a named route or is spoken unrouted? | **Fail as this object.** The utterance already does this work (Claim 1, 4). The bank does not speak unrouted verbs until pressed. After press it *becomes* the named route ("committed on Toolbar") — a circular home for orphans. | **Pass.** Not in the legal-edit route table. |
+| 6 | Non-verb global controls grouped by actual authority? | **Fail.** The bank shares one wrap with Play / Save / Resolve / CPU. Teal is not verb-commit. Play inherited the Toolbar stamp (Claim 5). | **Fail today, keepable.** Same wrap. KEEP means split the object, not keep the mix. |
+
+**Vote.** DELETE the locus-taking bank as a global verb surface. KEEP a
+session strip as a different global object. Do not STEAL the six buttons
+elsewhere on the window. Do not decide here whether orphans stay spoken or
+gain a projection gesture — that would be a shipping winner.
+
+Locks unchanged. Same PNGs as Claims 1 and 3: the bank is visible on title
+(illegal) and still visible after a scene Split (some legal, Gain not).
