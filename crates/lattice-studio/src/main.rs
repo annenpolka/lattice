@@ -1686,7 +1686,7 @@ impl StudioView {
         }
         let x = self.pointer_x(window_x);
         let y = self.pointer_y(window_y, self.hover_track.as_deref());
-        match self.session.commit_timeline_pointer_xy_snap(x, y, snap_off) {
+        let applied = match self.session.commit_timeline_pointer_xy_snap(x, y, snap_off) {
             Ok(outcome) => {
                 trace::log(format!(
                     "gesture commit x={x:.1} outcome={outcome:?} playhead={} undo={}",
@@ -1696,14 +1696,21 @@ impl StudioView {
                 if outcome == lattice_studio::GestureOutcome::Applied {
                     self.invalidate_audio("timeline-edit");
                 }
+                outcome == lattice_studio::GestureOutcome::Applied
             }
-            Err(err) => trace::log(format!("commit gesture: {err}")),
-        }
+            Err(err) => {
+                trace::log(format!("commit gesture: {err}"));
+                false
+            }
+        };
         if let Some(err) = self.session.last_gesture_error() {
             trace::log(format!("gesture failed: {err}"));
         }
         self.sync_audio_monitor("timeline-pointer-commit");
         self.adopt_locus_label();
+        if applied {
+            self.refresh_property_drafts();
+        }
         self.last_inflight_key = None;
         self.log_semantic_state("timeline-pointer-commit", None);
         self.preview_dirty = true;
