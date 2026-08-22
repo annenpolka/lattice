@@ -1,0 +1,45 @@
+package lattice:stdlib@0.1.0;
+
+interface lowering {
+    record rational-time {
+        num: s64,
+        den: s64,
+    }
+
+    record span {
+        start: u32,
+        end: u32,
+        line: u32,
+        column: u32,
+    }
+
+    record time-map-segment {
+        local-start: rational-time,
+        local-duration: rational-time,
+        content-start: rational-time,
+        rate: rational-time,
+    }
+
+    record time-map {
+        duration: rational-time,
+        segments: list<time-map-segment>,
+    }
+
+    record placement-fragment {
+        start: rational-time,
+        duration: rational-time,
+        text: string,
+        opacity: option<u8>,
+        span: span,
+    }
+
+    /// Insert a rate-0 hold. Returns the updated TimeMap. No FFmpeg / GPUI.
+    freeze: func(map: time-map, at: rational-time, hold: rational-time) -> result<time-map, string>;
+
+    /// Build a title placement fragment. No FFmpeg / GPUI.
+    title: func(text: string, at: rational-time, hold: rational-time, opacity: option<u8>, span: span) -> result<placement-fragment, string>;
+}
+
+world stdlib {
+    export lowering;
+}

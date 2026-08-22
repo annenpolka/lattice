@@ -4,21 +4,76 @@
 //! VEL syntax, GPUI, Wasmtime, or `FFmpeg`.
 
 mod diagnostic;
+mod edit;
+mod evaluate;
 mod ir;
 mod locator;
+mod locus;
+mod property;
 mod provenance;
+mod resolve;
+mod scene;
+mod space;
 mod span;
 mod time;
 mod time_map;
 mod timeline;
 
 pub use diagnostic::{Diagnostic, Severity};
+pub use edit::{EditProposal, SemanticEdit, source_revision};
+pub use evaluate::{
+    EvaluateError, EvaluateOpts, audio_plan_from_timeline, evaluate, evaluate_at,
+    evaluate_with_style, text_overlay_size,
+};
 pub use ir::{
     Audio, Media, Placement, PlacementKind, Project, Scene, Sequence, Source, TimeSpan, Visual,
 };
 pub use locator::MediaLocator;
+pub use locus::{
+    CoreProjection, Locus, LocusId, LocusKind, LocusProjection, SourceProjection,
+    TimelineProjection, VisualProjection,
+};
+pub use property::{Curve, Easing, Interpolate, Keyframe, Property};
 pub use provenance::{Origin, Provenance};
+pub use resolve::{AssetIdentity, LockedAsset, ResolveLock, ResolvedAsset};
+pub use scene::{
+    AnimatedStyle, AssetRef, AudioClip, AudioPlan, BlendMode, Canvas, EffectNode, FontIdentity,
+    FontSource, FontSpec, GroupNode, ImageNode, MaskNode, NodeProps, Rect, RenderNode, RenderScene,
+    Rgba, ShapeKind, ShapeNode, TextNode, Transform, VideoNode,
+};
+pub use space::{
+    CANVAS_BASIS_POINTS, NormalizedPosition, NormalizedScale, OVERLAY_SCALE_MAX, OVERLAY_SCALE_MIN,
+    OVERLAY_SCALE_ONE,
+};
 pub use span::Span;
 pub use time::{Time, TimeError};
 pub use time_map::{TimeMap, TimeMapError, TimeMapSegment};
 pub use timeline::{Timeline, TimelineClip, TimelineError, TimelineSource, flatten_project};
+
+#[cfg(test)]
+mod crate_purity {
+    #[test]
+    fn cargo_toml_has_no_forbidden_runtime_deps() {
+        let manifest = include_str!("../Cargo.toml");
+        for forbidden in [
+            "gpui",
+            "wasmtime",
+            "ffmpeg-next",
+            "wgpu",
+            "cosmic-text",
+            "git2",
+            "async-openai",
+            "anthropic",
+            "async_openai",
+        ] {
+            assert!(
+                !manifest.contains(forbidden),
+                "lattice-core must not depend on {forbidden}"
+            );
+        }
+        assert!(
+            !manifest.contains("lattice-vel"),
+            "lattice-core must not depend on the VEL parser"
+        );
+    }
+}

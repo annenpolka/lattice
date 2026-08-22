@@ -281,6 +281,12 @@ impl Parser {
     }
 
     fn parse_primary(&mut self) -> Result<Expr, ParseError> {
+        if self.at(TokenKind::Minus) {
+            self.bump();
+            let mut expr = self.parse_primary()?;
+            negate_time(&mut expr);
+            return Ok(expr);
+        }
         match self.peek().kind {
             TokenKind::String => {
                 let tok = self.bump();
@@ -670,6 +676,31 @@ scene demo {
         );
         let title = title.expect("title is a generic invocation");
         assert!(matches!(title.args.first(), Some(Expr::String { value, .. }) if value == "Hello"));
+    }
+
+    #[test]
+    fn parses_negative_quantity_as_generic_expr() {
+        let doc = parse(r"scene x { gain fight by -3 }").unwrap();
+        let Item::Scene { body, .. } = &doc.items[0] else {
+            panic!("expected scene");
+        };
+        let Item::Invocation(inv) = &body.items[0] else {
+            panic!("expected invocation");
+        };
+        assert_eq!(inv.name, "gain");
+        let by = inv
+            .modifiers
+            .iter()
+            .find(|m| m.name == "by")
+            .expect("parser keeps `by` as a modifier");
+        assert!(
+            matches!(
+                &by.value,
+                Expr::Quantity(q) if q.negative && q.digits == 3
+            ),
+            "unary minus is syntax, not gain semantics: {:?}",
+            by.value
+        );
     }
 
     #[test]

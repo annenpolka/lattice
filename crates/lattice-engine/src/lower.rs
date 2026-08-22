@@ -56,6 +56,12 @@ fn value_view(expr: &Expr) -> Result<ValueView, TimeEvalError> {
             scale: q.scale,
             unit: q.unit.clone(),
         }),
+        Expr::Tuple { items, .. } => Ok(ValueView::Tuple(
+            items
+                .iter()
+                .map(value_view)
+                .collect::<Result<Vec<_>, _>>()?,
+        )),
         Expr::End { .. } => Err(TimeEvalError::Message(
             "`end` is only valid inside a range".into(),
         )),

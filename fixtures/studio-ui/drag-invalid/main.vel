@@ -1,0 +1,17 @@
+project "drag-invalid"
+
+convention commentary
+
+media game "capture.mp4"
+
+sequence main {
+  pinned
+}
+
+scene pinned {
+  game[0s..500ms] as clip
+
+  title "Pinned" {
+    at 0s for 500ms
+  }
+}

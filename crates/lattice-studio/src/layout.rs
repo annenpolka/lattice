@@ -1,0 +1,453 @@
+//! GPUI-free layout projection of a Studio session.
+//! Every pane is derived from Engine compile / timeline / plan / locus.
+
+use lattice_engine::{
+    Canvas, EditProposal, Engine, Locus, LocusId, LocusKind, NormalizedScale, Origin, Span, Time,
+    plan_from_timeline, text_overlay_size,
+};
+
+use crate::session::StudioSession;
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TreeNode {
+    pub id: String,
+    pub kind: String,
+    pub label: String,
+    pub selected: bool,
+    pub children: Vec<TreeNode>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CanvasOverlay {
+    pub locus_id: String,
+    pub text: String,
+    pub callout: bool,
+    pub selected: bool,
+    pub x: i32,
+    pub y: i32,
+    pub width: u32,
+    pub height: u32,
+    pub scale: NormalizedScale,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CanvasView {
+    pub overlays: Vec<CanvasOverlay>,
+    pub preview_frame: Option<std::path::PathBuf>,
+    pub playhead: Time,
+    pub preview_width: u32,
+    pub preview_height: u32,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SourceView {
+    pub text: String,
+    pub highlight: Option<Span>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct InspectorView {
+    pub heading: String,
+    pub origin: String,
+    pub defined_in: String,
+    pub locus_id: Option<String>,
+    pub go_to_definition: Option<Span>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TimelineClipView {
+    pub id: String,
+    pub kind: String,
+    pub track: String,
+    pub label: String,
+    pub start: Time,
+    pub duration: Time,
+    pub selected: bool,
+    pub scene_id: String,
+    pub handles: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TimelineTrackView {
+    pub name: String,
+    pub clips: Vec<TimelineClipView>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TimelineView {
+    pub duration: Time,
+    pub tracks: Vec<TimelineTrackView>,
+    pub snap_indicator: Option<Time>,
+    pub insertion_marker: Option<Time>,
+    pub viewport_start: Time,
+    pub viewport_duration: Time,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ReviewView {
+    pub description: String,
+    pub vel_diff: String,
+    pub locus_id: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct StudioLayout {
+    pub project_name: String,
+    pub file_label: String,
+    pub tree: Vec<TreeNode>,
+    pub canvas: CanvasView,
+    pub source: SourceView,
+    pub inspector: InspectorView,
+    pub timeline: TimelineView,
+    pub review: Option<ReviewView>,
+    pub playhead: Time,
+    pub dirty: bool,
+    pub playing: bool,
+}
+
+pub fn from_session(session: &StudioSession) -> Result<StudioLayout, lattice_engine::EngineError> {
+    let compilation = session.compilation();
+    let loci = session.loci()?;
+    let current = session.current_locus()?;
+    let current_id = current.as_ref().map(|locus| locus.id.clone());
+    let timeline = Engine::timeline(&compilation.project)?;
+    let plan = plan_from_timeline(&timeline)?;
+
+    Ok(StudioLayout {
+        project_name: compilation.project.name.clone(),
+        file_label: file_label(session.path()),
+        tree: tree_from_compilation(compilation, &loci, current_id.as_ref()),
+        canvas: canvas_from_plan(
+            session,
+            &plan,
+            &loci,
+            current_id.as_ref(),
+            session.playhead(),
+            session.peek_preview_frame(),
+            session.preview_pixel_size(),
+        ),
+        source: SourceView {
+            text: compilation.source.clone(),
+            highlight: current.as_ref().and_then(|locus| locus.source_span),
+        },
+        inspector: inspector_from_locus(current.as_ref(), session.path()),
+        timeline: timeline_view(session, &timeline, current.as_ref()),
+        review: session.review_proposal().map(review_from_proposal),
+        playhead: session.playhead(),
+        dirty: session.is_dirty(),
+        playing: session.is_playing(),
+    })
+}
+
+fn file_label(path: &std::path::Path) -> String {
+    path.file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("project.vel")
+        .to_string()
+}
+
+fn tree_from_compilation(
+    compilation: &lattice_engine::Compilation,
+    loci: &[Locus],
+    current: Option<&LocusId>,
+) -> Vec<TreeNode> {
+    let mut roots = Vec::new();
+    for sequence in &compilation.project.sequences {
+        let mut scenes = Vec::new();
+        for scene_id in &sequence.scene_ids {
+            let Some(scene) = compilation
+                .project
+                .scenes
+                .iter()
+                .find(|scene| scene.id == *scene_id)
+            else {
+                continue;
+            };
+            let mut children = Vec::new();
+            for source in &scene.sources {
+                if source.generated {
+                    continue;
+                }
+                children.push(node_for(
+                    &source.id,
+                    "source",
+                    &source.name,
+                    current,
+                    Vec::new(),
+                ));
+                if source
+                    .time_map
+                    .segments
+                    .iter()
+                    .any(|segment| segment.rate.num() == 0)
+                {
+                    children.push(TreeNode {
+                        id: format!("freeze:{}", source.id),
+                        kind: "freeze".into(),
+                        label: "freeze".into(),
+                        selected: false,
+                        children: Vec::new(),
+                    });
+                }
+            }
+            for locus in loci {
+                if locus.scene_id.as_deref() != Some(scene.id.as_str()) {
+                    continue;
+                }
+                if !matches!(
+                    locus.kind,
+                    LocusKind::Title | LocusKind::Callout | LocusKind::Speech
+                ) {
+                    continue;
+                }
+                children.push(node_for(
+                    locus.id.as_str(),
+                    kind_label(locus.kind),
+                    &locus.label,
+                    current,
+                    Vec::new(),
+                ));
+            }
+            scenes.push(node_for(&scene.id, "scene", &scene.name, current, children));
+        }
+        roots.push(node_for(
+            &sequence.id,
+            "sequence",
+            &sequence.name,
+            current,
+            scenes,
+        ));
+    }
+    roots
+}
+
+fn node_for(
+    id: &str,
+    kind: &str,
+    label: &str,
+    current: Option<&LocusId>,
+    children: Vec<TreeNode>,
+) -> TreeNode {
+    TreeNode {
+        selected: current.is_some_and(|locus| locus.as_str() == id),
+        id: id.to_string(),
+        kind: kind.to_string(),
+        label: label.to_string(),
+        children,
+    }
+}
+
+fn canvas_from_plan(
+    session: &StudioSession,
+    plan: &lattice_engine::RenderPlan,
+    loci: &[Locus],
+    current: Option<&LocusId>,
+    playhead: Time,
+    preview_frame: Option<std::path::PathBuf>,
+    preview_size: (u32, u32),
+) -> CanvasView {
+    let overlays = plan
+        .overlays
+        .iter()
+        .filter(|overlay| {
+            let locus = loci.iter().find(|locus| locus.id == overlay.locus_id);
+            match locus {
+                Some(locus) => crate::interaction::overlay_playhead_visible(
+                    session,
+                    locus.id.as_str(),
+                    overlay.span,
+                ),
+                None => overlay.span.contains(playhead),
+            }
+        })
+        .filter_map(|overlay| {
+            let text = overlay.text.clone()?;
+            let locus = loci.iter().find(|locus| locus.id == overlay.locus_id)?;
+            let (mut x, mut y, base_width, base_height) =
+                overlay_bounds(overlay.callout, preview_size.0, preview_size.1);
+            let resize = session.canvas_overlay_resize_preview(&locus.id);
+            let requested_scale = resize
+                .map(|preview| preview.scale)
+                .or_else(|| locus.visual.as_ref().and_then(|visual| visual.scale))
+                .unwrap_or_default();
+            let scale =
+                requested_scale.fit_within(base_width, base_height, preview_size.0, preview_size.1);
+            let width = scale.scaled_extent(base_width);
+            let height = scale.scaled_extent(base_height);
+            let position = resize
+                .map(|preview| preview.position)
+                .or_else(|| session.canvas_overlay_drag_position(&locus.id))
+                .or_else(|| locus.visual.as_ref().and_then(|visual| visual.position));
+            if let Some(position) = position {
+                (x, y) = position.pixel_origin(preview_size.0, preview_size.1, width, height);
+            } else if !overlay.callout {
+                y = i32::try_from(preview_size.1.saturating_sub(height)).unwrap_or(0);
+            }
+            Some(CanvasOverlay {
+                selected: current.is_some_and(|id| id == &locus.id),
+                locus_id: locus.id.as_str().to_string(),
+                text,
+                callout: overlay.callout,
+                x,
+                y,
+                width,
+                height,
+                scale,
+            })
+        })
+        .collect();
+    CanvasView {
+        overlays,
+        preview_frame,
+        playhead,
+        preview_width: preview_size.0,
+        preview_height: preview_size.1,
+    }
+}
+
+fn inspector_from_locus(locus: Option<&Locus>, path: &std::path::Path) -> InspectorView {
+    let Some(locus) = locus else {
+        return InspectorView {
+            heading: "(no locus)".into(),
+            origin: String::new(),
+            defined_in: String::new(),
+            locus_id: None,
+            go_to_definition: None,
+        };
+    };
+    let file = file_label(path);
+    let defined_in = locus.source_span.map_or_else(
+        || "provenance always present".into(),
+        |span| format!("{file}:{}", span.line),
+    );
+    let origin = match &locus.provenance.origin {
+        Origin::Invocation { command } => format!("invocation `{command}`"),
+        Origin::Convention { name } => format!("convention `{name}`"),
+        Origin::Builtin { name } => format!("builtin `{name}`"),
+        Origin::Source => "source".into(),
+    };
+    InspectorView {
+        heading: format!("{} \"{}\"", kind_label(locus.kind), locus.label),
+        origin,
+        defined_in,
+        locus_id: Some(locus.id.as_str().to_string()),
+        go_to_definition: locus.source_span,
+    }
+}
+
+fn timeline_view(
+    session: &StudioSession,
+    timeline: &lattice_engine::Timeline,
+    current: Option<&Locus>,
+) -> TimelineView {
+    let current_id = current.map(|locus| locus.id.clone());
+    let clips: Vec<TimelineClipView> = timeline
+        .clips
+        .iter()
+        .map(|clip| {
+            let kind = format!("{:?}", clip.kind).to_ascii_lowercase();
+            let track = match kind.as_str() {
+                "title" | "callout" => "text",
+                "audio" => "audio",
+                _ => "video",
+            };
+            let scene_id = session
+                .compilation()
+                .project
+                .scenes
+                .iter()
+                .find(|scene| {
+                    scene
+                        .placements
+                        .iter()
+                        .any(|placement| placement.id == clip.id)
+                })
+                .map(|scene| scene.id.clone())
+                .unwrap_or_default();
+            let overlay = matches!(kind.as_str(), "title" | "callout");
+            let selected = current.is_some_and(|locus| {
+                if overlay {
+                    return locus.id.as_str() == clip.id || locus.node_id == clip.id;
+                }
+                locus.id.as_str() == clip.id
+                    || locus.node_id == clip.id
+                    || locus.scene_id.as_deref() == Some(scene_id.as_str())
+                    || current_id
+                        .as_ref()
+                        .is_some_and(|id| id.as_str() == scene_id)
+            });
+            let (start, duration) = crate::interaction::ephemeral_clip_span(session, &clip.id)
+                .unwrap_or((clip.span.start, clip.span.duration));
+            let handles = selected && matches!(kind.as_str(), "video" | "title" | "callout");
+            TimelineClipView {
+                selected,
+                id: clip.id.clone(),
+                kind,
+                track: track.into(),
+                label: clip.text.clone().unwrap_or_else(|| clip.id.clone()),
+                start,
+                duration,
+                scene_id,
+                handles,
+            }
+        })
+        .collect();
+    TimelineView {
+        duration: timeline.duration,
+        tracks: vec![
+            track_named("Video", "video", &clips),
+            track_named("Audio", "audio", &clips),
+            track_named("Text", "text", &clips),
+        ],
+        snap_indicator: session.snap_indicator(),
+        insertion_marker: crate::interaction::insertion_marker(session),
+        viewport_start: session.viewport().visible_start(),
+        viewport_duration: session.viewport().visible_duration(),
+    }
+}
+
+fn track_named(name: &str, track: &str, clips: &[TimelineClipView]) -> TimelineTrackView {
+    TimelineTrackView {
+        name: name.into(),
+        clips: clips
+            .iter()
+            .filter(|clip| clip.track == track)
+            .cloned()
+            .collect(),
+    }
+}
+
+fn review_from_proposal(proposal: &EditProposal) -> ReviewView {
+    ReviewView {
+        description: proposal.description.clone(),
+        vel_diff: proposal.vel_diff.clone(),
+        locus_id: proposal.locus_id.as_str().to_string(),
+    }
+}
+
+/// Matches `evaluate` title/callout geometry so GPUI chrome sits on the composited frame.
+fn overlay_bounds(callout: bool, canvas_w: u32, canvas_h: u32) -> (i32, i32, u32, u32) {
+    let (width, height) = text_overlay_size(Canvas {
+        width: canvas_w,
+        height: canvas_h,
+    });
+    if callout {
+        (0, 0, width, height)
+    } else {
+        let y = i32::try_from(canvas_h.saturating_sub(height)).unwrap_or(0);
+        (0, y, width, height)
+    }
+}
+
+fn kind_label(kind: LocusKind) -> &'static str {
+    match kind {
+        LocusKind::Title => "title",
+        LocusKind::Callout => "callout",
+        LocusKind::Source => "source",
+        LocusKind::Placement => "placement",
+        LocusKind::Scene => "scene",
+        LocusKind::Sequence => "sequence",
+        LocusKind::Media => "media",
+        LocusKind::Speech => "speech",
+    }
+}

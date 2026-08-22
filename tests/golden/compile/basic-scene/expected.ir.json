@@ -10,6 +10,15 @@
         "kind": "file",
         "path": "capture.mp4"
       }
+    },
+    {
+      "id": "media:speech-nice-freeze",
+      "name": "speech-nice-freeze",
+      "locator": {
+        "kind": "generated",
+        "generator": "speech",
+        "key": "Nice freeze"
+      }
     }
   ],
   "sequences": [
@@ -118,6 +127,60 @@
               "kind": "source"
             }
           }
+        },
+        {
+          "id": "source:speech-nice-freeze",
+          "name": "speech-nice-freeze",
+          "media_name": "speech-nice-freeze",
+          "source_range": {
+            "start": {
+              "num": 0,
+              "den": 1
+            },
+            "duration": {
+              "num": 3,
+              "den": 2
+            }
+          },
+          "time_map": {
+            "duration": {
+              "num": 3,
+              "den": 2
+            },
+            "segments": [
+              {
+                "local_start": {
+                  "num": 0,
+                  "den": 1
+                },
+                "local_duration": {
+                  "num": 3,
+                  "den": 2
+                },
+                "content_start": {
+                  "num": 0,
+                  "den": 1
+                },
+                "rate": {
+                  "num": 1,
+                  "den": 1
+                }
+              }
+            ]
+          },
+          "provenance": {
+            "span": {
+              "start": 325,
+              "end": 372,
+              "line": 31,
+              "column": 3
+            },
+            "origin": {
+              "kind": "invocation",
+              "command": "speech"
+            }
+          },
+          "generated": true
         }
       ],
       "placements": [
@@ -137,14 +200,15 @@
           },
           "visual": {
             "fit": null,
-            "text": "Hello"
+            "text": "Hello",
+            "opacity": 90
           },
           "audio": null,
           "provenance": {
             "span": {
-              "start": 166,
-              "end": 202,
-              "line": 16,
+              "start": 205,
+              "end": 256,
+              "line": 20,
               "column": 3
             },
             "origin": {
@@ -154,7 +218,70 @@
           }
         },
         {
-          "id": "demo:video:2",
+          "id": "demo:callout:2",
+          "kind": "callout",
+          "source_id": null,
+          "span": {
+            "start": {
+              "num": 26,
+              "den": 5
+            },
+            "duration": {
+              "num": 3,
+              "den": 2
+            }
+          },
+          "visual": {
+            "fit": null,
+            "text": "Hold"
+          },
+          "audio": null,
+          "provenance": {
+            "span": {
+              "start": 260,
+              "end": 301,
+              "line": 25,
+              "column": 3
+            },
+            "origin": {
+              "kind": "invocation",
+              "command": "callout"
+            }
+          }
+        },
+        {
+          "id": "demo:speech:3",
+          "kind": "audio",
+          "source_id": "source:speech-nice-freeze",
+          "span": {
+            "start": {
+              "num": 26,
+              "den": 5
+            },
+            "duration": {
+              "num": 3,
+              "den": 2
+            }
+          },
+          "visual": null,
+          "audio": {
+            "gain_db": null
+          },
+          "provenance": {
+            "span": {
+              "start": 325,
+              "end": 372,
+              "line": 31,
+              "column": 3
+            },
+            "origin": {
+              "kind": "invocation",
+              "command": "speech"
+            }
+          }
+        },
+        {
+          "id": "demo:video:4",
           "kind": "video",
           "source_id": "source:fight",
           "span": {
@@ -169,7 +296,11 @@
           },
           "visual": {
             "fit": "canvas-fill",
-            "text": null
+            "text": null,
+            "fade_in": {
+              "num": 1,
+              "den": 2
+            }
           },
           "audio": null,
           "provenance": {
@@ -181,7 +312,7 @@
           }
         },
         {
-          "id": "demo:audio:3",
+          "id": "demo:audio:5",
           "kind": "audio",
           "source_id": "source:fight",
           "span": {
@@ -196,7 +327,7 @@
           },
           "visual": null,
           "audio": {
-            "gain_db": null
+            "gain_db": -3
           },
           "provenance": {
             "span": null,

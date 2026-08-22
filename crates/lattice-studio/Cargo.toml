@@ -4,10 +4,30 @@ version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
-description = "GPUI Studio shell. Not wired in Milestone 0. Must not leak GPUI into Core."
+description = "GPUI Studio shell. Engine client; compile semantics stay in lattice-engine."
+
+[[bin]]
+name = "lattice-studio"
+path = "src/main.rs"
+required-features = ["window"]
+
+[features]
+default = ["window"]
+window = ["dep:gpui", "dep:image"]
 
 [dependencies]
+gpui = { version = "0.2.2", optional = true }
+image = { version = "0.25.10", default-features = false, optional = true }
 lattice-engine.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+cpal = { version = "=0.18.2", default-features = false }
+
+[dev-dependencies]
+gpui = { version = "0.2.2", features = ["test-support"] }
+lattice-media.workspace = true
 
 [lints]
 workspace = true

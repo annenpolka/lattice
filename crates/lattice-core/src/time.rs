@@ -97,6 +97,26 @@ impl Time {
         from_i128(num, den)
     }
 
+    /// Ceil of `self * fps_num / fps_den` as a frame count.
+    pub fn frame_count_ceil(self, fps_num: i64, fps_den: i64) -> Result<u64, TimeError> {
+        if fps_den == 0 || self.den == 0 {
+            return Err(TimeError::ZeroDenominator);
+        }
+        let n = i128::from(self.num)
+            .checked_mul(i128::from(fps_num))
+            .ok_or(TimeError::Overflow)?;
+        let d = i128::from(self.den)
+            .checked_mul(i128::from(fps_den))
+            .ok_or(TimeError::Overflow)?;
+        if d <= 0 {
+            return Err(TimeError::ZeroDenominator);
+        }
+        let q = n.div_euclid(d);
+        let r = n.rem_euclid(d);
+        let frames = if r == 0 { q } else { q + 1 };
+        u64::try_from(frames.max(0)).map_err(|_| TimeError::Overflow)
+    }
+
     /// `self * fps_num / fps_den` as an exact integer frame count.
     pub fn exact_frame_count(self, fps_num: i64, fps_den: i64) -> Result<u64, TimeError> {
         if fps_den == 0 || self.den == 0 {

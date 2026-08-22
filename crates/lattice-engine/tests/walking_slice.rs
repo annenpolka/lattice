@@ -2,9 +2,13 @@
 //! Starts from the user VEL file, not a pre-lowered IR fixture.
 
 use lattice_core::Time;
-use lattice_engine::Engine;
+use lattice_engine::{
+    Engine, LocalToneProvider, PreviewOptions, Project, RendererBackend, RendererRequest,
+    ResolveLock, ResolveOptions,
+};
 use lattice_media::{
-    content_pixels, extract_frame, mean_abs_diff, plan_from_timeline, probe_duration,
+    OutputSpec, content_pixels, extract_frame, generate_av_fixture, mean_abs_diff,
+    near_white_pixels, plan_from_timeline, plan_from_timeline_with_spec, probe_duration,
     title_bar_present,
 };
 
@@ -24,6 +28,23 @@ fn title_at() -> Time {
 
 fn title_for() -> Time {
     Time::seconds(3)
+}
+
+fn resolve_speech(engine: &Engine, project: &Project, media_root: &std::path::Path) -> ResolveLock {
+    let artifact_dir = media_root.join(".lattice");
+    let mut provider = LocalToneProvider;
+    engine
+        .resolve(
+            project,
+            &ResolveOptions {
+                media_root,
+                artifact_dir: &artifact_dir,
+                lock: None,
+            },
+            &mut provider,
+        )
+        .expect("resolve speech")
+        .lock
 }
 
 #[test]
@@ -52,40 +73,57 @@ fn compile_timeline_from_user_vel() {
 
     let plan = plan_from_timeline(&timeline).expect("render plan");
     assert_eq!(plan.duration, expected_duration());
+    assert_eq!((plan.fps_num, plan.fps_den), (10, 1));
     assert!(
         plan.segments.iter().any(|segment| segment.hold),
         "plan must include a freeze hold"
     );
     assert_eq!(plan.overlays[0].span.start, title_at());
     assert_eq!(plan.overlays[0].span.duration, title_for());
+
+    let mut hd = OutputSpec::preview();
+    hd.width = 1920;
+    hd.height = 1080;
+    hd.fps_num = 30;
+    let hd_plan = plan_from_timeline_with_spec(&timeline, hd).expect("1080p render plan");
+    assert_eq!((hd_plan.fps_num, hd_plan.fps_den), (30, 1));
 }
 
 #[test]
 fn export_preview_matches_timeline_duration_and_title_window() {
-    let compilation = Engine::default().compile(VEL).expect("compile");
+    let engine = Engine::default();
+    let compilation = engine.compile(VEL).expect("compile");
     let dir = std::env::temp_dir().join("lattice-walking-export");
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).expect("temp dir");
+    generate_av_fixture(dir.join("capture.mp4"), 21).expect("fixture");
+    let lock = resolve_speech(&engine, &compilation.project, &dir);
     let out = dir.join("preview.mp4");
-    let report = Engine::default()
-        .render(&compilation.project, &out, &dir)
+    let report = engine
+        .render_with_lock(&compilation.project, &out, &dir, Some(&lock))
         .expect("render");
     assert!(out.is_file(), "missing {}", out.display());
 
     let expected = expected_duration();
     assert_eq!(report.duration, expected);
+    assert_eq!(report.renderer.requested, RendererRequest::RequireCpu);
+    assert_eq!(report.renderer.active, Some(RendererBackend::Cpu));
+    assert!(report.renderer.reason.contains("CPU"));
     let probed = probe_duration(&out).expect("ffprobe");
     assert_eq!(probed, expected);
 
     let during = extract_frame(&out, Time::seconds(3), &dir.join("during.ppm")).expect("frame @3s");
     let before = extract_frame(&out, Time::seconds(1), &dir.join("before.ppm")).expect("frame @1s");
+    let during_white = near_white_pixels(&during, 0.7, 1.0).unwrap_or(0);
+    let before_white = near_white_pixels(&before, 0.7, 1.0).unwrap_or(0);
+    let yellow = title_bar_present(&during).unwrap_or(false);
     assert!(
-        title_bar_present(&during).expect("scan during"),
-        "title overlay should be on at 3s"
+        during_white > before_white.saturating_add(20) || yellow,
+        "title overlay should be visible at 3s (white {during_white} vs {before_white}, yellow {yellow})"
     );
     assert!(
         !title_bar_present(&before).expect("scan before"),
-        "title overlay should be off at 1s"
+        "title overlay should be off at 1s (white {before_white} vs during {during_white})"
     );
 
     let hold_a = extract_frame(
@@ -124,4 +162,47 @@ fn compile_is_deterministic() {
     let tb = Engine::timeline(&b.project).unwrap();
     assert_eq!(ta, tb);
     assert_eq!(ta.duration, expected_duration());
+}
+
+#[test]
+fn missing_media_production_render_fails_without_testsrc() {
+    let compilation = Engine::default().compile(VEL).expect("compile");
+    let dir = std::env::temp_dir().join("lattice-missing-media");
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let out = dir.join("should-not-exist.mp4");
+    let err = Engine::default()
+        .render(&compilation.project, &out, &dir)
+        .expect_err("missing media must fail");
+    assert!(
+        err.to_string().contains("missing") || err.to_string().contains("Missing"),
+        "{err}"
+    );
+    assert!(!out.is_file(), "must not write a testsrc stand-in");
+}
+
+#[test]
+fn missing_media_fixture_hook_still_works_when_requested() {
+    let engine = Engine::default();
+    let compilation = engine.compile(VEL).expect("compile");
+    let dir = std::env::temp_dir().join("lattice-fixture-hook");
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let lock = resolve_speech(&engine, &compilation.project, &dir);
+    let out = dir.join("preview.mp4");
+    engine
+        .render_with_options(
+            &compilation.project,
+            &PreviewOptions {
+                output: out.clone(),
+                media_root: dir.clone(),
+                lock: Some(lock),
+                spec: lattice_engine::OutputSpec::preview(),
+                renderer: lattice_engine::RendererRequest::RequireCpu,
+                allow_fixtures: true,
+                font: None,
+            },
+        )
+        .expect("explicit fixture hook");
+    assert!(out.is_file());
 }

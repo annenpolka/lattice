@@ -11,6 +11,19 @@ lattice-core.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
+cosmic-text = "0.14"
+png = "0.17"
+pollster = "0.4"
+
+# wgpu 26's naga needs a newer codespan-reporting than GPUI. wgpu 25 shares naga 25.
+# RendererRequest::RequireGpuDx12 is deliberately backed by DX12 only. Keeping the
+# dependency target-specific prevents a non-Windows backend from being mistaken
+# for the requested renderer.
+[target.'cfg(windows)'.dependencies]
+wgpu = { version = "25.0.2", default-features = false, features = ["dx12", "wgsl"] }
+# gpu-allocator 0.27 accepts windows 0.53..=0.58 while wgpu-hal 25 uses
+# windows 0.58 types in its public allocator bridge. Pin the shared resolution.
+windows = { version = "=0.58.0", default-features = false }
 
 [lints]
 workspace = true

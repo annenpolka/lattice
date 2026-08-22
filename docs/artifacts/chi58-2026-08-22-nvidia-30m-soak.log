@@ -1,0 +1,45 @@
+==== CHI-58 NVIDIA 30m soak log excerpt 2026-08-22 ====
+source=studio-smoke-20260822-090326.log
+lines=18014 preview_frames=17993 non_preview=21
+note=full preview-frame stream omitted; first 8 and last 8 frames kept
+
+==== studio-smoke 2026-08-22T09:03:26.8158766+09:00 vel=C:\Users\lance\AppData\Local\Temp\lattice-studio-smoke-project-26ae7a9c406647a2b13836077088a32b\main.vel smokeMs=1800000 preview=on audio=off-soak renderer=gpu-dx12 adapter=NVIDIA ====
+1787357007.267 pid=55152 tid=ThreadId(1) start exe=C:\Users\lance\AppData\Local\Temp\cursor-sandbox-cache\ac803702ce0913be139bd1993fb72e9a\cargo-target\release\lattice-studio.exe cwd=C:\Users\lance\ghq\github.com\annenpolka\lattice vel=C:\Users\lance\AppData\Local\Temp\lattice-studio-smoke-project-26ae7a9c406647a2b13836077088a32b\main.vel fixture=none log=C:\Users\lance\AppData\Local\Temp\lattice-studio-smoke\studio-smoke-20260822-090326.log preview=on autoplay=on smoke=1800000ms rustc=0.1.0
+1787357007.271 pid=55152 tid=ThreadId(1) renderer requested=require_gpu_dx12
+1787357007.271 pid=55152 tid=ThreadId(1) compile/open C:\Users\lance\AppData\Local\Temp\lattice-studio-smoke-project-26ae7a9c406647a2b13836077088a32b\main.vel
+1787357007.382 pid=55152 tid=ThreadId(1) semantic_state {"locus":{"id":"demo:title:1","kind":"title","label":"Smoke"},"playhead":"0s","duration":"1810s","playing":false,"interaction":"idle","gesture":{"kind":"none"},"drag":null,"last_gesture_error":null,"reason":"open"}
+1787357007.382 pid=55152 tid=ThreadId(1) open ok dirty=false playhead=Time { num: 0, den: 1 } diagnostics=0
+1787357007.382 pid=55152 tid=ThreadId(1) smoke timeout 1800000ms
+1787357007.383 pid=55152 tid=ThreadId(1) Application::run
+1787357007.659 pid=55152 tid=ThreadId(1) open_window
+1787357007.675 pid=55152 tid=ThreadId(1) StudioView::new
+1787357007.675 pid=55152 tid=ThreadId(1) preview worker spawned
+1787357007.676 pid=55152 tid=ThreadId(1) audio monitor explicitly disabled
+1787357007.676 pid=55152 tid=ThreadId(1) autoplay
+1787357007.676 pid=55152 tid=ThreadId(1) play samples AudioPlan+video playhead=0.00s Audio · monitor explicitly disabled
+1787357007.676 pid=55152 tid=ThreadId(1) semantic_state {"locus":{"id":"demo:title:1","kind":"title","label":"Smoke"},"playhead":"0s","duration":"1810s","playing":true,"interaction":"play","gesture":{"kind":"none"},"drag":null,"last_gesture_error":null,"reason":"play"}
+1787357007.677 pid=55152 tid=ThreadId(1) first paint preview=none
+1787357007.677 pid=55152 tid=ThreadId(1) semantic_state {"locus":{"id":"demo:title:1","kind":"title","label":"Smoke"},"playhead":"0s","duration":"1810s","playing":true,"interaction":"play","gesture":{"kind":"none"},"drag":null,"last_gesture_error":null,"reason":"first-paint"}
+1787357007.681 pid=55152 tid=ThreadId(1) open_window ok
+1787357007.681 pid=55152 tid=ThreadId(1) activate
+1787357007.997 pid=55152 tid=ThreadId(3) preview renderer requested=require_gpu_dx12, active=gpu_dx12, adapter=NVIDIA GeForce RTX 5070 Ti, reason=explicit DX12 renderer request on `NVIDIA GeForce RTX 5070 Ti`
+1787358807.383 pid=55152 tid=ThreadId(2) smoke quit
+
+----- first preview frames -----
+1787357008.108 pid=55152 tid=ThreadId(1) preview frame 0.40s memory 640x360
+1787357008.234 pid=55152 tid=ThreadId(1) preview frame 0.50s memory 640x360
+1787357008.329 pid=55152 tid=ThreadId(1) preview frame 0.60s memory 640x360
+1787357008.422 pid=55152 tid=ThreadId(1) preview frame 0.70s memory 640x360
+1787357008.517 pid=55152 tid=ThreadId(1) preview frame 0.80s memory 640x360
+1787357008.612 pid=55152 tid=ThreadId(1) preview frame 0.90s memory 640x360
+1787357008.737 pid=55152 tid=ThreadId(1) preview frame 1.00s memory 640x360
+1787357008.832 pid=55152 tid=ThreadId(1) preview frame 1.10s memory 640x360
+----- last preview frames -----
+1787358806.628 pid=55152 tid=ThreadId(1) preview frame 1798.90s memory 640x360
+1787358806.721 pid=55152 tid=ThreadId(1) preview frame 1799.00s memory 640x360
+1787358806.814 pid=55152 tid=ThreadId(1) preview frame 1799.10s memory 640x360
+1787358806.908 pid=55152 tid=ThreadId(1) preview frame 1799.20s memory 640x360
+1787358807.033 pid=55152 tid=ThreadId(1) preview frame 1799.30s memory 640x360
+1787358807.127 pid=55152 tid=ThreadId(1) preview frame 1799.40s memory 640x360
+1787358807.238 pid=55152 tid=ThreadId(1) preview frame 1799.50s memory 640x360
+1787358807.332 pid=55152 tid=ThreadId(1) preview frame 1799.60s memory 640x360

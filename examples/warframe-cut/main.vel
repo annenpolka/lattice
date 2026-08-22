@@ -1,0 +1,81 @@
+project "warframe-cut"
+
+convention commentary
+
+media game "warframe-cut.mp4"
+
+sequence main {
+  hook
+  fight
+  hold
+  outro
+}
+
+// Fade in + stacked titles (canvas / timeline overlay drag, opacity).
+scene hook {
+  game[0s..4s] as intro
+
+  fade intro {
+    at 0s for 0.5s
+  }
+
+  title "Warframe" {
+    at 0.5s for 3s
+    opacity 90
+  }
+
+  title "sample" {
+    at 2s for 1.5s
+    opacity 70
+  }
+}
+
+// Gain + title + callout. Trim / Set In / Set Out / Split / reorder from the body.
+scene fight {
+  game[4s..12s] as clip
+
+  gain clip by -3
+
+  title "Engage" {
+    at 0.5s for 2s
+    opacity 85
+  }
+
+  callout "This beat" {
+    at 3s for 2s
+  }
+}
+
+// Commentary duck (`over line`) + freeze TimeMap + speech (Resolve, not Compile).
+scene hold over line {
+  game[12s..18s] as clip
+
+  fade clip {
+    at 0s for 0.4s
+  }
+
+  freeze clip at 2s for 1.5s
+
+  callout "Hold" {
+    at 2s for 1.5s
+  }
+
+  speech "Nice freeze" {
+    at 2s for 1.5s
+  }
+}
+
+scene outro {
+  game[18s..25.5s] as clip
+
+  gain clip by -6
+
+  fade clip {
+    at 0s for 0.3s
+  }
+
+  title "Cut" {
+    at 1s for 4s
+    opacity 80
+  }
+}

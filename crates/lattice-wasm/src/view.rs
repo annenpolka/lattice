@@ -1,4 +1,7 @@
-use lattice_core::{Diagnostic, Origin, Placement, Scene, Source, Span, Time};
+use lattice_core::{
+    Diagnostic, Media, NormalizedPosition, NormalizedScale, Origin, Placement, Scene, Source, Span,
+    Time,
+};
 use thiserror::Error;
 
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
@@ -34,6 +37,7 @@ pub enum ValueView {
         scale: u32,
         unit: Option<String>,
     },
+    Tuple(Vec<ValueView>),
 }
 
 impl ValueView {
@@ -57,6 +61,56 @@ impl ValueView {
             _ => None,
         }
     }
+
+    pub fn as_int(&self) -> Option<i64> {
+        match self {
+            Self::Quantity {
+                negative,
+                digits,
+                scale,
+                ..
+            } if *scale == 0 => Some(if *negative { -*digits } else { *digits }),
+            _ => None,
+        }
+    }
+
+    /// Read a generic `(x%, y%)` tuple as normalized Canvas Space.
+    /// Vocabulary meaning remains in lowering; the VEL parser only supplies a tuple.
+    pub fn as_normalized_position(&self) -> Option<NormalizedPosition> {
+        let Self::Tuple(items) = self else {
+            return None;
+        };
+        let [x, y] = items.as_slice() else {
+            return None;
+        };
+        NormalizedPosition::new(percent_basis_points(x)?, percent_basis_points(y)?)
+    }
+
+    /// Read a generic percent as an aspect-preserving overlay scale.
+    pub fn as_normalized_scale(&self) -> Option<NormalizedScale> {
+        let basis_points = percent_basis_points(self)?;
+        let milli = basis_points.saturating_add(5) / 10;
+        NormalizedScale::new(milli)
+    }
+}
+
+fn percent_basis_points(value: &ValueView) -> Option<u16> {
+    let ValueView::Quantity {
+        negative,
+        digits,
+        scale,
+        unit: Some(unit),
+    } = value
+    else {
+        return None;
+    };
+    if *negative || unit != "%" || *digits < 0 {
+        return None;
+    }
+    let divisor = 10_i128.checked_pow(*scale)?;
+    let numerator = i128::from(*digits).checked_mul(100)?;
+    let rounded = numerator.checked_add(divisor / 2)?.checked_div(divisor)?;
+    u16::try_from(rounded).ok()
 }
 
 impl InvocationView {
@@ -89,6 +143,9 @@ pub struct SceneDraft {
     pub over: Option<String>,
     pub sources: Vec<Source>,
     pub placements: Vec<Placement>,
+    pub media: Vec<Media>,
+    pub source_fade_in: Vec<(String, Time)>,
+    pub source_gain_db: Vec<(String, i32)>,
     pub explain: Vec<ExplainLine>,
     pub diagnostics: Vec<Diagnostic>,
 }
@@ -140,5 +197,34 @@ impl SceneDraft {
 
     pub fn next_placement_id(&self, prefix: &str) -> String {
         format!("{}:{}:{}", self.name, prefix, self.placements.len() + 1)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn percent(digits: i64, scale: u32) -> ValueView {
+        ValueView::Quantity {
+            negative: false,
+            digits,
+            scale,
+            unit: Some("%".into()),
+        }
+    }
+
+    #[test]
+    fn generic_percent_tuple_projects_to_canvas_basis_points() {
+        let tuple = ValueView::Tuple(vec![percent(125, 1), percent(875, 1)]);
+        assert_eq!(
+            tuple.as_normalized_position(),
+            NormalizedPosition::new(1_250, 8_750)
+        );
+        let outside = ValueView::Tuple(vec![percent(101, 0), percent(0, 0)]);
+        assert!(outside.as_normalized_position().is_none());
+        assert_eq!(
+            percent(1255, 1).as_normalized_scale(),
+            NormalizedScale::new(1_255)
+        );
     }
 }

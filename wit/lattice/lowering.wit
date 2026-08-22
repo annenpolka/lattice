@@ -8,7 +8,7 @@ interface lowering {
         span: span,
     }
 
-    /// Host-side contract: an invocation lowers to Core fragments.
-    /// v0 implements this in-process; Wasmtime will host the same world later.
+    /// Provisional v0 spelling. The hosted contract is `lattice:stdlib/lowering`
+    /// (`freeze` / `title` functions) in `stdlib.wit`.
     lower: func(command: string) -> result<string, string>;
 }
