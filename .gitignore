@@ -6,7 +6,6 @@ lattice.lock.json
 studio-preview.mp4
 preview.mp4
 *.mp4
-!docs/sketches/projection-local/walk.mp4
 fonts/
 !fixtures/fonts/
 !fixtures/fonts/**
