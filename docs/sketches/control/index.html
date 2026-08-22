@@ -1,0 +1,1147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Lattice Studio · Control</title>
+  <style>
+    :root {
+      --bg: #0c0e12;
+      --panel: #141821;
+      --line: #2a3140;
+      --text: #e8edf5;
+      --muted: #8b95a8;
+      --dim: #5c6678;
+      --teal: #3dd6c6;
+      --locus-bg: #1c3d3a;
+      --locus-line: #245a55;
+      --stage: #1a2330;
+      --rail: #1a1f28;
+      --video: #4a3a6a;
+      --audio: #5a7a9a;
+      --text-clip: #7a5a48;
+      --playhead: #f2efe6;
+      --commit: #3d5c8a;
+      --danger: #c45c5c;
+      --amber: #e8b86d;
+      --snap: #f0c040;
+      --ok: #7d9a6a;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      background: #08090c;
+      color: var(--text);
+      font-family: "Segoe UI", "IBM Plex Sans", sans-serif;
+      font-size: 13px;
+      line-height: 1.35;
+    }
+    body { padding: 16px 20px 24px; }
+    button, input { font: inherit; color: inherit; }
+    button { cursor: pointer; border: 0; }
+    .sketch-chrome { max-width: 1400px; margin: 0 auto 12px; }
+    .sketch-chrome h1 {
+      font-size: 16px;
+      font-weight: 600;
+    }
+    .sketch-chrome h1 span { color: var(--muted); font-weight: 500; }
+    .sketch-chrome .lead {
+      color: var(--muted);
+      margin: 4px 0 10px;
+      max-width: 920px;
+    }
+    .scenes {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    .scenes button {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      color: var(--text);
+      padding: 5px 10px;
+      border-radius: 2px;
+    }
+    .scenes button[aria-current="true"] {
+      border-color: var(--teal);
+      color: var(--teal);
+      background: var(--locus-bg);
+    }
+    .scenes button .k {
+      color: var(--dim);
+      margin-right: 6px;
+    }
+    .scenes button[aria-current="true"] .k { color: var(--teal); }
+
+    #studio {
+      width: 1400px;
+      height: 840px;
+      margin: 0 auto;
+      background: var(--bg);
+      color: var(--text);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      border: 1px solid var(--line);
+    }
+    #studio.narrow {
+      width: 800px;
+      height: 600px;
+    }
+
+    .header {
+      display: flex;
+      align-items: center;
+      height: 36px;
+      padding: 0 12px;
+      background: var(--panel);
+      border-bottom: 1px solid var(--line);
+      flex-shrink: 0;
+    }
+    .header .brand { color: var(--muted); font-weight: 600; }
+    .header .file { margin-left: 12px; color: var(--muted); }
+
+    .toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 4px;
+      padding: 4px 8px;
+      background: var(--panel);
+      border-bottom: 1px solid var(--line);
+      flex-shrink: 0;
+    }
+    .btn {
+      background: var(--line);
+      padding: 4px 12px;
+      white-space: nowrap;
+    }
+    .btn:hover { filter: brightness(1.08); }
+    .btn.commit { background: var(--commit); }
+    .btn.danger { background: var(--danger); }
+    .btn.transport { background: #243044; }
+    .btn.active-renderer { background: #2c3d55; }
+    .status { padding: 4px 8px; color: var(--muted); white-space: nowrap; }
+    .status.err { color: #ff8f8f; }
+
+    .notice {
+      display: none;
+      padding: 5px 10px;
+      background: #1b2230;
+      border-bottom: 1px solid var(--line);
+      color: var(--amber);
+      flex-shrink: 0;
+    }
+    .notice.show { display: block; }
+
+    .body {
+      display: flex;
+      flex: 1;
+      min-height: 0;
+    }
+    .pane {
+      display: flex;
+      flex-direction: column;
+      border-right: 1px solid var(--line);
+      background: var(--panel);
+      min-width: 0;
+    }
+    .pane-title {
+      padding: 4px 8px;
+      border-bottom: 1px solid var(--line);
+      color: var(--dim);
+      flex-shrink: 0;
+    }
+    .pane-body {
+      flex: 1;
+      min-height: 0;
+      overflow: auto;
+      padding: 8px;
+    }
+    .sequence { width: 200px; flex-shrink: 0; }
+    .canvas { flex: 1; min-width: 160px; }
+    .vel { width: 280px; flex-shrink: 0; }
+    .inspector { width: 240px; flex-shrink: 0; border-right: 0; }
+    #studio.narrow .sequence { width: 132px; }
+    #studio.narrow .vel { width: 118px; }
+    #studio.narrow .inspector { width: 132px; }
+
+    .tree-row {
+      padding: 2px 6px;
+      cursor: pointer;
+      border: 1px solid transparent;
+    }
+    .tree-row.d1 { padding-left: 20px; }
+    .tree-row.d2 { padding-left: 34px; }
+    .tree-row.here {
+      background: var(--locus-bg);
+      color: var(--teal);
+    }
+    .tree-row:hover { background: #1a222c; }
+    .tree-row.here:hover { background: var(--locus-bg); }
+    .absent-note {
+      margin-top: 10px;
+      padding: 6px 8px;
+      border: 1px dashed #3a4558;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .stage-wrap {
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+    }
+    .stage {
+      position: relative;
+      flex: 1;
+      margin: 4px;
+      background: var(--stage);
+      border: 1px solid var(--line);
+      overflow: hidden;
+    }
+    .frame {
+      position: absolute;
+      inset: 10% 8%;
+      background:
+        linear-gradient(180deg, #243044 0%, #1a2838 40%, #121820 100%),
+        repeating-linear-gradient(90deg, #2a3a28 0 12%, #3a2a22 12% 24%, #223040 24% 36%);
+      background-blend-mode: overlay;
+      opacity: 0.85;
+    }
+    .frame.none { display: none; }
+    .overlay {
+      position: absolute;
+      border: 1px solid transparent;
+      background: rgba(8, 10, 14, 0.72);
+      color: var(--text);
+      padding: 6px 10px;
+      cursor: grab;
+      user-select: none;
+    }
+    .overlay.here {
+      border-color: var(--teal);
+      color: var(--teal);
+    }
+    .overlay.title {
+      left: 28%;
+      bottom: 10%;
+      width: 44%;
+      text-align: center;
+    }
+    .overlay.callout {
+      left: 10%;
+      top: 14%;
+      width: 28%;
+    }
+    .overlay.moved { left: 14%; bottom: 22%; }
+    .handle {
+      position: absolute;
+      width: 10px;
+      height: 10px;
+      background: var(--teal);
+      border: 1px solid var(--bg);
+      cursor: nwse-resize;
+    }
+    .handle.tl { left: -6px; top: -6px; }
+    .handle.tr { right: -6px; top: -6px; }
+    .handle.bl { left: -6px; bottom: -6px; }
+    .handle.br { right: -6px; bottom: -6px; }
+    .absence {
+      position: absolute;
+      left: 16px;
+      right: 16px;
+      top: 16px;
+      padding: 10px 12px;
+      background: rgba(12, 14, 18, 0.88);
+      border: 1px solid #3a4558;
+    }
+    .absence h2 {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 4px;
+    }
+    .absence p { color: var(--muted); margin-bottom: 8px; }
+    .clip-banner {
+      position: absolute;
+      left: 8px;
+      right: 8px;
+      bottom: 8px;
+      padding: 6px 8px;
+      background: rgba(12, 14, 18, 0.9);
+      border: 1px dashed #3a4558;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .vel-status { color: var(--muted); margin-bottom: 6px; }
+    .vel-editor {
+      font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+      font-size: 12px;
+      white-space: pre;
+      border: 1px solid transparent;
+      min-height: 100%;
+    }
+    .vel-editor.focus {
+      border-color: var(--commit);
+      box-shadow: inset 0 0 0 1px #3d5c8a66;
+    }
+    .vel-line { padding: 0 4px; min-height: 18px; }
+    .vel-line.here { background: var(--locus-bg); color: var(--teal); }
+    .vel-line.related { background: #161d22; }
+
+    .insp-id { font-size: 16px; margin-bottom: 2px; }
+    .insp-id.here { color: var(--teal); }
+    .insp-kind { color: var(--muted); margin-bottom: 8px; }
+    .insp-block { margin-top: 10px; }
+    .insp-block h3 {
+      font-size: 11px;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--dim);
+      margin-bottom: 4px;
+    }
+    .field { color: var(--muted); margin: 2px 0; }
+    .field b { color: var(--text); font-weight: 600; }
+    .field.absent { color: var(--dim); }
+    .verb {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 4px 0;
+      border-bottom: 1px solid #1e2530;
+    }
+    .verb .scope { color: var(--dim); }
+    .none-legal { color: var(--amber); margin-top: 6px; }
+    .title-box {
+      width: 100%;
+      background: var(--bg);
+      border: 1px solid var(--line);
+      padding: 4px 8px;
+      margin: 4px 0 8px;
+    }
+    .title-box:focus { outline: 1px solid var(--commit); }
+    .insp-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+    .review {
+      margin-top: 12px;
+      padding-top: 8px;
+      border-top: 1px solid var(--line);
+    }
+    .review h3 { color: var(--muted); }
+    .review .state { color: var(--amber); margin: 4px 0; }
+    .review .state.committed { color: var(--ok); }
+    .diff {
+      font-family: ui-monospace, Consolas, monospace;
+      font-size: 12px;
+      background: var(--bg);
+      border: 1px solid var(--line);
+      padding: 6px 8px;
+      margin: 6px 0;
+      white-space: pre;
+    }
+    .diff .add { color: #8fca8f; }
+    .diff .del { color: #e08a8a; }
+
+    .timeline {
+      height: 160px;
+      background: var(--panel);
+      border-top: 1px solid var(--line);
+      flex-shrink: 0;
+    }
+    #studio.narrow .timeline { height: 132px; }
+    .ruler {
+      padding: 4px 8px 4px 72px;
+      color: var(--muted);
+      cursor: text;
+      position: relative;
+    }
+    .ruler-marks {
+      position: relative;
+      height: 14px;
+      margin-top: 2px;
+    }
+    .ruler-marks span {
+      position: absolute;
+      top: 0;
+      font-size: 11px;
+      color: var(--dim);
+      transform: translateX(-50%);
+    }
+    .tracks { padding: 0 8px 8px; display: flex; flex-direction: column; gap: 4px; }
+    .track {
+      display: flex;
+      align-items: center;
+      height: 28px;
+      gap: 8px;
+    }
+    .track-name { width: 56px; color: var(--muted); flex-shrink: 0; }
+    .rail {
+      position: relative;
+      flex: 1;
+      height: 22px;
+      background: var(--rail);
+      cursor: text;
+    }
+    .clip {
+      position: absolute;
+      top: 0;
+      height: 100%;
+      padding: 0 6px;
+      overflow: hidden;
+      white-space: nowrap;
+      border: 1px solid transparent;
+      cursor: pointer;
+      line-height: 20px;
+    }
+    .clip.video { background: var(--video); }
+    .clip.audio { background: var(--audio); }
+    .clip.text { background: var(--text-clip); }
+    .clip.here { border-color: var(--teal); color: var(--teal); }
+    .trim {
+      position: absolute;
+      top: 0;
+      width: 6px;
+      height: 100%;
+      background: #fff;
+    }
+    .trim.in { left: 0; }
+    .trim.out { right: 0; }
+    .playhead {
+      position: absolute;
+      top: 0;
+      width: 2px;
+      height: 100%;
+      background: var(--playhead);
+      pointer-events: none;
+      box-shadow: 0 0 0 1px #0006;
+    }
+
+    body.capture { padding: 0; background: var(--bg); }
+    body.capture .sketch-chrome { display: none; }
+    body.capture #studio { border: 0; margin: 0; }
+  </style>
+</head>
+<body>
+  <header class="sketch-chrome">
+    <h1>Lattice Studio <span>Control</span></h1>
+    <p class="lead">
+      One here (locus) and one playhead. Pointing writes here. Scrubbing writes the playhead.
+      A named verb commits one edit. Review inspects a proposal Engine already built; it is not a gate.
+    </p>
+    <nav class="scenes" aria-label="Scenes">
+      <button type="button" data-go="a"><span class="k">A</span>Open</button>
+      <button type="button" data-go="b"><span class="k">B</span>Video clip</button>
+      <button type="button" data-go="c"><span class="k">C</span>Scrub audio</button>
+      <button type="button" data-go="d"><span class="k">D</span>Overlap</button>
+      <button type="button" data-go="e-scene"><span class="k">E</span>Scene inspector</button>
+      <button type="button" data-go="e-title"><span class="k">E</span>Title inspector</button>
+      <button type="button" data-go="f"><span class="k">F</span>Freeze</button>
+      <button type="button" data-go="g-title"><span class="k">G</span>Review · title text</button>
+      <button type="button" data-go="g-position"><span class="k">G</span>Review · SetPosition</button>
+      <button type="button" data-go="h"><span class="k">H</span>Narrow 800</button>
+    </nav>
+  </header>
+
+  <div id="studio" aria-label="Studio window"></div>
+
+  <script>
+    const TITLE_START = 1;
+    const TITLE_END = 4;
+    const DURATION = 4;
+    const CALLOUT_START = 2;
+    const CALLOUT_END = 3;
+
+    const VEL = [
+      { n: 1, t: 'project "timeline-basic"', marks: ["sequence"] },
+      { n: 2, t: "" },
+      { n: 3, t: "convention commentary" },
+      { n: 4, t: "" },
+      { n: 5, t: 'media game "capture.mp4"', marks: ["media"] },
+      { n: 6, t: "" },
+      { n: 7, t: "sequence main {", marks: ["sequence"] },
+      { n: 8, t: "  demo", marks: ["sequence", "scene"] },
+      { n: 9, t: "}" },
+      { n: 10, t: "" },
+      { n: 11, t: "scene demo {", marks: ["scene"] },
+      { n: 12, t: "  game[0s..4s] as clip", marks: ["source", "scene"] },
+      { n: 13, t: "" },
+      { n: 14, t: "  freeze clip at 2.5s for 0.5s", marks: ["source"] },
+      { n: 15, t: "" },
+      { n: 16, t: '  title "Hello" {', marks: ["title"] },
+      { n: 17, t: "    at 1s for 3s", marks: ["title"] },
+      { n: 18, t: "  }" },
+      { n: 19, t: "" },
+      { n: 20, t: '  callout "Hold" {', marks: ["callout"] },
+      { n: 21, t: "    at 2s for 1s", marks: ["callout"] },
+      { n: 22, t: "  }" },
+      { n: 23, t: "}" }
+    ];
+
+    const LOCI = {
+      sequence: {
+        id: "sequence:main",
+        kind: "sequence",
+        label: "main",
+        heading: 'sequence "main"',
+        origin: "source",
+        defined: "main.vel:7",
+        span: "main.vel:7–9"
+      },
+      scene: {
+        id: "scene:demo",
+        kind: "scene",
+        label: "demo",
+        heading: 'scene "demo"',
+        origin: "source",
+        defined: "main.vel:11",
+        span: "main.vel:11–23"
+      },
+      source: {
+        id: "source:clip",
+        kind: "source",
+        label: "clip",
+        heading: 'source "clip"',
+        origin: "source",
+        defined: "main.vel:12",
+        span: "main.vel:12"
+      },
+      title: {
+        id: "title:hello",
+        kind: "title",
+        label: "Hello",
+        heading: 'title "Hello"',
+        origin: "invocation `title`",
+        defined: "main.vel:16",
+        span: "main.vel:16–18"
+      },
+      callout: {
+        id: "callout:hold",
+        kind: "callout",
+        label: "Hold",
+        heading: 'callout "Hold"',
+        origin: "invocation `callout`",
+        defined: "main.vel:20",
+        span: "main.vel:20–22"
+      }
+    };
+
+    const SCENES = {
+      a: { locus: "title", playhead: 0, review: null, titleText: "Hello", moved: false, narrow: false, velFocus: false, notice: "" },
+      b: { locus: "source", playhead: 0, review: null, titleText: "Hello", moved: false, narrow: false, velFocus: false, notice: "" },
+      c: { locus: "scene", playhead: 2.5, review: null, titleText: "Hello", moved: false, narrow: false, velFocus: false, notice: "" },
+      d: { locus: "title", playhead: 2.5, review: null, titleText: "Hello", moved: false, narrow: false, velFocus: false, notice: "" },
+      "e-scene": { locus: "scene", playhead: 2.5, review: null, titleText: "Hello", moved: false, narrow: false, velFocus: false, notice: "" },
+      "e-title": { locus: "title", playhead: 2.5, review: null, titleText: "Hello", moved: false, narrow: false, velFocus: false, notice: "" },
+      f: { locus: "source", playhead: 2.5, review: null, titleText: "Hello", moved: false, narrow: false, velFocus: false, notice: "" },
+      "g-title": {
+        locus: "title",
+        playhead: 2.5,
+        review: "title-committed",
+        titleText: "Hello there",
+        moved: false,
+        narrow: false,
+        velFocus: false,
+        notice: ""
+      },
+      "g-position": {
+        locus: "title",
+        playhead: 2.5,
+        review: "position-committed",
+        titleText: "Hello",
+        moved: true,
+        narrow: false,
+        velFocus: false,
+        notice: ""
+      },
+      h: { locus: "title", playhead: 0, review: null, titleText: "Hello", moved: false, narrow: true, velFocus: false, notice: "" }
+    };
+
+    const state = Object.assign({ scene: "a" }, SCENES.a);
+
+    function fmt(t) {
+      return t.toFixed(2) + "s";
+    }
+    function pct(t) {
+      return (t / DURATION) * 100;
+    }
+    function titleVisible() {
+      return state.playhead >= TITLE_START && state.playhead < TITLE_END;
+    }
+    function calloutVisible() {
+      return state.playhead >= CALLOUT_START && state.playhead < CALLOUT_END;
+    }
+    function point(kind) {
+      state.locus = kind;
+      state.notice = "";
+      if (state.review && state.review.indexOf("pending") !== -1) {
+        state.review = null;
+      }
+      render();
+    }
+    function scrubFromEvent(ev) {
+      const rail = ev.currentTarget.getBoundingClientRect();
+      const x = Math.min(Math.max(ev.clientX - rail.left, 0), rail.width);
+      state.playhead = Math.round((x / rail.width) * DURATION * 100) / 100;
+      state.notice = "";
+      render();
+    }
+    function go(id) {
+      const next = SCENES[id];
+      if (!next) return;
+      Object.assign(state, next, { scene: id });
+      location.hash = id;
+      render();
+    }
+    function seekToLocus() {
+      if (state.locus === "title") state.playhead = TITLE_START;
+      else if (state.locus === "callout") state.playhead = CALLOUT_START;
+      else state.playhead = 0;
+      state.notice = "";
+      render();
+    }
+    function applyTitle() {
+      if (state.locus !== "title") return;
+      state.review = "title-committed";
+      state.notice = "";
+      render();
+    }
+    function proposeTitle() {
+      if (state.locus !== "title") return;
+      state.review = "title-pending";
+      state.notice = "";
+      render();
+    }
+    function commitMove() {
+      if (state.locus !== "title" && state.locus !== "callout") return;
+      state.moved = true;
+      state.review = "position-committed";
+      state.notice = "";
+      render();
+    }
+    function applyReview() {
+      if (state.review === "title-pending") state.review = "title-committed";
+      render();
+    }
+    function rejectReview() {
+      if (state.review === "title-pending") {
+        state.titleText = "Hello";
+        state.review = null;
+      }
+      render();
+    }
+    function undoReview() {
+      if (state.review === "title-committed") {
+        state.titleText = "Hello";
+        state.review = null;
+      }
+      if (state.review === "position-committed") {
+        state.moved = false;
+        state.review = null;
+      }
+      render();
+    }
+    function gain() {
+      if (state.locus === "source") {
+        state.notice = "SetGain on source clip · this source · no Time scope.";
+      } else {
+        state.notice = "Gain applies to source clip, not " + LOCI[state.locus].kind + " " + LOCI[state.locus].label + ".";
+      }
+      render();
+    }
+    function fade() {
+      if (state.locus === "source") {
+        state.notice = "SetFade on source clip · this source · video opacity envelope.";
+      } else {
+        state.notice = "Fade applies to source clip, not " + LOCI[state.locus].kind + " " + LOCI[state.locus].label + ".";
+      }
+      render();
+    }
+    function split() {
+      if (state.locus === "scene") {
+        state.notice = "Split on scene demo · scene.";
+      } else {
+        state.notice = "Split applies to scene demo, not " + LOCI[state.locus].kind + " " + LOCI[state.locus].label + ".";
+      }
+      render();
+    }
+    function del() {
+      if (state.locus === "scene") {
+        state.notice = "Delete on scene demo · scene.";
+      } else {
+        state.notice = "Delete applies to scene demo, not " + LOCI[state.locus].kind + " " + LOCI[state.locus].label + ".";
+      }
+      render();
+    }
+
+    function inventory(kind) {
+      const rows = [];
+      const ph = fmt(state.playhead);
+      if (kind === "title") {
+        rows.push(["Source span", LOCI.title.span]);
+        rows.push(["Timeline range", "1.00s–4.00s"]);
+        rows.push(
+          titleVisible()
+            ? ["Visual", "title overlay at playhead"]
+            : ["Visual", "not visible at " + ph + "; active 1.00s–4.00s", true]
+        );
+        rows.push(["TimeMap / freeze", "absent — titles are not sources", true]);
+        rows.push(["Scene / sequence", "scene demo · sequence main"]);
+        rows.push(["Canvas", "evaluate_at at " + ph + " — not a locus field", true]);
+      } else if (kind === "callout") {
+        rows.push(["Source span", LOCI.callout.span]);
+        rows.push(["Timeline range", "2.00s–3.00s"]);
+        rows.push(
+          calloutVisible()
+            ? ["Visual", "callout overlay at playhead"]
+            : ["Visual", "not visible at " + ph + "; active 2.00s–3.00s", true]
+        );
+        rows.push(["TimeMap / freeze", "absent — callouts are not sources", true]);
+        rows.push(["Scene / sequence", "scene demo · sequence main"]);
+      } else if (kind === "source") {
+        rows.push(["Source span", LOCI.source.span]);
+        rows.push(["Timeline range", "0.00s–4.00s"]);
+        rows.push(["Visual", "video frames; no title overlay of its own"]);
+        rows.push(["TimeMap / freeze", "hold at 2.50s for 0.50s"]);
+        rows.push(["Scene / sequence", "scene demo · sequence main"]);
+        rows.push(["Canvas", "evaluate_at at " + ph + " — not a locus field", true]);
+      } else if (kind === "scene") {
+        rows.push(["Source span", LOCI.scene.span]);
+        rows.push(["Timeline range", "0.00s–4.00s"]);
+        rows.push(["Visual", "this scene has no visual of its own", true]);
+        rows.push(["TimeMap / freeze", "absent — TimeMap lives on sources", true]);
+        rows.push(["Scene / sequence", "scene demo · sequence main"]);
+        rows.push(["Canvas", "evaluate_at at " + ph + " — not a locus field", true]);
+      } else {
+        rows.push(["Source span", LOCI.sequence.span]);
+        rows.push(["Timeline range", "absent — sequence is order, not a span", true]);
+        rows.push(["Visual", "this sequence has no visual at any time", true]);
+        rows.push(["TimeMap / freeze", "absent", true]);
+        rows.push(["Scene / sequence", "sequence main"]);
+      }
+      return rows
+        .map(function (row) {
+          return (
+            '<div class="field' +
+            (row[2] ? " absent" : "") +
+            '">' +
+            row[0] +
+            ": <b>" +
+            row[1] +
+            "</b></div>"
+          );
+        })
+        .join("");
+    }
+
+    function verbs(kind) {
+      if (kind === "title") {
+        return (
+          verb("Title text / title timing", "definition") +
+          verb("SetPosition", "this placement") +
+          verb("ResizeOverlay", "this placement")
+        );
+      }
+      if (kind === "callout") {
+        return (
+          verb("Callout timing", "this placement") +
+          verb("SetPosition", "this placement") +
+          verb("ResizeOverlay", "this placement")
+        );
+      }
+      if (kind === "source") {
+        return (
+          verb("Trim", "this source") +
+          verb("SetGain", "this source · no Time scope") +
+          verb("SetFade", "this source · video opacity")
+        );
+      }
+      if (kind === "scene") {
+        return verb("ReorderScene / Split / Delete", "scene order / scene");
+      }
+      return '<p class="none-legal">No mutation is legal: sequence is order context, not an edit target.</p>';
+    }
+    function verb(name, scope) {
+      return '<div class="verb"><span>' + name + '</span><span class="scope">' + scope + "</span></div>";
+    }
+
+    function reviewHtml() {
+      if (!state.review) return "";
+      if (state.review === "title-pending") {
+        return (
+          '<div class="review">' +
+          "<h3>Review</h3>" +
+          '<p class="state">Pending · Engine proposal · base_revision must still match</p>' +
+          '<p class="field">SetTitleText on <b>title:hello</b> · scope: definition</p>' +
+          '<p class="field">Current picture = Canvas at ' +
+          fmt(state.playhead) +
+          " (current, not a preview of new_source)</p>" +
+          '<div class="diff"><span class="del">- title "Hello"</span>\n<span class="add">+ title "Hello there"</span></div>' +
+          '<div class="insp-actions">' +
+          '<button type="button" class="btn commit" data-act="apply-review">Apply</button>' +
+          '<button type="button" class="btn danger" data-act="reject-review">Reject</button>' +
+          "</div></div>"
+        );
+      }
+      if (state.review === "title-committed") {
+        return (
+          '<div class="review">' +
+          "<h3>Review</h3>" +
+          '<p class="state committed">Committed evidence · already rewritten</p>' +
+          '<p class="field">SetTitleText on <b>title:hello</b> · scope: definition</p>' +
+          '<p class="field">Current picture = Canvas at ' +
+          fmt(state.playhead) +
+          "</p>" +
+          '<div class="diff"><span class="del">- title "Hello"</span>\n<span class="add">+ title "Hello there"</span></div>' +
+          '<p class="field absent">No second Apply. Reject is not a second history. Undo reverts.</p>' +
+          '<div class="insp-actions"><button type="button" class="btn" data-act="undo">Undo</button></div>' +
+          "</div>"
+        );
+      }
+      return (
+        '<div class="review">' +
+        "<h3>Review</h3>" +
+        '<p class="state committed">Committed evidence · already rewritten</p>' +
+        '<p class="field">SetPosition on <b>title:hello</b> · scope: this placement</p>' +
+        '<p class="field">Current picture = Canvas at ' +
+        fmt(state.playhead) +
+        " (the move is already on screen)</p>" +
+        '<div class="diff"><span class="del">- position default</span>\n<span class="add">+ position { x: 0.18, y: 0.62 }</span></div>' +
+        '<p class="field absent">Review reused the proposal from the commit. It is not a gate. Undo reverts.</p>' +
+        '<div class="insp-actions"><button type="button" class="btn" data-act="undo">Undo</button></div>' +
+        "</div>"
+      );
+    }
+
+    function titleFields() {
+      if (state.locus !== "title") return "";
+      return (
+        '<div class="insp-block"><h3>Title</h3>' +
+        '<div class="field">Title text</div>' +
+        '<input class="title-box" id="title-draft" value="' +
+        escapeAttr(state.titleText) +
+        '" />' +
+        '<div class="insp-actions">' +
+        '<button type="button" class="btn commit" data-act="apply-title">Apply edit</button>' +
+        '<button type="button" class="btn" data-act="propose-title">Review</button>' +
+        "</div></div>"
+      );
+    }
+
+    function escapeAttr(s) {
+      return s.replace(/&/g, "&amp;").replace(/"/g, "&quot;");
+    }
+
+    function canvasHtml() {
+      const locus = LOCI[state.locus];
+      const showTitle = titleVisible();
+      const showCallout = calloutVisible();
+      const titleHere = state.locus === "title";
+      const calloutHere = state.locus === "callout";
+      let html = '<div class="stage-wrap"><div class="stage">';
+      html += '<div class="frame" title="evaluate_at at the playhead"></div>';
+
+      if (titleHere && !showTitle) {
+        html +=
+          '<div class="absence">' +
+          "<h2>title Hello is not visible at " +
+          fmt(state.playhead) +
+          "</h2>" +
+          "<p>active 1.00s–4.00s · playhead and here are independent</p>" +
+          '<button type="button" class="btn transport" data-act="seek-locus">Seek to locus</button>' +
+          "</div>";
+      } else if (calloutHere && !showCallout) {
+        html +=
+          '<div class="absence">' +
+          "<h2>callout Hold is not visible at " +
+          fmt(state.playhead) +
+          "</h2>" +
+          "<p>active 2.00s–3.00s · playhead and here are independent</p>" +
+          '<button type="button" class="btn transport" data-act="seek-locus">Seek to locus</button>' +
+          "</div>";
+      } else if (state.locus === "sequence") {
+        html +=
+          '<div class="absence"><h2>this sequence has no visual at any time</h2>' +
+          "<p>Canvas is evaluate_at at " +
+          fmt(state.playhead) +
+          ", not a sequence picture</p></div>";
+      } else if (state.locus === "scene" && showTitle) {
+        html +=
+          '<div class="absence" style="background:transparent;border:0;padding:0;left:16px;top:8px;right:auto;">' +
+          '<p style="background:rgba(12,14,18,.8);padding:4px 8px;border:1px solid #3a4558;">' +
+          "scene demo is here · overlays below are evaluate_at, not here" +
+          "</p></div>";
+      }
+
+      if (showTitle) {
+        html +=
+          '<div class="overlay title' +
+          (titleHere ? " here" : "") +
+          (state.moved && titleHere ? " moved" : "") +
+          '" data-point="title">' +
+          state.titleText +
+          (titleHere
+            ? '<i class="handle tl" data-act="move"></i><i class="handle tr" data-act="move"></i><i class="handle bl" data-act="move"></i><i class="handle br" data-act="move"></i>'
+            : "") +
+          "</div>";
+      }
+      if (showCallout) {
+        html +=
+          '<div class="overlay callout' +
+          (calloutHere ? " here" : "") +
+          '" data-point="callout">' +
+          "Hold" +
+          (calloutHere
+            ? '<i class="handle tl"></i><i class="handle tr"></i><i class="handle bl"></i><i class="handle br"></i>'
+            : "") +
+          "</div>";
+      }
+      if (state.narrow) {
+        html +=
+          '<div class="clip-banner">800px · SEQUENCE, Canvas, VEL, Inspector, and Timeline stay. VEL and Inspector are clipped, not removed. Source remains main.vel.</div>';
+      }
+      html += "</div></div>";
+      return html;
+    }
+
+    function inspectorHtml() {
+      const locus = LOCI[state.locus];
+      let html = "";
+      html += '<div class="insp-id here">' + locus.heading + "</div>";
+      html += '<div class="insp-kind">' + locus.origin + " · " + locus.id + "</div>";
+      html += '<div class="insp-block"><h3>Provenance</h3>';
+      html += '<div class="field">Defined in <b>' + locus.defined + "</b></div>";
+      html += '<div class="field absent">Always present. Not a checkpoint.</div>';
+      if (locus.span) {
+        html += '<button type="button" class="btn" style="margin-top:6px" data-act="goto">Go to definition</button>';
+      }
+      html += "</div>";
+      html += '<div class="insp-block"><h3>Projections</h3>' + inventory(state.locus) + "</div>";
+      html += '<div class="insp-block"><h3>Legal verbs</h3>' + verbs(state.locus) + "</div>";
+      html += titleFields();
+      html += reviewHtml();
+      return html;
+    }
+
+    function treeRow(kind, depth, label) {
+      return (
+        '<div class="tree-row d' +
+        depth +
+        (state.locus === kind ? " here" : "") +
+        '" data-point="' +
+        kind +
+        '">' +
+        label +
+        "</div>"
+      );
+    }
+
+    function velHtml() {
+      const lines = VEL.map(function (line) {
+        const here = line.marks && line.marks.indexOf(state.locus) !== -1;
+        const cls = here ? "vel-line here" : "vel-line";
+        return '<div class="' + cls + '" data-point="' + (line.marks ? line.marks[0] : "") + '">' + (line.t || " ") + "</div>";
+      }).join("");
+      return (
+        '<div class="vel-status">locus at ' +
+        LOCI[state.locus].defined +
+        (state.velFocus ? " · text entry (Space inserts a space)" : " · click to edit source") +
+        "</div>" +
+        '<div class="vel-editor' +
+        (state.velFocus ? " focus" : "") +
+        '" data-act="vel-focus">' +
+        lines +
+        "</div>"
+      );
+    }
+
+    function clip(kind, cls, label, start, end, here) {
+      return (
+        '<div class="clip ' +
+        cls +
+        (here ? " here" : "") +
+        '" data-point="' +
+        kind +
+        '" style="left:' +
+        pct(start) +
+        "%;width:" +
+        pct(end - start) +
+        '%">' +
+        label +
+        (here && (kind === "source" || kind === "title" || kind === "callout")
+          ? '<i class="trim in"></i><i class="trim out"></i>'
+          : "") +
+        "</div>"
+      );
+    }
+
+    function railsHtml() {
+      const ph = pct(state.playhead);
+      const sourceHere = state.locus === "source";
+      const titleHere = state.locus === "title";
+      const calloutHere = state.locus === "callout";
+      const head = '<div class="playhead" style="left:' + ph + '%"></div>';
+      return (
+        '<div class="track"><div class="track-name">Video</div>' +
+        '<div class="rail" data-scrub="1">' +
+        clip("source", "video", "demo:video:3", 0, 4, sourceHere) +
+        head +
+        "</div></div>" +
+        '<div class="track"><div class="track-name">Audio</div>' +
+        '<div class="rail" data-scrub="1">' +
+        clip("source", "audio", "demo:audio:4", 0, 4, sourceHere) +
+        head +
+        "</div></div>" +
+        '<div class="track"><div class="track-name">Text</div>' +
+        '<div class="rail" data-scrub="1">' +
+        clip("title", "text", state.titleText, 1, 4, titleHere) +
+        clip("callout", "text", "Hold", 2, 3, calloutHere) +
+        head +
+        "</div></div>"
+      );
+    }
+
+    function render() {
+      const studio = document.getElementById("studio");
+      studio.className = state.narrow ? "narrow" : "";
+      studio.dataset.scene = state.scene;
+      document.body.dataset.scene = state.scene;
+
+      document.querySelectorAll(".scenes [data-go]").forEach(function (btn) {
+        btn.setAttribute("aria-current", btn.getAttribute("data-go") === state.scene ? "true" : "false");
+      });
+
+      studio.innerHTML =
+        '<div class="header"><div class="brand">Lattice</div>' +
+        '<div class="file">main.vel</div></div>' +
+        '<div class="toolbar">' +
+        '<button type="button" class="btn">Open Video…</button>' +
+        '<button type="button" class="btn">Set In</button>' +
+        '<button type="button" class="btn">Set Out</button>' +
+        '<button type="button" class="btn" data-act="split">Split at Playhead</button>' +
+        '<button type="button" class="btn" data-act="delete">Delete Selected Clip</button>' +
+        '<span class="status">Renderer · CPU</span>' +
+        '<span class="status">Audio · monitor explicitly disabled</span>' +
+        '<button type="button" class="btn active-renderer">CPU</button>' +
+        '<button type="button" class="btn">GPU DX12</button>' +
+        '<button type="button" class="btn transport">Play</button>' +
+        '<button type="button" class="btn transport">Pause</button>' +
+        '<button type="button" class="btn transport" data-act="seek0">Seek</button>' +
+        '<button type="button" class="btn transport">Scrub</button>' +
+        '<button type="button" class="btn commit">Save</button>' +
+        '<button type="button" class="btn" data-act="undo">Undo</button>' +
+        '<button type="button" class="btn">Redo</button>' +
+        '<button type="button" class="btn commit">Resolve</button>' +
+        '<button type="button" class="btn" data-act="copy">Copy locus JSON</button>' +
+        '<button type="button" class="btn" data-act="gain">Gain -3 dB</button>' +
+        '<button type="button" class="btn" data-act="fade">Fade</button>' +
+        '<button type="button" class="btn">Zoom In</button>' +
+        '<button type="button" class="btn">Zoom Out</button>' +
+        "</div>" +
+        '<div class="notice' +
+        (state.notice ? " show" : "") +
+        '">' +
+        (state.notice || "") +
+        "</div>" +
+        '<div class="body">' +
+        '<section class="pane sequence"><div class="pane-title">SEQUENCE</div><div class="pane-body">' +
+        treeRow("sequence", 0, "sequence main") +
+        treeRow("scene", 1, "scene demo") +
+        treeRow("source", 2, "source clip") +
+        treeRow("title", 2, "title " + state.titleText) +
+        treeRow("callout", 2, "callout Hold") +
+        "</div></section>" +
+        '<section class="pane canvas"><div class="pane-title">Canvas</div><div class="pane-body">' +
+        canvasHtml() +
+        "</div></section>" +
+        '<section class="pane vel"><div class="pane-title">VEL</div><div class="pane-body">' +
+        velHtml() +
+        "</div></section>" +
+        '<section class="pane inspector"><div class="pane-title">Inspector</div><div class="pane-body">' +
+        inspectorHtml() +
+        "</div></section>" +
+        "</div>" +
+        '<div class="timeline">' +
+        '<div class="ruler" data-scrub="1">Timeline · ' +
+        fmt(state.playhead) +
+        '<div class="ruler-marks">' +
+        '<span style="left:0%">0s</span><span style="left:25%">1s</span><span style="left:50%">2s</span><span style="left:75%">3s</span><span style="left:100%">4s</span>' +
+        "</div></div>" +
+        '<div class="tracks">' +
+        railsHtml() +
+        "</div></div>";
+
+      bind(studio);
+    }
+
+    function bind(root) {
+      root.querySelectorAll("[data-point]").forEach(function (el) {
+        el.addEventListener("click", function (ev) {
+          ev.stopPropagation();
+          const kind = el.getAttribute("data-point");
+          if (!kind) return;
+          point(kind);
+        });
+      });
+      root.querySelectorAll("[data-scrub]").forEach(function (el) {
+        el.addEventListener("click", function (ev) {
+          if (ev.target.closest("[data-point]")) return;
+          scrubFromEvent(ev);
+        });
+      });
+      root.querySelectorAll("[data-act]").forEach(function (el) {
+        el.addEventListener("click", function (ev) {
+          const act = el.getAttribute("data-act");
+          if (act === "seek-locus") seekToLocus();
+          else if (act === "seek0") {
+            state.playhead = 0;
+            render();
+          } else if (act === "apply-title") applyTitle();
+          else if (act === "propose-title") proposeTitle();
+          else if (act === "apply-review") applyReview();
+          else if (act === "reject-review") rejectReview();
+          else if (act === "undo") undoReview();
+          else if (act === "gain") gain();
+          else if (act === "fade") fade();
+          else if (act === "split") split();
+          else if (act === "delete") del();
+          else if (act === "copy") {
+            state.notice = "Copied locus JSON for " + LOCI[state.locus].id + ".";
+            render();
+          } else if (act === "goto") {
+            state.velFocus = true;
+            state.notice = "VEL definition " + LOCI[state.locus].defined + " selected.";
+            render();
+          } else if (act === "vel-focus") {
+            state.velFocus = true;
+            render();
+          } else if (act === "move") {
+            ev.stopPropagation();
+            commitMove();
+          }
+        });
+      });
+      const draft = root.querySelector("#title-draft");
+      if (draft) {
+        draft.addEventListener("input", function () {
+          state.titleText = draft.value;
+        });
+        draft.addEventListener("click", function (ev) {
+          ev.stopPropagation();
+        });
+      }
+    }
+
+    document.querySelectorAll(".scenes [data-go]").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        go(btn.getAttribute("data-go"));
+      });
+    });
+
+    if (new URLSearchParams(location.search).has("capture")) {
+      document.body.classList.add("capture");
+    }
+    const initial = (location.hash || "#a").slice(1);
+    go(SCENES[initial] ? initial : "a");
+  </script>
+</body>
+</html>
