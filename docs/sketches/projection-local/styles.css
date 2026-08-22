@@ -787,7 +787,8 @@ body[data-scene="d"] .title-card {
 
 /* scene-specific visibility */
 
-[data-show] { display: none !important; }
+[data-show],
+[data-show-block] { display: none !important; }
 body[data-scene="a"] [data-show~="a"],
 body[data-scene="b"] [data-show~="b"],
 body[data-scene="c"] [data-show~="c"],
