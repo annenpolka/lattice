@@ -1,0 +1,922 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Studio sketch · Command Ledger</title>
+  <style>
+    :root {
+      --bg: #0c0e12;
+      --panel: #141821;
+      --panel-2: #1a2030;
+      --line: #2a3140;
+      --text: #e8edf5;
+      --muted: #8b95a8;
+      --dim: #5c6678;
+      --teal: #3dd6c6;
+      --teal-dim: #1a3a36;
+      --amber: #e8b86d;
+      --amber-dim: #3a2e18;
+      --rose: #e07a7a;
+      --rose-dim: #3a1e22;
+      --blue: #7aa2ff;
+      --ok: #7dcea0;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: "Segoe UI", "IBM Plex Sans", sans-serif;
+      min-height: 100%;
+    }
+    body { padding: 20px 24px 28px; max-width: 1440px; margin: 0 auto; }
+
+    header.page {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 14px;
+    }
+    .brand { display: flex; align-items: center; gap: 10px; }
+    .mark {
+      width: 16px; height: 16px;
+      background: conic-gradient(from 45deg, var(--teal), #7aa2ff, var(--teal));
+      clip-path: polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%);
+    }
+    h1 { font-size: 18px; font-weight: 600; }
+    h1 span { color: var(--muted); font-weight: 500; }
+    .page-note { font-size: 12px; color: var(--muted); max-width: 520px; text-align: right; line-height: 1.45; }
+
+    .scenes {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+    .scenes button {
+      appearance: none;
+      border: 1px solid var(--line);
+      background: var(--panel);
+      color: var(--text);
+      padding: 7px 11px;
+      border-radius: 8px;
+      font-size: 12px;
+      cursor: pointer;
+    }
+    .scenes button[aria-current="true"] {
+      border-color: #2a5a54;
+      background: #15201f;
+      color: var(--teal);
+    }
+    .scenes button:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
+
+    .rule {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 12px;
+      align-items: start;
+      margin-bottom: 12px;
+    }
+    .rule p {
+      font-size: 13px;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+    .rule strong { color: var(--text); font-weight: 600; }
+    .here-chip {
+      border: 1px solid #2a5a54;
+      background: #15201f;
+      color: var(--teal);
+      padding: 8px 12px;
+      border-radius: 8px;
+      font-size: 12px;
+      white-space: nowrap;
+    }
+    .here-chip.unresolved {
+      border-color: #5a4a2a;
+      background: var(--amber-dim);
+      color: var(--amber);
+    }
+    .here-chip b { color: inherit; }
+
+    .studio {
+      border: 1px solid var(--line);
+      background: #10141c;
+      border-radius: 12px;
+      overflow: hidden;
+    }
+
+    .session-strip {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      border-bottom: 1px solid var(--line);
+      background: var(--panel);
+      min-height: 44px;
+    }
+    .session-strip .lab {
+      font-size: 10px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--dim);
+      margin-right: 6px;
+    }
+    .chip {
+      border: 1px solid var(--line);
+      background: var(--panel-2);
+      color: var(--text);
+      padding: 5px 9px;
+      border-radius: 6px;
+      font-size: 12px;
+    }
+    .chip.clock { color: var(--teal); font-variant-numeric: tabular-nums; }
+    .ghost-bank {
+      margin-left: auto;
+      display: flex;
+      gap: 6px;
+      align-items: center;
+    }
+    .ghost {
+      border: 1px dashed #3a2430;
+      color: #6a4a52;
+      background: transparent;
+      padding: 4px 8px;
+      border-radius: 6px;
+      font-size: 11px;
+      text-decoration: line-through;
+    }
+    .session-strip.hot {
+      box-shadow: inset 0 0 0 1px #2a5a54;
+    }
+
+    .workspace {
+      display: grid;
+      grid-template-columns: minmax(0, 1.35fr) minmax(320px, 0.85fr);
+      min-height: 360px;
+    }
+    .canvas-col, .ledger-col {
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+    }
+    .canvas-col { border-right: 1px solid var(--line); }
+    .pane-h {
+      font-size: 10px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--dim);
+      padding: 8px 12px 0;
+    }
+
+    .canvas {
+      margin: 10px 12px 12px;
+      aspect-ratio: 16 / 9;
+      background:
+        linear-gradient(180deg, #1c2433 0%, #121821 70%),
+        repeating-linear-gradient(90deg, transparent 0 18px, rgba(255,255,255,0.015) 18px 19px);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      position: relative;
+      overflow: hidden;
+      cursor: default;
+    }
+    .video-plate {
+      position: absolute;
+      inset: 10% 8% 18% 8%;
+      background: #243044;
+      border: 1px solid #3a4a62;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    .video-plate.here { box-shadow: 0 0 0 2px var(--teal); }
+    .video-plate .tag {
+      position: absolute;
+      left: 10px; bottom: 8px;
+      font-size: 11px;
+      color: #c5d2e8;
+    }
+    .title-card {
+      position: absolute;
+      left: 18%;
+      top: 22%;
+      width: 38%;
+      padding: 10px 12px;
+      background: rgba(12, 14, 18, 0.78);
+      border: 1px solid #3d4a3a;
+      color: #f2f6ee;
+      font-size: 18px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .title-card.here { box-shadow: 0 0 0 2px var(--teal); }
+    .title-card small {
+      display: block;
+      font-size: 10px;
+      font-weight: 500;
+      color: var(--muted);
+      margin-top: 4px;
+    }
+
+    .inspector {
+      margin: 0 12px 12px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 8px 10px 10px;
+      background: var(--panel);
+    }
+    .inspector h3 {
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--dim);
+      margin-bottom: 6px;
+    }
+    .insp-empty { font-size: 12px; color: var(--dim); }
+    .insp-fields { display: none; flex-direction: column; gap: 6px; }
+    .insp-fields.show { display: flex; }
+    .insp-fields label { font-size: 11px; color: var(--muted); }
+    .insp-fields input {
+      width: 100%;
+      background: #0c0e12;
+      border: 1px solid var(--line);
+      color: var(--text);
+      padding: 5px 7px;
+      border-radius: 4px;
+      font-size: 12px;
+    }
+
+    .ledger-col {
+      background: #12171f;
+    }
+    .utterance {
+      margin: 10px 12px 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .clause {
+      border: 1px solid var(--line);
+      background: var(--panel);
+      border-radius: 8px;
+      padding: 8px 10px;
+      text-align: left;
+      color: var(--text);
+      width: 100%;
+      cursor: default;
+    }
+    .clause.present {
+      border-color: #2a5a54;
+      background: #15201f;
+      cursor: pointer;
+    }
+    .clause.present:hover { border-color: var(--teal); }
+    .clause.absent {
+      opacity: 0.88;
+      cursor: not-allowed;
+    }
+    .clause .row1 {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      font-size: 13px;
+    }
+    .clause .verb { font-weight: 600; font-family: ui-monospace, "Cascadia Code", monospace; }
+    .clause .state {
+      font-size: 10px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--teal);
+    }
+    .clause.absent .state { color: var(--amber); }
+    .clause .meta { font-size: 11px; color: var(--muted); margin-top: 3px; line-height: 1.4; }
+    .clause.armed { box-shadow: 0 0 0 1px var(--teal); }
+
+    .invoke {
+      display: none;
+      margin: 0 12px 8px;
+      border: 1px solid #2a5a54;
+      background: #15201f;
+      border-radius: 8px;
+      padding: 10px;
+    }
+    .invoke.open { display: block; }
+    .invoke h3 { font-size: 12px; margin-bottom: 6px; }
+    .invoke p { font-size: 12px; color: var(--muted); margin-bottom: 8px; }
+    .invoke label { display: block; font-size: 11px; color: var(--muted); margin-bottom: 4px; }
+    .invoke input, .invoke select {
+      width: 100%;
+      background: #0c0e12;
+      border: 1px solid var(--line);
+      color: var(--text);
+      padding: 6px 8px;
+      border-radius: 4px;
+      margin-bottom: 8px;
+    }
+    .invoke-actions { display: flex; gap: 8px; }
+    .invoke-actions button {
+      appearance: none;
+      border: 1px solid var(--line);
+      background: var(--panel-2);
+      color: var(--text);
+      padding: 6px 10px;
+      border-radius: 6px;
+      font-size: 12px;
+      cursor: pointer;
+    }
+    .invoke-actions .commit {
+      border-color: #2a5a54;
+      background: #1a3330;
+      color: var(--teal);
+    }
+
+    .toast {
+      display: none;
+      margin: 0 12px 8px;
+      font-size: 12px;
+      padding: 8px 10px;
+      border-radius: 6px;
+      border: 1px solid #2a5a54;
+      background: #15201f;
+      color: var(--ok);
+    }
+    .toast.show { display: block; }
+    .toast.refuse {
+      border-color: #5a4a2a;
+      background: var(--amber-dim);
+      color: var(--amber);
+    }
+
+    .session-ledger {
+      margin: 0 12px 12px;
+      border-top: 1px solid var(--line);
+      padding-top: 8px;
+    }
+    .session-ledger h3 {
+      font-size: 10px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--dim);
+      margin-bottom: 6px;
+    }
+    .session-ledger ul { list-style: none; display: flex; flex-direction: column; gap: 4px; }
+    .session-ledger li {
+      font-size: 11px;
+      color: var(--muted);
+      font-family: ui-monospace, "Cascadia Code", monospace;
+    }
+    .session-ledger .empty { color: var(--dim); font-family: inherit; }
+
+    .timeline {
+      border-top: 1px solid var(--line);
+      background: #0f131a;
+      padding: 8px 12px 12px;
+      position: relative;
+    }
+    .tl-head {
+      display: flex;
+      justify-content: space-between;
+      font-size: 10px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--dim);
+      margin-bottom: 8px;
+    }
+    .tracks { position: relative; height: 92px; }
+    .rail {
+      position: absolute;
+      left: 0; right: 0;
+      height: 28px;
+      border-radius: 5px;
+      background: #1a2030;
+      border: 1px solid var(--line);
+    }
+    .rail.scene { top: 4px; }
+    .rail.source { top: 40px; }
+    .span {
+      position: absolute;
+      top: 3px;
+      height: 22px;
+      border-radius: 4px;
+      font-size: 11px;
+      padding: 3px 8px;
+      cursor: pointer;
+      white-space: nowrap;
+      overflow: hidden;
+    }
+    .span.scene {
+      left: 8%;
+      width: 62%;
+      background: #243044;
+      color: #c5d2e8;
+      border: 1px solid #3a4a62;
+    }
+    .span.source {
+      left: 12%;
+      width: 48%;
+      background: #2a3a28;
+      color: #d7e8d2;
+      border: 1px solid #3d4a3a;
+    }
+    .span.here { box-shadow: 0 0 0 2px var(--teal); }
+    .span .edge {
+      position: absolute;
+      top: 0; bottom: 0;
+      width: 5px;
+      background: rgba(232, 184, 109, 0.55);
+    }
+    .span .edge.l { left: 0; }
+    .span .edge.r { right: 0; }
+    .playhead {
+      position: absolute;
+      top: 0; bottom: 0;
+      left: 42%;
+      width: 2px;
+      background: var(--amber);
+      pointer-events: none;
+    }
+    .playhead::before {
+      content: attr(data-at);
+      position: absolute;
+      top: -2px;
+      left: 6px;
+      font-size: 10px;
+      color: var(--amber);
+      white-space: nowrap;
+    }
+    .overlap-hit {
+      position: absolute;
+      left: 28%;
+      width: 16%;
+      top: 4px;
+      height: 64px;
+      border: 1px dashed transparent;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    .overlap-hit.armed {
+      border-color: var(--amber);
+      background: rgba(232, 184, 109, 0.08);
+    }
+    .candidates {
+      display: none;
+      position: absolute;
+      left: 30%;
+      top: -8px;
+      z-index: 3;
+      background: #1c1810;
+      border: 1px solid #5a4a2a;
+      border-radius: 8px;
+      padding: 6px;
+      min-width: 220px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+    }
+    .candidates.open { display: block; }
+    .candidates p {
+      font-size: 10px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--amber);
+      margin-bottom: 6px;
+    }
+    .candidates button {
+      display: block;
+      width: 100%;
+      text-align: left;
+      margin-bottom: 4px;
+      appearance: none;
+      border: 1px solid var(--line);
+      background: var(--panel);
+      color: var(--text);
+      padding: 6px 8px;
+      border-radius: 6px;
+      font-size: 12px;
+      cursor: pointer;
+    }
+    .candidates button:last-child { margin-bottom: 0; }
+
+    .no-handles {
+      font-size: 11px;
+      color: var(--dim);
+      margin-top: 6px;
+    }
+
+    .locks {
+      margin-top: 12px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    .lock {
+      font-size: 11px;
+      color: var(--muted);
+      border: 1px solid var(--line);
+      padding: 4px 8px;
+      border-radius: 999px;
+    }
+
+    .walk {
+      margin-top: 16px;
+      font-size: 12px;
+      color: var(--dim);
+      line-height: 1.5;
+    }
+  </style>
+</head>
+<body>
+  <header class="page">
+    <div class="brand">
+      <div class="mark"></div>
+      <h1>Command Ledger <span>utterance が commit 面</span></h1>
+    </div>
+    <p class="page-note">クリック可能な静的スケッチ。見た目の確定ではない。四動詞は named command。Timeline に gain / fade / razor / delete は生えない。</p>
+  </header>
+
+  <nav class="scenes" aria-label="Scenes">
+    <button type="button" data-scene="strip" aria-current="true">1 · Session strip</button>
+    <button type="button" data-scene="source">2 · Source here</button>
+    <button type="button" data-scene="scene">3 · Scene here</button>
+    <button type="button" data-scene="video">4 · Video click</button>
+    <button type="button" data-scene="overlap">5 · Overlap</button>
+  </nav>
+
+  <section class="rule">
+    <p id="sceneCopy">Session / application strip は残ってよい。メンバーは未定。locus を取る動詞（Gain / Fade / Split / Delete / Set In / Set Out）は載らない。Ledger はその strip ではない。</p>
+    <div id="hereChip" class="here-chip">here · <b>source clip · gameplay</b></div>
+  </section>
+
+  <div class="studio" id="studio">
+    <div class="session-strip hot" id="sessionStrip">
+      <span class="lab">Session</span>
+      <span class="chip">Play</span>
+      <span class="chip">Pause</span>
+      <span class="chip clock" id="clock">00:08.40</span>
+      <span class="chip">renderer · CPU</span>
+      <span class="chip">Open</span>
+      <div class="ghost-bank" title="Deleted locus-taking bank. Not on this strip.">
+        <span class="ghost">Set In/Out</span>
+        <span class="ghost">Split</span>
+        <span class="ghost">Delete</span>
+        <span class="ghost">Gain</span>
+        <span class="ghost">Fade</span>
+      </div>
+    </div>
+
+    <div class="workspace">
+      <div class="canvas-col">
+        <div class="pane-h">Canvas · video click = source clip</div>
+        <div class="canvas" id="canvas">
+          <button type="button" class="video-plate here" id="videoPlate" data-point="source" aria-label="Point source clip gameplay">
+            <span class="tag">gameplay.mp4 · source</span>
+          </button>
+          <button type="button" class="title-card" id="titleCard" data-point="title" aria-label="Point title Hello">
+            Hello
+            <small>title · placement only</small>
+          </button>
+        </div>
+        <div class="inspector">
+          <h3>Inspector</h3>
+          <p class="insp-empty" id="inspEmpty">Title 形の欄は、here が Title のときだけ。</p>
+          <div class="insp-fields" id="inspFields">
+            <label>text</label>
+            <input value="Hello" readonly />
+            <label>font</label>
+            <input value="fixture.ttf" readonly />
+          </div>
+        </div>
+      </div>
+
+      <div class="ledger-col">
+        <div class="pane-h">Utterance · Command Ledger</div>
+        <div class="utterance" id="utterance" aria-live="polite"></div>
+        <div class="invoke" id="invoke"></div>
+        <div class="toast" id="toast"></div>
+        <div class="session-ledger">
+          <h3>Invoked this session</h3>
+          <ul id="ledgerLog"><li class="empty">まだ invocable 行を commit していない。</li></ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="timeline">
+      <div class="tl-head">
+        <span>Timeline · 既存の trim / reorder / overlay time だけ</span>
+        <span>playhead は時計 · here ではない</span>
+      </div>
+      <div class="tracks" id="tracks">
+        <div class="rail scene"></div>
+        <div class="rail source"></div>
+        <button type="button" class="span scene" id="sceneSpan" data-point="scene">scene · intro</button>
+        <button type="button" class="span source here" id="sourceSpan" data-point="source">
+          <i class="edge l" title="edge trim"></i>
+          source · gameplay
+          <i class="edge r" title="edge trim"></i>
+        </button>
+        <div class="overlap-hit" id="overlapHit" data-point="overlap" title="Coordinate names several loci"></div>
+        <div class="playhead" id="playhead" data-at="at 00:08.40"></div>
+        <div class="candidates" id="candidates">
+          <p>On this Timeline only</p>
+          <button type="button" data-pick="scene">scene · intro</button>
+          <button type="button" data-pick="source">source clip · gameplay</button>
+          <button type="button" data-pick="title">title · Hello</button>
+        </div>
+      </div>
+      <p class="no-handles" id="tlNote">このクリップに gain handle / fade handle / razor / delete hit はない。四動詞の commit は utterance の present 行。</p>
+    </div>
+  </div>
+
+  <div class="locks" aria-label="Held locks">
+    <span class="lock">one locus / one legal set / one utterance</span>
+    <span class="lock">video click = source</span>
+    <span class="lock">overlap stays on the touched projection</span>
+    <span class="lock">no silent retarget</span>
+    <span class="lock">Title fields only on Title</span>
+    <span class="lock">no per-view selection</span>
+  </div>
+  <p class="walk">Present 行をクリックすると invoke。Absent 行は拒否される。Escape は in-flight invoke を取り消す。関連 scene / source の言及は Navigate であり、here を黙って書き換えない。</p>
+
+  <script>
+    const COPY = {
+      strip: "Session / application strip は残ってよい。メンバーは未定。locus を取る動詞（Gain / Fade / Split / Delete / Set In / Set Out）は載らない。Ledger はその strip ではない。",
+      source: "here は source clip。Engine は trim / set-gain / set-fade を名指す。gain と fade は utterance の present 行から invoke する。Timeline ハンドルではない。",
+      scene: "here は scene。Engine は split / delete / reorder-scene を名指す。split と delete は ledger から。playhead は split の at を渡す時計であり、here にならない。",
+      video: "Canvas の映像をクリックしても here は source clip のまま。split の clause はこの target では absent。関連 scene は Navigate として話す。昇格しない。",
+      overlap: "重なった座標の候補は、触った Timeline に出す。Ledger は unresolved-pointing を話し、候補リストを引き受けない。カードを選ぶまで invocable な行はない。"
+    };
+
+    const LOCI = {
+      source: { kind: "source", label: "source clip · gameplay", legal: ["trim", "set-gain", "set-fade"] },
+      scene: { kind: "scene", label: "scene · intro", legal: ["split", "delete", "reorder-scene"] },
+      title: { kind: "title", label: "title · Hello", legal: ["title", "set-position", "resize-overlay"] },
+      unresolved: { kind: "unresolved", label: "unresolved pointing", legal: [] }
+    };
+
+    const FOUR = [
+      {
+        verb: "set-gain",
+        presentOn: "source",
+        present: { target: "source clip · gameplay", scope: "this source", effect: "gain を書く。db は invoke の引数。" },
+        absent: {
+          scene: { code: "needs-source-binding", speak: "Point the video clip。scene に gain は書かない。" },
+          title: { code: "structurally-absent", speak: "Title に fade/gain はない。" },
+          unresolved: { code: "unresolved-pointing", speak: "指差しが決まるまで invocable ではない。" },
+          source: null
+        }
+      },
+      {
+        verb: "set-fade",
+        presentOn: "source",
+        present: { target: "source clip · gameplay", scope: "this source", effect: "fade を書く。引数は invoke。" },
+        absent: {
+          scene: { code: "needs-source-binding", speak: "Point the video clip。" },
+          title: { code: "structurally-absent", speak: "Title 形の fade 欄は出さない。" },
+          unresolved: { code: "unresolved-pointing", speak: "指差しが決まるまで invocable ではない。" },
+          source: null
+        }
+      },
+      {
+        verb: "split",
+        presentOn: "scene",
+        present: { target: "scene · intro", scope: "that scene", effect: "playhead 00:08.40 で split。playhead は here ではない。" },
+        absent: {
+          source: { code: "needs-scene", speak: "関連 scene · intro では legal。here は source clip のまま。Navigate。" },
+          title: { code: "structurally-absent", speak: "Title では split しない。" },
+          unresolved: { code: "unresolved-pointing", speak: "指差しが決まるまで invocable ではない。" },
+          scene: null
+        }
+      },
+      {
+        verb: "delete",
+        presentOn: "scene",
+        present: { target: "scene · intro", scope: "that scene", effect: "この scene を削除する。" },
+        absent: {
+          source: { code: "needs-scene", speak: "関連 scene の delete は Navigate。adopt しない。" },
+          title: { code: "structurally-absent", speak: "Title では delete しない。" },
+          unresolved: { code: "unresolved-pointing", speak: "指差しが決まるまで invocable ではない。" },
+          scene: null
+        }
+      }
+    ];
+
+    const state = {
+      scene: "strip",
+      here: "source",
+      invoke: null,
+      toast: null,
+      toastKind: "ok",
+      log: []
+    };
+
+    const els = {
+      sceneCopy: document.getElementById("sceneCopy"),
+      hereChip: document.getElementById("hereChip"),
+      sessionStrip: document.getElementById("sessionStrip"),
+      videoPlate: document.getElementById("videoPlate"),
+      titleCard: document.getElementById("titleCard"),
+      sceneSpan: document.getElementById("sceneSpan"),
+      sourceSpan: document.getElementById("sourceSpan"),
+      overlapHit: document.getElementById("overlapHit"),
+      candidates: document.getElementById("candidates"),
+      utterance: document.getElementById("utterance"),
+      invoke: document.getElementById("invoke"),
+      toast: document.getElementById("toast"),
+      ledgerLog: document.getElementById("ledgerLog"),
+      inspEmpty: document.getElementById("inspEmpty"),
+      inspFields: document.getElementById("inspFields"),
+      tlNote: document.getElementById("tlNote")
+    };
+
+    function setScene(name) {
+      state.scene = name;
+      state.invoke = null;
+      state.toast = null;
+      if (name === "strip" || name === "source" || name === "video") state.here = "source";
+      if (name === "scene") state.here = "scene";
+      if (name === "overlap") state.here = "unresolved";
+      document.querySelectorAll(".scenes button").forEach((b) => {
+        b.setAttribute("aria-current", b.dataset.scene === name ? "true" : "false");
+      });
+      render();
+    }
+
+    function point(kind) {
+      if (kind === "overlap") {
+        state.here = "unresolved";
+        state.invoke = null;
+        state.toast = "候補は触った Timeline に留まる。Ledger は unresolved-pointing だけを話す。";
+        state.toastKind = "refuse";
+        render();
+        return;
+      }
+      state.here = kind;
+      state.invoke = null;
+      if (kind === "source") {
+        state.toast = "here は source clip。containing scene へは昇格しない。";
+        state.toastKind = "ok";
+      } else if (kind === "scene") {
+        state.toast = "新しい指差し。video click の source を scene に読み替えない。";
+        state.toastKind = "ok";
+      } else if (kind === "title") {
+        state.toast = "Title 欄だけが Inspector に出る。set-fade は structurally-absent。";
+        state.toastKind = "ok";
+      }
+      render();
+    }
+
+    function pick(kind) {
+      state.here = kind;
+      state.invoke = null;
+      state.toast = "一つの LocusId。候補リストは消える。";
+      state.toastKind = "ok";
+      render();
+    }
+
+    function refuse(code, speak) {
+      state.invoke = null;
+      state.toast = "Invoke 拒否 · " + code + " — " + speak;
+      state.toastKind = "refuse";
+      render();
+    }
+
+    function beginInvoke(verb) {
+      const locus = LOCI[state.here];
+      const spec = FOUR.find((v) => v.verb === verb);
+      if (!spec || spec.presentOn !== locus.kind) {
+        const abs = spec && spec.absent[locus.kind];
+        refuse(abs ? abs.code : "absent", abs ? abs.speak : "この target では呼べない。");
+        return;
+      }
+      state.invoke = { verb };
+      state.toast = null;
+      render();
+    }
+
+    function cancelInvoke() {
+      state.invoke = null;
+      state.toast = "Escape · invoke 中止。source は変わらない。";
+      state.toastKind = "refuse";
+      render();
+    }
+
+    function commitInvoke() {
+      if (!state.invoke) return;
+      const spec = FOUR.find((v) => v.verb === state.invoke.verb);
+      const arg = state.invoke.verb === "set-gain"
+        ? (document.getElementById("argGain") || {}).value || "-3"
+        : state.invoke.verb === "set-fade"
+          ? (document.getElementById("argFade") || {}).value || "in 12f"
+          : state.invoke.verb === "split"
+            ? "at 00:08.40"
+            : "";
+      const row = spec.verb + " · " + spec.present.target + " · " + (arg || spec.present.scope) + " · " + spec.present.effect;
+      state.log.unshift(row);
+      state.invoke = null;
+      state.toast = "SemanticEdit を一つ commit。target は committed LocusId。";
+      state.toastKind = "ok";
+      render();
+    }
+
+    function clauseHtml(spec, locus) {
+      const present = spec.presentOn === locus.kind;
+      const abs = spec.absent[locus.kind];
+      const stateLabel = present ? "present · invoke" : (abs ? abs.code : "absent");
+      const meta = present
+        ? spec.present.target + " · " + spec.present.scope + " · " + spec.present.effect
+        : (abs ? abs.speak : "unrouted");
+      const armed = state.invoke && state.invoke.verb === spec.verb ? " armed" : "";
+      return (
+        '<button type="button" class="clause ' + (present ? "present" : "absent") + armed + '" data-verb="' + spec.verb + '">' +
+          '<div class="row1"><span class="verb">' + spec.verb + '</span><span class="state">' + stateLabel + '</span></div>' +
+          '<div class="meta">' + meta + '</div>' +
+        '</button>'
+      );
+    }
+
+    function render() {
+      const locus = LOCI[state.here];
+      els.sceneCopy.textContent = COPY[state.scene];
+      els.hereChip.className = "here-chip" + (state.here === "unresolved" ? " unresolved" : "");
+      els.hereChip.innerHTML = "here · <b>" + locus.label + "</b>";
+      els.sessionStrip.classList.toggle("hot", state.scene === "strip");
+      els.videoPlate.classList.toggle("here", state.here === "source");
+      els.titleCard.classList.toggle("here", state.here === "title");
+      els.sceneSpan.classList.toggle("here", state.here === "scene");
+      els.sourceSpan.classList.toggle("here", state.here === "source");
+      els.overlapHit.classList.toggle("armed", state.scene === "overlap" || state.here === "unresolved");
+      els.candidates.classList.toggle("open", state.here === "unresolved");
+      const titleHere = state.here === "title";
+      els.inspFields.classList.toggle("show", titleHere);
+      els.inspEmpty.style.display = titleHere ? "none" : "block";
+      els.utterance.innerHTML = FOUR.map((spec) => clauseHtml(spec, locus)).join("");
+      if (state.invoke) {
+        const spec = FOUR.find((v) => v.verb === state.invoke.verb);
+        let extra = "";
+        if (spec.verb === "set-gain") {
+          extra = '<label for="argGain">db</label><input id="argGain" value="-3" />';
+        } else if (spec.verb === "set-fade") {
+          extra = '<label for="argFade">fade</label><input id="argFade" value="in 12f" />';
+        } else if (spec.verb === "split") {
+          extra = '<p>at は session clock 00:08.40。playhead を here にはしない。</p>';
+        }
+        els.invoke.className = "invoke open";
+        els.invoke.innerHTML =
+          "<h3>Invoke " + spec.verb + "</h3>" +
+          "<p>target は " + spec.present.target + "。ここが committed LocusId。</p>" +
+          extra +
+          '<div class="invoke-actions">' +
+            '<button type="button" class="commit" id="doCommit">Commit one SemanticEdit</button>' +
+            '<button type="button" id="doCancel">Escape</button>' +
+          "</div>";
+      } else {
+        els.invoke.className = "invoke";
+        els.invoke.innerHTML = "";
+      }
+      if (state.toast) {
+        els.toast.className = "toast show" + (state.toastKind === "refuse" ? " refuse" : "");
+        els.toast.textContent = state.toast;
+      } else {
+        els.toast.className = "toast";
+        els.toast.textContent = "";
+      }
+      if (state.log.length === 0) {
+        els.ledgerLog.innerHTML = '<li class="empty">まだ invocable 行を commit していない。</li>';
+      } else {
+        els.ledgerLog.innerHTML = state.log.map((row) => "<li>" + row + "</li>").join("");
+      }
+      if (state.here === "source") {
+        els.tlNote.textContent = "source clip に gain / fade handle はない。set-gain / set-fade は上の present 行。";
+      } else if (state.here === "scene") {
+        els.tlNote.textContent = "scene span に razor / delete hit はない。split / delete は上の present 行。";
+      } else if (state.here === "unresolved") {
+        els.tlNote.textContent = "候補カードはこの Timeline にある。utterance 側には候補を移さない。";
+      } else {
+        els.tlNote.textContent = "Canvas は Title / Callout の placement。四動詞の commit 面ではない。";
+      }
+    }
+
+    document.querySelector(".scenes").addEventListener("click", (e) => {
+      const btn = e.target.closest("[data-scene]");
+      if (btn) setScene(btn.dataset.scene);
+    });
+    document.getElementById("studio").addEventListener("click", (e) => {
+      const pickBtn = e.target.closest("[data-pick]");
+      if (pickBtn) { pick(pickBtn.dataset.pick); return; }
+      const pointBtn = e.target.closest("[data-point]");
+      if (pointBtn) { point(pointBtn.dataset.point); return; }
+      const clause = e.target.closest("[data-verb]");
+      if (clause) { beginInvoke(clause.dataset.verb); return; }
+      if (e.target.id === "doCommit") { commitInvoke(); return; }
+      if (e.target.id === "doCancel") { cancelInvoke(); return; }
+    });
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && state.invoke) {
+        e.preventDefault();
+        cancelInvoke();
+      }
+    });
+
+    render();
+  </script>
+</body>
+</html>
