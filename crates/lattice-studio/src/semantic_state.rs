@@ -32,7 +32,26 @@ pub fn snapshot(session: &StudioSession) -> Value {
         "last_gesture_error": session.last_gesture_error(),
         "pointing": utterance.pointing,
         "projection": session.touched_projection().as_str(),
-        "spoken": utterance.spoken.iter().map(|clause| &clause.text).collect::<Vec<_>>(),
+        "legal": utterance.legal.iter().map(|edit| {
+            json!({
+                "verb": edit.verb,
+                "target": edit.target.as_str(),
+                "scope": edit.scope,
+                "effect": edit.effect,
+            })
+        }).collect::<Vec<_>>(),
+        "routed": utterance.routed,
+        "spoken": utterance.spoken.iter().map(|clause| {
+            json!({
+                "verb": clause.verb,
+                "status": clause.status,
+                "reason": clause.reason,
+                "target": clause.target,
+                "scope": clause.scope,
+                "effect": clause.effect,
+                "text": clause.text,
+            })
+        }).collect::<Vec<_>>(),
         "unresolved": session.unresolved_pointing().map(|point| {
             json!({
                 "projection": point.projection.as_str(),

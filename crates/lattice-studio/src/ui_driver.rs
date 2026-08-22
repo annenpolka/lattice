@@ -707,7 +707,7 @@ scene demo {
 
     #[gpui::test]
     fn video_clip_click_keeps_source_and_hides_title_fields(cx: &mut TestAppContext) {
-        let mut session = overlap_session();
+        let session = overlap_session();
         let clip_id = session
             .layout()
             .unwrap()
@@ -719,7 +719,6 @@ scene demo {
             .clips[0]
             .id
             .clone();
-        session.point_video_clip(&clip_id).unwrap();
         let (view, cx) = add_studio(cx, session);
         let mut ui = UiDriver::new(cx);
         ui.click(format!("timeline.clip.{clip_id}"));
@@ -737,6 +736,11 @@ scene demo {
         assert_eq!(kind, Some(lattice_engine::LocusKind::Source));
         assert!(!title_fields, "title fields only when here is Title");
         assert!(heading.contains("source"), "{heading}");
+        let spoken = ui.read(&view, |view, _| view.session.utterance().spoken_text());
+        assert!(
+            spoken.contains("legal there") && spoken.contains("do not retarget"),
+            "{spoken}"
+        );
     }
 
     #[gpui::test]
@@ -813,7 +817,7 @@ scene demo {
 
     #[gpui::test]
     fn scene_inspector_has_no_title_selector(cx: &mut TestAppContext) {
-        let mut session = overlap_session();
+        let session = overlap_session();
         let scene = session
             .loci()
             .unwrap()
@@ -821,9 +825,15 @@ scene demo {
             .find(|locus| locus.kind == lattice_engine::LocusKind::Scene)
             .unwrap()
             .id;
-        session.point_at(scene);
         let (view, cx) = add_studio(cx, session);
         let mut ui = UiDriver::new(cx);
+        ui.click(format!("tree.node.{}", scene.as_str()));
+        assert_eq!(
+            ui.read(&view, |view, _| {
+                view.session.current_locus().unwrap().map(|locus| locus.id)
+            }),
+            Some(scene.clone())
+        );
         assert!(ui.read(&view, |view, _| {
             !view.session.layout().unwrap().inspector.title_fields
         }));

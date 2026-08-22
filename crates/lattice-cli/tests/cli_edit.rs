@@ -39,6 +39,10 @@ fn json_inspect_propose_reject_then_apply() {
     let inspect = run_ok(&["--json", "inspect", vel_s, "--locus", "demo:title:1"]);
     assert!(inspect.contains("demo:title:1"));
     assert!(inspect.contains("Hello"));
+    assert!(
+        inspect.contains("\"legal\"") && inspect.contains("\"set-position\""),
+        "inspect --json must expose the Engine legal set: {inspect}"
+    );
 
     let propose = run_ok(&[
         "--json",

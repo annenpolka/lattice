@@ -57,12 +57,15 @@ pub struct PointCandidate {
     pub routed_verbs: Vec<String>,
 }
 
-/// A spoken clause: present, routed elsewhere, or absent with a typed reason.
+/// A spoken clause: present, routed elsewhere, relation, or absent with a typed reason.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SpokenClause {
     pub verb: String,
     pub status: String,
     pub reason: Option<String>,
+    pub target: Option<String>,
+    pub scope: Option<String>,
+    pub effect: Option<String>,
     pub text: String,
 }
 
@@ -178,6 +181,9 @@ pub fn utterance(
             verb: String::new(),
             status: AbsenceReason::UnresolvedPointing.as_str().into(),
             reason: Some(AbsenceReason::UnresolvedPointing.as_str().into()),
+            target: None,
+            scope: None,
+            effect: None,
             text: format!(
                 "This {} point named {} loci. Pick one card. Here is unset.",
                 point.projection.as_str(),
@@ -205,6 +211,9 @@ pub fn utterance(
                 verb: String::new(),
                 status: "none".into(),
                 reason: None,
+                target: None,
+                scope: None,
+                effect: None,
                 text: "No here. Point a locus.".into(),
             }],
             projection,
@@ -215,7 +224,8 @@ pub fn utterance(
         .into_iter()
         .map(str::to_string)
         .collect();
-    let spoken = speak_legal_vs_routed(locus, &legal, &routed, projection);
+    let mut spoken = speak_legal_vs_routed(locus, &legal, &routed, projection);
+    spoken.extend(speak_relations(locus));
     Utterance {
         here: Some(format!("{} \"{}\"", kind_label(locus.kind), locus.label)),
         here_kind: Some(kind_label(locus.kind).into()),
@@ -235,14 +245,23 @@ fn speak_legal_vs_routed(
 ) -> Vec<SpokenClause> {
     let mut spoken = Vec::new();
     for edit in legal {
+        let disclosure = format!(
+            "{} → {} ({}: {})",
+            edit.verb,
+            edit.target.as_str(),
+            edit.scope,
+            edit.effect
+        );
         if routed.iter().any(|verb| verb == &edit.verb) {
             spoken.push(SpokenClause {
                 verb: edit.verb.clone(),
                 status: "present".into(),
                 reason: None,
+                target: Some(edit.target.as_str().into()),
+                scope: Some(edit.scope.clone()),
+                effect: Some(edit.effect.clone()),
                 text: format!(
-                    "{} is legal for this {} and this {} gesture commits it.",
-                    edit.verb,
+                    "{disclosure} is legal for this {} and this {} gesture commits it.",
                     kind_label(locus.kind),
                     projection.as_str()
                 ),
@@ -254,15 +273,50 @@ fn speak_legal_vs_routed(
             verb: edit.verb.clone(),
             status: "routed".into(),
             reason: Some(AbsenceReason::RoutedElsewhere.as_str().into()),
+            target: Some(edit.target.as_str().into()),
+            scope: Some(edit.scope.clone()),
+            effect: Some(edit.effect.clone()),
             text: format!(
-                "{} is legal for this {}, committed on {} — not implied absent here.",
-                edit.verb,
+                "{disclosure} is legal for this {}, committed on {} — not implied absent here.",
                 kind_label(locus.kind),
                 route.as_str()
             ),
         });
     }
     spoken
+}
+
+/// Identity-versus-relation: a displayed container or binding is never adopted as here.
+fn speak_relations(locus: &Locus) -> Vec<SpokenClause> {
+    match locus.kind {
+        LocusKind::Source => {
+            let scene = locus
+                .scene_id
+                .as_deref()
+                .unwrap_or("the containing scene");
+            vec![SpokenClause {
+                verb: String::new(),
+                status: "relation".into(),
+                reason: None,
+                target: locus.scene_id.clone(),
+                scope: Some("relation".into()),
+                effect: Some("Navigate to the scene; do not retarget here".into()),
+                text: format!(
+                    "{scene} is a relation, not here. split, delete, reorder-scene are legal there — Navigate, do not retarget."
+                ),
+            }]
+        }
+        LocusKind::Scene => vec![SpokenClause {
+            verb: String::new(),
+            status: "relation".into(),
+            reason: Some(AbsenceReason::NeedsSourceBinding.as_str().into()),
+            target: None,
+            scope: Some("relation".into()),
+            effect: Some("Point the video clip; do not retarget here".into()),
+            text: "trim, set-gain, set-fade need a source binding. Point the video clip — do not retarget.".into(),
+        }],
+        _ => Vec::new(),
+    }
 }
 
 /// Refuse a toolbar/session edit whose target the Engine cannot name for here.
@@ -437,6 +491,44 @@ mod tests {
             !spoken.spoken_text().contains("committed on Timeline"),
             "gain/fade must not claim Timeline: {}",
             spoken.spoken_text()
+        );
+    }
+
+    #[test]
+    fn source_utterance_discloses_scene_as_relation_not_absence() {
+        let source = locus(LocusKind::Source, "source:fight", "fight");
+        let spoken = utterance(Some(&source), None, Projection::Timeline);
+        assert!(
+            spoken
+                .spoken
+                .iter()
+                .any(|clause| clause.status == "relation" && clause.text.contains("scene:demo")),
+            "{}",
+            spoken.spoken_text()
+        );
+        assert!(spoken.spoken_text().contains("legal there"));
+        assert!(spoken.spoken_text().contains("do not retarget"));
+        assert!(!spoken.spoken_text().contains("split is not legal"));
+        assert!(spoken.spoken.iter().any(
+            |clause| clause.verb == "trim" && clause.target.as_deref() == Some("source:fight")
+        ));
+    }
+
+    #[test]
+    fn scene_utterance_discloses_source_binding_affordance() {
+        let scene = locus(LocusKind::Scene, "scene:demo", "demo");
+        let spoken = utterance(Some(&scene), None, Projection::Timeline);
+        assert!(
+            spoken.spoken_text().contains("Point the video clip"),
+            "{}",
+            spoken.spoken_text()
+        );
+        assert!(
+            spoken
+                .spoken
+                .iter()
+                .any(|clause| clause.status == "relation"
+                    && clause.reason.as_deref() == Some("needs-source-binding"))
         );
     }
 }

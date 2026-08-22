@@ -3835,6 +3835,10 @@ fn tree_node(
             .bg(if selected { rgb(0x1c3d3a) } else { rgb(PANEL) })
             .text_color(if selected { rgb(TEAL) } else { rgb(TEXT) })
             .cursor_pointer()
+            .debug_selector({
+                let id = id.clone();
+                move || format!("tree.node.{id}")
+            })
             .on_click(cx.listener(move |this, _, _, cx| {
                 this.session
                     .touch_projection(lattice_studio::Projection::Tree);

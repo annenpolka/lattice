@@ -357,7 +357,15 @@ fn utterance_view(utterance: &Utterance) -> UtteranceView {
         legal: utterance
             .legal
             .iter()
-            .map(|edit| format!("{} → {} ({})", edit.verb, edit.target.as_str(), edit.scope))
+            .map(|edit| {
+                format!(
+                    "{} → {} ({}: {})",
+                    edit.verb,
+                    edit.target.as_str(),
+                    edit.scope,
+                    edit.effect
+                )
+            })
             .collect(),
         routed: utterance.routed.clone(),
         spoken: utterance

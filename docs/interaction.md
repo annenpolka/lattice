@@ -113,7 +113,8 @@ Studio interaction correctness is split deliberately:
 
 Interactive selectors are semantic and do not depend on visible labels or widget nesting. The
 namespace uses names such as `toolbar.play`, `inspector.title`, `canvas.overlay.<locus>`,
-`timeline.track.<track>`, `timeline.clip.<stable-id>`, `timeline.trim.<stable-id>.in`, and
-`review.apply`. Tests must not record absolute screen coordinates: use center/relative points or
+`timeline.track.<track>`, `timeline.clip.<stable-id>`, `timeline.trim.<stable-id>.in`,
+`timeline.candidate.<locus>`, `tree.node.<id>`, and `review.apply`. Tests must not record
+absolute screen coordinates: use center/relative points or
 source/target selector drags. A drag always emits mouse-down, multiple mouse-moves, and mouse-up so
 GPUI hit testing and the product drag threshold stay in the path.
