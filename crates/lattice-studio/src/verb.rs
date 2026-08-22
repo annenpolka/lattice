@@ -107,7 +107,7 @@ impl Utterance {
 pub fn routed_verbs(projection: Projection, kind: LocusKind) -> Vec<&'static str> {
     match (projection, kind) {
         (Projection::Timeline, LocusKind::Source) => vec!["trim"],
-        (Projection::Timeline, LocusKind::Title) => vec!["title"],
+        (Projection::Timeline | Projection::Inspector, LocusKind::Title) => vec!["title"],
         (Projection::Timeline, LocusKind::Callout) => vec!["callout"],
         (Projection::Timeline, LocusKind::Scene) => vec!["reorder-scene"],
         (Projection::Canvas, LocusKind::Title | LocusKind::Callout) => {
@@ -115,7 +115,6 @@ pub fn routed_verbs(projection: Projection, kind: LocusKind) -> Vec<&'static str
         }
         (Projection::Toolbar, LocusKind::Source) => vec!["trim", "set-gain", "set-fade"],
         (Projection::Toolbar, LocusKind::Scene) => vec!["split", "delete"],
-        (Projection::Inspector, LocusKind::Title) => vec!["title"],
         _ => vec![],
     }
 }
@@ -395,15 +394,17 @@ pub fn refuse_edit(here: Option<&Locus>, edit: &SemanticEdit, loci: &[Locus]) ->
                 legal_edits_for(scene)
                     .iter()
                     .find(|legal| legal.verb == verb)
-                    .map(|legal| {
-                        format!(
-                            " {verb} → {} ({}: {}) — Navigate, do not retarget.",
-                            legal.target.as_str(),
-                            legal.scope,
-                            legal.effect
-                        )
-                    })
-                    .unwrap_or_else(|| " Navigate, do not retarget.".into())
+                    .map_or_else(
+                        || " Navigate, do not retarget.".into(),
+                        |legal| {
+                            format!(
+                                " {verb} → {} ({}: {}) — Navigate, do not retarget.",
+                                legal.target.as_str(),
+                                legal.scope,
+                                legal.effect
+                            )
+                        },
+                    )
             } else if locus.scene_id.is_some() {
                 " Navigate, do not retarget.".into()
             } else {
