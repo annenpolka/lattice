@@ -1,87 +1,131 @@
-# Studio toolbar observation — domain semantics
+# Does Studio need a global verb button row?
 
-Date: 2026-08-22  
-Observed base: `85b589ec260554f851c214731e607c7727c7cae8`
+Date: 2026-08-22
+Reference base: `85b589ec260554f851c214731e607c7727c7cae8`
 
-This is a docs-only observation of the current top-of-window button row after
-the verb-license spine. It describes the row that is present; it does not
-propose a new toolbar or reopen the spine locks.
+This is a docs-only domain-semantics review. It asks whether a global
+top-of-window home for verbs is the right object at all. It does not propose
+polish for the current row and does not specify Studio implementation.
 
-## Live observation
+The concrete object under review is visible in this immutable capture of the
+whole Studio client:
+[current top-of-window row](https://github.com/annenpolka/lattice/blob/77894c052f8d5b63783df875a9de6880dad4c991/docs/artifacts/2026-08-22-studio-toolbar-semantics.png?raw=true).
 
-The Linux UI fixture opened the real GPUI window at 1400×840. The single
-flex-wrapped action bar appeared as two visual lines:
+## Answer
 
-1. `Open Video…`, `Set In`, `Set Out`, `Split at Playhead`,
-   `Delete Selected Clip`, renderer status, audio status, `CPU`, `GPU DX12`,
-   `Play`, `Pause`, `Seek`, `Scrub`
-2. `Save`, `Undo`, `Redo`, `Resolve`, `Copy locus JSON`, `Gain -3 dB`, `Fade`,
-   `Zoom In`, `Zoom Out`
+No. A global verb button row is the wrong semantic object.
 
-The capture is the whole identified Studio client, not a reconstructed mockup:
-[Studio toolbar at the observed base](https://github.com/annenpolka/lattice/blob/77894c052f8d5b63783df875a9de6880dad4c991/docs/artifacts/2026-08-22-studio-toolbar-semantics.png?raw=true).
+The spine has three authorities with deliberately different jobs:
 
-At first paint, here was Title `demo:title:1` and the touched projection was
-Timeline. Engine named `title`, `set-position`, and `resize-overlay` as legal.
-Timeline routed `title`; the one utterance spoke that position and resize were
-routed on Canvas. This state is useful because none of the toolbar's
-source/scene edit routes is licensed for the current Title.
+- **Legality:** Engine names the exact legal edits for the one committed
+  `LocusId`, including verb, target, scope, and effect.
+- **Routing:** a projection says what a gesture on that projection can commit.
+- **Utterance:** one account of here discloses legality and says where a legal
+  edit commits when the present projection does not route it.
 
-## The three things the row must not collapse
+A global row can only fit this model by becoming another commit projection.
+Once it does, it stops being neutral chrome: it needs target acquisition rules
+for verbs whose natural target is currently represented in Timeline, Canvas,
+or Inspector. That is precisely where a convenient global action starts to
+look like global legality or permission to retarget.
 
-- **Legality** belongs to Engine and the one committed `LocusId`. It answers
-  which `SemanticEdit` verb has an exact target, scope, and effect here.
-- **Routing** belongs to the touched projection. Toolbar can commit `trim`,
-  `set-gain`, and `set-fade` for Source; `split` and `delete` for Scene. That is
-  not a second Toolbar legal set.
-- **Utterance** describes the one here. It discloses the Engine legal set and
-  says where a legal verb is routed when the current gesture cannot commit it.
-  A toolbar label is not authority to acquire or substitute another target.
+The alternative is not a better global row. It is **no global verb home**.
 
-Consequently, the row has five canonical edit verbs even though it has six
-edit buttons: `Set In` and `Set Out` are two parameterizations of `trim`.
-`Split at Playhead`, `Delete Selected Clip`, `Gain -3 dB`, and `Fade` utter
-`split`, `delete`, `set-gain`, and `set-fade` respectively.
+## Why the global row sends the wrong message
 
-## Button-by-button reading
+### Presence looks like legality
 
-| Visible control | Domain reading | Locus / license consequence |
-|---|---|---|
-| `Open Video…` | Project/session open, not a `SemanticEdit` verb | Opens another source-backed session; it does not route an edit against the old here. |
-| `Set In`, `Set Out` | Toolbar routes `trim` with one bound changed at playhead source time | Legal only for Source here. Scene/Title here is refused and spoken; no source lookup becomes a hidden retarget. |
-| `Split at Playhead` | Toolbar routes `split` at playhead source time | Legal only for Scene here. A related Scene displayed from Source is Navigate information, not permission to adopt it. |
-| `Delete Selected Clip` | Toolbar routes canonical `delete` | Legal only for Scene here. “Selected” means the one shared here, not a toolbar-private clip selection. |
-| Renderer status, audio status | Observable runtime state, not verbs | Neither participates in Engine legality or changes here. |
-| `CPU`, `GPU DX12` | Explicit renderer request | Application policy, not `SemanticEdit`; required DX12 does not silently fall back. |
-| `Play`, `Pause` | Transport commands | Change playback state, not here or the Engine legal set. |
-| `Seek` | Top-bar transport command that seeks to zero | The seek-verb name is relevant only because this control is in the top bar. It does not point. |
-| `Scrub` | Transport-position command at the current playhead | It must not call `point_from_timeline_time`; here remains unchanged. |
-| `Save` | Persist current source text | Session persistence, not an Engine-licensed edit verb. |
-| `Undo`, `Redo` | Volatile source-backed session history | Restore working source states and recompile; they do not introduce another persistent history or selection model. |
-| `Resolve` | Explicit Resolve phase | Provider I/O and lock persistence stay outside Parse/Compile/Evaluate and outside the legal-edit vocabulary. |
-| `Copy locus JSON` | Agent-context projection | Serializes the same shared locus; it does not manufacture a prompt-only or toolbar-local target. |
-| `Gain -3 dB` | Toolbar routes `set-gain` with `db = -3` | Legal only for Source here; Scene here speaks `needs-source-binding` and keeps the Scene locus. |
-| `Fade` | Toolbar routes `set-fade` with a 500 ms fade-in | Legal only for Source here; no scene/source promotion is allowed. |
-| `Zoom In`, `Zoom Out` | Timeline viewport commands | Projection-local view state, not semantic legality and not pointing. |
+A persistent edit button remains visible across Title, Source, Scene, and
+unresolved pointing. Its stable presence visually claims broader availability
+than Engine's locus-dependent legal set. Disabled states do not repair the
+model: they still make the row the apparent authority and reduce typed absence
+to button state.
 
-## What the observed Title state means
+For example, with Title `demo:title:1` as here in the capture, Engine names
+`title`, `set-position`, and `resize-overlay`. A persistent split, delete,
+trim, gain, or fade control is not evidence that any of those verbs is legal
+for Title.
 
-With Title as here, the toolbar routing set for that locus kind is empty while
-Engine legality is non-empty. That mismatch is not evidence that title edits
-are absent: `title` is committed on Timeline/Inspector and placement edits are
-committed on Canvas. Conversely, the presence of trim/split/delete/gain/fade
-buttons does not make those verbs legal for Title. Invoking one must refuse,
-speak the typed target mismatch, preserve `demo:title:1`, and leave source text
-unchanged.
+### A global click has no intrinsic route
 
-The row therefore remains one consumer of the shipped spine:
+Timeline, Canvas, and Inspector each have a semantic relationship to what they
+show. A click in a global row has no such relationship. To commit, it must
+either:
+
+1. use the one here and refuse when the verb is illegal; or
+2. search another represented object and silently substitute it.
+
+Only the first is lawful, but repeated lawful refusal exposes the deeper
+problem: the action is located away from the projection that can commit it.
+The second is forbidden silent retargeting, including source-to-scene
+promotion or scene-to-source lookup.
+
+### The row collapses unlike command classes
+
+The observed row mixes semantic edits with transport, viewport, renderer,
+persistence, history, Resolve, status, and context-copy commands. Those
+commands do not share Engine legality:
+
+| Command class | Domain authority |
+|---|---|
+| Semantic edit | Engine legal set for the one here; committed by a projection |
+| Transport / viewport | Session playhead or projection-local view state |
+| Save / Undo / Redo | Source-backed working-session state |
+| Resolve | Explicit application phase and lock persistence |
+| Renderer / audio | Runtime request and observable status |
+| Copy locus | Projection of the same locus into agent context |
+
+Putting them in one row encourages “everything clickable is a verb” and then
+forces non-edit commands into a license vocabulary they do not belong to.
+
+## Replacement semantic shape
+
+There are only three commit surfaces:
+
+- **Timeline** commits time-, clip-, and sequence-shaped edits against the
+  represented locus.
+- **Canvas** commits normalized placement and aspect-preserving resize against
+  the represented overlay locus.
+- **Inspector** commits definition/property edits for the one here.
+
+This is a statement about routing ownership, not a new selection model. Every
+surface reads the same here. Touching a projection does not create another
+locus or legal set.
+
+The global affordance, if any, is the spoken/legal account rather than a bank
+of verb buttons:
 
 ```text
-one LocusId → Engine legal set → one utterance
-                    ↑
-          Toolbar is routing only
+one LocusId
+    ↓
+Engine legal edits: verb + target + scope + effect
+    ↓
+one utterance: where each edit commits, or why no route exists
 ```
 
-No toolbar action warrants `target_source_locus`, `target_scene_locus`, scene
-promotion on video click, a cross-surface modal, a freeze row/Core Freeze, a
-per-view selection, or GPUI knowledge in Core.
+The account may say that a legal edit commits on Timeline, Canvas, or
+Inspector. It must not perform the edit itself, choose a hidden target, or
+turn an unavailable route into implied absence. A projection exposes a verb
+only where that projection can actually commit it.
+
+## Consequences
+
+- Toolbar is removed from the semantic routing vocabulary; it is not a fourth
+  commit surface.
+- A legal verb without a current route remains legal and is spoken as such.
+  The UI must not invent a global fallback route.
+- A projection-local verb that is illegal for here is refused with the typed
+  reason. The projection does not search for a more convenient locus.
+- Transport, viewport, project, phase, and runtime controls may have shell
+  affordances, but they are not a global **verb** home and do not participate
+  in `legal_edits_for`.
+- The one utterance can expose the complete legal set without rendering every
+  legal edit as a persistent button.
+
+## Locks preserved
+
+This conclusion does not reopen overlap handling: overlap stays local to the
+touched projection until one candidate becomes the shared `LocusId`. Video
+click still points the source clip, never promotes to Scene. There is no
+cross-surface modal, silent retarget, per-view selection, Core Freeze, or GPUI
+type in Core.
