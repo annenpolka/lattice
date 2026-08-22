@@ -113,6 +113,65 @@ Transport: `session.playing` + `session.playhead` are Session-owned. `StudioView
 
 Viewport zoom is `StudioSession.viewport`. Undo/redo are `StudioSession` source stacks (volatile working-session history). Save writes `session.path`. Resolve writes `lattice.lock.json` through Engine.
 
+## 根本的見直し / radical-rethink
+
+Question: is a **global top-of-window verb button row** even the right object?
+
+Cosmetic wrap / teal / grouping is out of scope. This section does not reopen overlap UI, video-click identity, silent `target_source_locus` / `target_scene_locus` fallthrough, per-view selection, Core Freeze, or GPUI in Core.
+
+### Toolbar is not an object
+
+The live row is not a `Toolbar` widget and not a pane. `Projection::Toolbar` is a routing stamp on `StudioSession.touched_projection`. `actions_bar` is one wrap flex of 20 buttons + 2 chips. Six of the twenty stamp `Toolbar` and call `apply_edit`:
+
+| Stamp `Toolbar` | Verb |
+|---|---|
+| Set In / Set Out | `trim` |
+| Split at Playhead | `split` |
+| Delete Selected Clip | `delete` |
+| Gain -3 dB | `set-gain` |
+| Fade | `set-fade` |
+
+The other fourteen are a different object: import, renderer request/status, audio status, transport (Play / Pause / Seek / Scrub), save, undo/redo, resolve, locus JSON dump, viewport zoom. They share a constructor (`action_button`) and a `toolbar.*` selector prefix. They do not share a store, a legal set, or a commit surface.
+
+Asking how to polish "the Toolbar" assumes that mixed flex is one thing. It is not.
+
+### The row does not own here, legal, or routing
+
+Live first paint (`timeline-basic`, not relaunched): `session.current` is `demo:title:1` (Title / Hello). `touched_projection` is Timeline. Engine legal is `title`, `set-position`, `resize-overlay`. Routed on Timeline is `title`. `routed_verbs(Toolbar, Title)` is empty.
+
+Sequence paints that same here. Inspector paints Title fields, `Apply edit` (`touched_projection = Inspector`, `SemanticEdit::Title`), and `utterance_block` (legal + spoken). The top row still paints Set In / Set Out / Split / Delete / Gain / Fade. Those constructors do not read `legal_edits_for` or `routed_verbs`. They are always-on.
+
+![One locus `title Hello` in Sequence; global verb buttons still painted above.](2026-08-22-studio-toolbar-structure/sequence-here-title.png)
+
+![Inspector owns Title commit (`Apply edit`) and the Engine legal/spoken set. The top row does not.](2026-08-22-studio-toolbar-structure/inspector-legal-set.png)
+
+![Same frame: global verb row vs here = Title / legal = title · set-position · resize-overlay.](2026-08-22-studio-toolbar-structure/here-vs-global-row.png)
+
+`speak_toolbar` writes `StudioView.last_render`, painted in Inspector as `wrote {…}`, not as a change to the button row. Refusal is spoken off-row. The row never becomes the utterance.
+
+### Where commits actually live
+
+`routed_verbs` (routing, not legality):
+
+| Projection | Kind | Commits |
+|---|---|---|
+| Timeline | Source | `trim` |
+| Timeline / Inspector | Title | `title` |
+| Timeline | Callout | `callout` |
+| Timeline | Scene | `reorder-scene` |
+| Canvas | Title / Callout | `set-position`, `resize-overlay` |
+| Toolbar | Source | `trim`, `set-gain`, `set-fade` |
+| Toolbar | Scene | `split`, `delete` |
+| Toolbar | Title | ∅ |
+
+Timeline, Canvas, and Inspector are panes that already host a commit. Toolbar is only a stamp. `split` / `delete` / `set-gain` / `set-fade` currently have no pane route except that stamp. That is an ownership fact, not a license to invent a fourth selection or a Core type.
+
+### Allowed object (named, not implemented)
+
+A global verb home is the wrong object. Verbs belong where a projection already commits: Timeline, Canvas, Inspector. The Engine legal set plus the one utterance already say what is legal and what this gesture commits; they do not need a second, always-on button list. Transport / renderer / save / resolve / zoom, if they remain chrome, are not verbs and are not `Projection::Toolbar`.
+
+Locks stay closed: one `LocusId` after a projection-local pick; video click keeps the source clip; legality ≠ routing is spoken, never a silent retarget; scrub/playhead do not `point_from_timeline_time`; Title Inspector fields only on Title; no per-view selection; no GPUI in Core.
+
 ## Seek leftover
 
 `Seek` is a child of `actions_bar` wrap 1 (`toolbar.seek-start`) and calls `session.seek(Time::ZERO)`. Seek-verb placement remains an open leftover; this note only records that the control currently lives in this row.
@@ -123,3 +182,4 @@ Viewport zoom is `StudioSession.viewport`. Undo/redo are `StudioSession` source 
 - Client XID `0x1a00001`, title `Lattice Studio · CPU`, `1400×840+1+57`
 - `smoke_geom.play` `{x:1115, y:67, w:51, h:30}`
 - `semantic_state` at first paint: locus `demo:title:1` / title / Hello; `projection` Timeline; `playing` false; playhead `0s`
+- Rethink shots are crops of that same client grab. Studio was not relaunched.
