@@ -257,8 +257,12 @@ pub fn commit(
                 .as_ref()
                 .is_none_or(|locus| locus.kind != LocusKind::Scene)
             {
-                let spoken =
-                    refuse_edit(here.as_ref(), &SemanticEdit::ReorderScene { before: None });
+                let loci = session.loci().unwrap_or_default();
+                let spoken = refuse_edit(
+                    here.as_ref(),
+                    &SemanticEdit::ReorderScene { before: None },
+                    &loci,
+                );
                 session.last_spoken = Some(spoken.clone());
                 session.last_gesture_error = Some(spoken);
                 return Ok(GestureOutcome::Failed);

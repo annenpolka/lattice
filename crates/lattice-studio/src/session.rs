@@ -438,11 +438,10 @@ impl StudioSession {
     }
 
     pub fn pick_point_candidate(&mut self, id: LocusId) -> Result<Option<Locus>, EngineError> {
-        let allowed = self
-            .unresolved
-            .as_ref()
-            .is_none_or(|point| point.candidates.iter().any(|locus| locus.id == id));
-        if !allowed {
+        let Some(point) = self.unresolved.as_ref() else {
+            return Err(EngineError::Edit("no unresolved pointing".into()));
+        };
+        if !point.candidates.iter().any(|locus| locus.id == id) {
             return Err(EngineError::Edit(
                 "candidate is not on the touched projection".into(),
             ));
@@ -469,10 +468,12 @@ impl StudioSession {
     #[must_use]
     pub fn utterance(&self) -> Utterance {
         let here = self.current_locus().ok().flatten();
+        let loci = self.loci().unwrap_or_default();
         verb::utterance(
             here.as_ref(),
             self.unresolved.as_ref(),
             self.touched_projection,
+            &loci,
         )
     }
 
@@ -1224,14 +1225,15 @@ impl StudioSession {
     }
 
     pub(crate) fn target_locus_for(&self, edit: &SemanticEdit) -> Result<Locus, EngineError> {
+        let loci = self.loci().unwrap_or_default();
         let here = self.current_locus()?;
         let Some(locus) = here else {
-            return Err(EngineError::Edit(refuse_edit(None, edit)));
+            return Err(EngineError::Edit(refuse_edit(None, edit, &loci)));
         };
         if lattice_engine::is_legal_verb(&locus, verb::verb_for_edit(edit)) {
             return Ok(locus);
         }
-        Err(EngineError::Edit(refuse_edit(Some(&locus), edit)))
+        Err(EngineError::Edit(refuse_edit(Some(&locus), edit, &loci)))
     }
 
     fn playhead_source_time(&self) -> Result<Time, EngineError> {

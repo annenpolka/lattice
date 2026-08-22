@@ -58,14 +58,26 @@ fn video_clip_id(session: &StudioSession) -> String {
 fn video_clip_click_points_source_not_scene() {
     let mut session = overlap_session();
     let clip_id = video_clip_id(&session);
-    let before = session
+    let clip = session
+        .layout()
+        .unwrap()
+        .timeline
+        .tracks
+        .iter()
+        .find(|track| track.name == "Video")
+        .unwrap()
+        .clips
+        .iter()
+        .find(|clip| clip.id == clip_id)
+        .cloned()
+        .expect("video clip");
+    let x = session.x_at_time(clip.start) + session.viewport().delta_x(clip.duration) / 2.0;
+    session.begin_timeline_pointer_on(x, true, "Video").unwrap();
+    session.commit_timeline_pointer(x).unwrap();
+    let pointed = session
         .current_locus()
         .unwrap()
-        .map(|locus| locus.id.clone());
-    let pointed = session
-        .point_video_clip(&clip_id)
-        .unwrap()
-        .expect("source clip");
+        .expect("video clip click must commit a source locus");
     assert_eq!(
         pointed.kind,
         LocusKind::Source,
@@ -87,7 +99,15 @@ fn video_clip_click_points_source_not_scene() {
         pointed.id,
         "one shared LocusId"
     );
-    let _ = before;
+    assert!(
+        session.utterance().spoken.iter().any(|clause| {
+            clause.status == "relation"
+                && clause.text.contains("split →")
+                && clause.text.contains("scene:demo")
+        }),
+        "container verbs come from Engine legal_edits_for on the related Scene: {}",
+        session.utterance().spoken_text()
+    );
 }
 
 #[test]
@@ -124,11 +144,12 @@ fn overlap_failed_point_uses_timeline_hit_path() {
 fn overlap_candidates_appear_on_timeline_not_modal() {
     let mut session = overlap_session();
     let here_before = session.current_locus().unwrap().map(|locus| locus.id);
-    let pointed = session
-        .point_from_timeline_time(Time::from_decimal_seconds(2, 4, 1).unwrap())
-        .unwrap();
+    let at = Time::from_decimal_seconds(2, 4, 1).unwrap();
+    let x = session.x_at_time(at);
+    session.begin_timeline_pointer_on(x, true, "Audio").unwrap();
+    session.commit_timeline_pointer(x).unwrap();
     assert!(
-        pointed.is_none(),
+        session.current_locus().unwrap().is_none(),
         "a time that names title + source + scene must not collapse"
     );
     let unresolved = session
@@ -147,6 +168,29 @@ fn overlap_candidates_appear_on_timeline_not_modal() {
     assert!(
         layout.timeline.candidates.len() >= 3,
         "candidates live on the Timeline projection: {:?}",
+        layout.timeline.candidates
+    );
+    let mut card_ids: Vec<_> = layout
+        .timeline
+        .candidates
+        .iter()
+        .map(|card| card.locus_id.clone())
+        .collect();
+    card_ids.sort();
+    card_ids.dedup();
+    assert_eq!(
+        card_ids.len(),
+        layout.timeline.candidates.len(),
+        "each card is a distinct LocusId: {:?}",
+        layout.timeline.candidates
+    );
+    assert!(
+        layout
+            .timeline
+            .candidates
+            .iter()
+            .any(|card| card.kind == "title" && card.routed_verbs.iter().eq(["title"])),
+        "cards advertise Timeline routes, not the full legal set: {:?}",
         layout.timeline.candidates
     );
     assert_eq!(layout.inspector.heading, "unresolved pointing");
@@ -330,7 +374,8 @@ fn timeline_source_utterance_speaks_toolbar_for_gain_and_fade() {
         .into_iter()
         .find(|locus| locus.kind == LocusKind::Source)
         .unwrap();
-    session.point_at(source.id);
+    let source_id = source.id.clone();
+    session.point_at(source_id.clone());
     session.touch_projection(Projection::Timeline);
     let utterance = session.utterance();
     assert!(utterance.routed.iter().any(|verb| verb == "trim"));
@@ -356,4 +401,143 @@ fn timeline_source_utterance_speaks_toolbar_for_gain_and_fade() {
         "{}",
         utterance.spoken_text()
     );
+    assert!(
+        utterance.spoken.iter().any(|clause| {
+            clause.status == "relation"
+                && clause.text.contains("split →")
+                && clause.text.contains("scene:demo")
+        }),
+        "scene verbs stay Engine-named on the related Scene: {}",
+        utterance.spoken_text()
+    );
+    let state = session.semantic_state();
+    assert!(
+        state["legal"].as_array().is_some_and(|edits| edits
+            .iter()
+            .any(|edit| edit["verb"] == "trim"
+                && edit["target"] == source_id.as_str()
+                && edit["scope"] == "source-range")),
+        "{state}"
+    );
+}
+
+#[test]
+fn duplicate_overlay_overlap_cards_are_distinct_by_locus_id() {
+    let dir = unique_dir("dup-overlap");
+    lattice_media::generate_av_fixture(dir.join("capture.mp4"), 4).unwrap();
+    let vel = dir.join("main.vel");
+    std::fs::write(
+        &vel,
+        r#"project "duplicate-overlays"
+convention commentary
+media game "capture.mp4"
+sequence main {
+  demo
+}
+scene demo {
+  game[0s..2s] as clip
+  title "Same" {
+    at 0s for 2s
+  }
+  title "Same" {
+    at 0s for 2s
+  }
+  callout "Same" {
+    at 0s for 2s
+  }
+}
+"#,
+    )
+    .unwrap();
+    let mut session = StudioSession::open(&vel).expect("open");
+    let at = Time::seconds(1);
+    let x = session.x_at_time(at);
+    session.begin_timeline_pointer_on(x, true, "Audio").unwrap();
+    session.commit_timeline_pointer(x).unwrap();
+    let unresolved = session
+        .unresolved_pointing()
+        .expect("identical spans still fail as a point");
+    assert_eq!(unresolved.projection, Projection::Timeline);
+    let titles: Vec<_> = unresolved
+        .candidates
+        .iter()
+        .filter(|locus| locus.kind == LocusKind::Title)
+        .cloned()
+        .collect();
+    assert_eq!(titles.len(), 2, "two Same titles stay two identities");
+    assert_ne!(titles[0].id, titles[1].id);
+    let cards = session.layout().unwrap().timeline.candidates;
+    let title_cards: Vec<_> = cards.iter().filter(|card| card.kind == "title").collect();
+    assert_eq!(title_cards.len(), 2);
+    assert_ne!(title_cards[0].locus_id, title_cards[1].locus_id);
+    assert_eq!(title_cards[0].label, title_cards[1].label);
+    assert_eq!(title_cards[0].scope, title_cards[1].scope);
+    let picked = session
+        .pick_point_candidate(titles[1].id.clone())
+        .unwrap()
+        .unwrap();
+    assert_eq!(picked.id, titles[1].id);
+    assert_eq!(
+        session.current_locus().unwrap().unwrap().id,
+        titles[1].id,
+        "pick commits the chosen LocusId, not a same-label collapse"
+    );
+}
+
+#[test]
+fn pick_without_unresolved_pointing_is_refused() {
+    let mut session = overlap_session();
+    assert!(session.unresolved_pointing().is_none());
+    let source = session
+        .loci()
+        .unwrap()
+        .into_iter()
+        .find(|locus| locus.kind == LocusKind::Source)
+        .expect("source");
+    let here_before = session.current_locus().unwrap().map(|locus| locus.id);
+    let err = session
+        .pick_point_candidate(source.id.clone())
+        .expect_err("pick requires an active unresolved point");
+    assert!(err.to_string().contains("no unresolved pointing"), "{err}");
+    assert_eq!(
+        session.current_locus().unwrap().map(|locus| locus.id),
+        here_before,
+        "a refused pick must not adopt here"
+    );
+}
+
+#[test]
+fn pick_rejects_locus_not_in_unresolved_candidates() {
+    let mut session = overlap_session();
+    let at = Time::from_decimal_seconds(2, 4, 1).unwrap();
+    let x = session.x_at_time(at);
+    session.begin_timeline_pointer_on(x, true, "Audio").unwrap();
+    session.commit_timeline_pointer(x).unwrap();
+    let unresolved = session
+        .unresolved_pointing()
+        .expect("overlap opens unresolved pointing");
+    let candidate_ids: Vec<_> = unresolved
+        .candidates
+        .iter()
+        .map(|locus| locus.id.clone())
+        .collect();
+    let outsider = session
+        .loci()
+        .unwrap()
+        .into_iter()
+        .find(|locus| !candidate_ids.contains(&locus.id))
+        .expect("a locus outside the touched projection's candidate list");
+    let err = session
+        .pick_point_candidate(outsider.id.clone())
+        .expect_err("non-candidate must be refused");
+    assert!(
+        err.to_string()
+            .contains("candidate is not on the touched projection"),
+        "{err}"
+    );
+    assert!(
+        session.unresolved_pointing().is_some(),
+        "a refused pick must leave pointing unresolved"
+    );
+    assert!(session.current_locus().unwrap().is_none());
 }
