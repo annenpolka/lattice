@@ -1,0 +1,503 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Studio toolbar gen2 — Opus · verbs are handles on the thing they change</title>
+<style>
+  :root {
+    --bg: #0c0e12;
+    --panel: #141821;
+    --panel2: #10141c;
+    --line: #2a3140;
+    --text: #e8edf5;
+    --muted: #8b95a8;
+    --dim: #5c6678;
+    --teal: #3dd6c6;
+    --amber: #e8b86d;
+    --red: #ff8f8f;
+    --violet: #9d8cff;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    width: 1600px; height: 920px; overflow: hidden;
+    background: var(--bg); color: var(--text);
+    font-family: "Segoe UI", "Noto Sans", "DejaVu Sans", sans-serif;
+    font-size: 13px;
+  }
+  body { padding: 16px 20px; }
+  .board { display: none; flex-direction: column; gap: 10px; height: 888px; }
+  .board.on { display: flex; }
+
+  header { display: flex; align-items: baseline; justify-content: space-between; }
+  h1 { font-size: 17px; font-weight: 600; }
+  h1 em { color: var(--teal); font-style: normal; }
+  h1 .t { color: var(--teal); }
+  .tag {
+    font-size: 10px; letter-spacing: .13em; text-transform: uppercase;
+    color: var(--dim); border: 1px solid var(--line); border-radius: 999px; padding: 3px 10px;
+  }
+
+  .strip {
+    display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+    background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+    padding: 7px 10px;
+  }
+  .strip .lbl {
+    font-size: 10px; letter-spacing: .12em; text-transform: uppercase;
+    color: var(--dim); margin-right: 6px;
+  }
+  .btn {
+    border: 1px solid var(--line); border-radius: 5px; padding: 4px 9px;
+    color: var(--text); background: #1a1f2b; font-size: 12px; white-space: nowrap;
+  }
+  .btn.go { background: #14312e; border-color: #2a5a54; color: var(--teal); }
+  .stat { color: var(--muted); padding: 4px 8px; font-size: 12px; }
+  .stat b { color: var(--text); font-weight: 500; }
+  .aside { margin-left: auto; font-size: 11.5px; color: var(--dim); }
+
+  .bank { border-color: #5a2a2a; background: #1d1214; }
+  .bank .lbl { color: var(--red); }
+  .btn.dead { color: var(--red); border-color: #5a2a2a; background: #241417; text-decoration: line-through; }
+  .bank .aside { color: var(--red); }
+
+  .body { display: grid; grid-template-columns: 1fr 460px; gap: 10px; flex: 1; min-height: 0; }
+  .pane {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+    display: flex; flex-direction: column; overflow: hidden; min-height: 0;
+  }
+  .pane > .ph {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 7px 11px; border-bottom: 1px solid var(--line);
+    font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: var(--dim);
+  }
+  .pane > .ph .on { color: var(--teal); }
+
+  .canvas { flex: 1; min-height: 0; position: relative; background: #05070a; margin: 9px; border-radius: 4px; overflow: hidden; }
+  .canvas .frame { position: absolute; inset: 0; background: linear-gradient(115deg, #1b2434 0%, #223047 42%, #14202f 100%); }
+  .canvas .grain { position: absolute; inset: 0; opacity: .35;
+    background: repeating-linear-gradient(122deg, rgba(255,255,255,.03) 0 2px, transparent 2px 7px); }
+  .ovl { position: absolute; border: 1px solid transparent; padding: 4px 8px; font-size: 15px; }
+  .ovl.title { left: 42px; top: 40px; }
+  .ovl.callout { right: 46px; bottom: 44px; color: var(--amber); font-size: 13px; }
+  .ovl.here { border-color: var(--teal); }
+  .ovl.here::before, .ovl.here::after, .ovl.here > i::before, .ovl.here > i::after {
+    content: ""; position: absolute; width: 7px; height: 7px; background: var(--teal);
+  }
+  .ovl.here::before { left: -4px; top: -4px; }
+  .ovl.here::after { right: -4px; top: -4px; }
+  .ovl.here > i::before { left: -4px; bottom: -4px; }
+  .ovl.here > i::after { right: -4px; bottom: -4px; }
+  .fadeveil { position: absolute; inset: 0; background: linear-gradient(90deg, rgba(0,0,0,.72), rgba(0,0,0,0) 34%); }
+
+  .vel { font-family: "Cascadia Mono", "DejaVu Sans Mono", monospace; font-size: 12.5px; line-height: 1.66; padding: 9px 12px; color: #b9c4d6; }
+  .vel .ln { color: #39404f; display: inline-block; width: 22px; }
+  .vel .k { color: var(--violet); }
+  .vel .s { color: var(--amber); }
+  .vel .n { color: var(--teal); }
+  .vel .row { display: block; padding-left: 4px; border-left: 2px solid transparent; }
+  .vel .row.hl { background: #16242a; border-left-color: var(--teal); }
+
+  .rails { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 9px 12px 11px; position: relative; }
+  .rails .rh { font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: var(--dim); margin-bottom: 7px; display: flex; gap: 16px; align-items: center; }
+  .rails .rh .on { color: var(--teal); }
+  .rail { display: grid; grid-template-columns: 56px 1fr; align-items: center; gap: 10px; margin-bottom: 6px; }
+  .rail:last-of-type { margin-bottom: 0; }
+  .rail .rn { font-size: 11px; color: var(--muted); text-align: right; }
+  .lane { position: relative; height: 44px; background: var(--panel2); border: 1px solid var(--line); border-radius: 4px; }
+  .lane.band { height: 44px; }
+  .clip {
+    position: absolute; top: 4px; bottom: 4px; border-radius: 3px;
+    background: #1d2739; border: 1px solid #33415c; font-size: 11.5px; color: #cbd6e8;
+    display: flex; align-items: center; padding-left: 9px; overflow: hidden;
+  }
+  .clip.audio { background: #17262a; border-color: #2c4a50; }
+  .clip.gen { background: #201a2c; border-color: #4a3a70; }
+  .clip.text { background: #23202f; border-color: #453c63; }
+  .clip.scene { background: #1a1d28; border-color: #39405a; color: var(--muted); }
+  .clip.here { border-color: var(--teal); box-shadow: 0 0 0 1px var(--teal) inset; color: var(--text); }
+  .clip .sub { color: var(--dim); margin-left: 8px; font-size: 10.5px; }
+
+  .h-edge { position: absolute; top: 0; bottom: 0; width: 9px; background: var(--teal); opacity: .95; border-radius: 2px; }
+  .h-edge.l { left: 0; } .h-edge.r { right: 0; }
+  .h-fade { position: absolute; left: 0; top: 0; bottom: 0; width: 92px;
+    background: linear-gradient(90deg, rgba(61,214,198,.40), rgba(61,214,198,0)); border-right: 1px dashed rgba(61,214,198,.6); }
+  .h-fade .grip { position: absolute; right: -6px; top: 50%; margin-top: -6px; width: 12px; height: 12px; background: var(--teal); border-radius: 50%; }
+  .h-fade .cap { position: absolute; left: 14px; top: 50%; margin-top: -7px; font-size: 10.5px; color: #0c0e12; font-weight: 600; }
+  .gainline { position: absolute; left: 0; right: 0; height: 0; border-top: 2px solid var(--teal); }
+  .gainline .grip { position: absolute; left: 46%; margin-left: -7px; top: -7px; width: 14px; height: 14px; border-radius: 50%; background: var(--teal); }
+  .gainline .db { position: absolute; right: 9px; top: -17px; font-size: 11px; color: var(--teal); }
+  .cutlane { position: absolute; left: 0; right: 0; top: 0; height: 9px;
+    background: repeating-linear-gradient(90deg, rgba(232,184,109,.5) 0 3px, transparent 3px 8px);
+    border-bottom: 1px solid rgba(232,184,109,.3); }
+  .cutmark { position: absolute; top: 0; bottom: 0; width: 0; border-left: 2px dashed var(--amber); }
+  .cutmark .cap { position: absolute; top: 13px; left: 6px; font-size: 10.5px; color: var(--amber); white-space: nowrap; }
+  .h-del { position: absolute; right: 5px; top: 50%; margin-top: -9px; width: 18px; height: 18px;
+    border: 1px solid var(--red); color: var(--red); border-radius: 4px;
+    display: flex; align-items: center; justify-content: center; font-size: 11px; background: #241417; }
+  .playhead { position: absolute; top: 20px; width: 0; border-left: 1px solid #fff; opacity: .82; }
+  .playhead .pcap { position: absolute; top: -13px; left: -17px; width: 34px; text-align: center; font-size: 10px; color: #fff; }
+
+  .notes { display: flex; gap: 8px; flex-wrap: wrap; }
+  .cnote { font-size: 11px; color: var(--teal); background: #0f1a1e; border: 1px solid #2a5a54; border-radius: 4px; padding: 3px 8px; }
+  .cnote.warn { color: var(--amber); border-color: #55431f; background: #1d1810; }
+  .cnote.bad { color: var(--red); border-color: #5a2a2a; background: #1d1214; }
+  .cnote.off { color: var(--dim); border-color: var(--line); background: var(--panel2); }
+
+  .utter { background: var(--panel); border: 1px solid var(--line); border-left: 3px solid var(--teal);
+    border-radius: 8px; padding: 9px 13px; display: flex; flex-direction: column; gap: 5px; }
+  .utter.bad { border-left-color: var(--red); }
+  .utter .uh { display: flex; align-items: center; gap: 10px;
+    font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: var(--dim); }
+  .utter .uh b { color: var(--teal); font-weight: 600; }
+  .utter.bad .uh b { color: var(--red); }
+  .utter .ro { color: var(--muted); border: 1px solid var(--line); border-radius: 999px; padding: 2px 8px; letter-spacing: .1em; }
+  .cl { font-size: 12.5px; line-height: 1.5; }
+  .cl .v { color: var(--teal); }
+  .cl .commits { color: var(--teal); }
+  .cl .w { color: var(--amber); }
+  .cl .b { color: var(--red); }
+  .cl .g { color: var(--dim); }
+  .cl .nav { border-bottom: 1px dotted var(--muted); color: var(--muted); }
+
+  footer { color: var(--dim); font-size: 11.5px; display: flex; justify-content: space-between; }
+</style>
+</head>
+<body>
+
+<!-- ============================ A — the bank that is deleted ============================ -->
+<section class="board" id="a">
+  <header>
+    <h1>A · <em>Deleted</em> — the standing verb bank</h1>
+    <span class="tag">before · main @ 85b589e</span>
+  </header>
+
+  <div class="strip">
+    <span class="lbl">session</span>
+    <span class="btn">Open Video…</span><span class="btn go">Play</span><span class="btn">Pause</span>
+    <span class="btn">Seek</span><span class="btn">Scrub</span><span class="btn">Zoom In</span><span class="btn">Zoom Out</span>
+    <span class="btn go">Save</span><span class="btn">Undo</span><span class="btn">Redo</span><span class="btn go">Resolve</span>
+    <span class="btn">Copy locus JSON</span>
+    <span class="stat">Renderer · <b>CPU</b></span><span class="stat">Audio · <b>idle</b></span>
+  </div>
+
+  <div class="strip bank">
+    <span class="lbl">verb bank</span>
+    <span class="btn dead">Set In</span><span class="btn dead">Set Out</span>
+    <span class="btn dead">Split at Playhead</span><span class="btn dead">Delete Selected Clip</span>
+    <span class="btn dead">Gain -3 dB</span><span class="btn dead">Fade</span>
+    <span class="aside">six controls, zero drawn subjects — identity arrives from wherever “here” happens to be</span>
+  </div>
+
+  <div class="body">
+    <div class="pane">
+      <div class="ph"><span>Canvas</span><span>here · <span class="on">title “Hello”</span></span></div>
+      <div class="canvas">
+        <div class="frame"></div><div class="grain"></div>
+        <div class="ovl title here">Hello<i></i></div>
+        <div class="ovl callout">Hold</div>
+      </div>
+    </div>
+    <div class="pane">
+      <div class="ph"><span>VEL · main.vel</span><span>examples/gameplay-commentary</span></div>
+      <div class="vel">
+        <span class="row"><span class="ln">11</span><span class="k">scene</span> <span class="n">demo</span> {</span>
+        <span class="row"><span class="ln">12</span>&nbsp;&nbsp;<span class="n">game</span>[<span class="s">10s</span>..<span class="s">20s</span>] <span class="k">as</span> <span class="n">fight</span></span>
+        <span class="row"><span class="ln">14</span>&nbsp;&nbsp;<span class="k">freeze</span> <span class="n">fight</span> <span class="k">at</span> <span class="s">5.2s</span> <span class="k">for</span> <span class="s">1.5s</span></span>
+        <span class="row"><span class="ln">16</span>&nbsp;&nbsp;<span class="k">fade</span> <span class="n">fight</span> { <span class="k">at</span> <span class="s">0s</span> <span class="k">for</span> <span class="s">0.5s</span> }</span>
+        <span class="row hl"><span class="ln">20</span>&nbsp;&nbsp;<span class="k">title</span> <span class="s">"Hello"</span> { <span class="k">at</span> <span class="s">2s</span> <span class="k">for</span> <span class="s">3s</span> }</span>
+        <span class="row"><span class="ln">25</span>&nbsp;&nbsp;<span class="k">callout</span> <span class="s">"Hold"</span> { <span class="k">at</span> <span class="s">5.2s</span> <span class="k">for</span> <span class="s">1.5s</span> }</span>
+        <span class="row"><span class="ln">29</span>&nbsp;&nbsp;<span class="k">gain</span> <span class="n">fight</span> <span class="k">by</span> <span class="s">-3</span></span>
+        <span class="row"><span class="ln">31</span>&nbsp;&nbsp;<span class="k">speech</span> <span class="s">"Nice freeze"</span> { <span class="k">at</span> <span class="s">5.2s</span> <span class="k">for</span> <span class="s">1.5s</span> }</span>
+        <span class="row"><span class="ln">34</span>}</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="rails">
+    <div class="rh"><span>Timeline</span><span class="on">here · title “Hello” · main.vel:20</span><span>0s ————————— 10s</span></div>
+    <div class="rail"><div class="rn">Video</div><div class="lane">
+      <div class="clip" style="left:6%; right:26%;">fight <span class="sub">no handle — the verbs for this clip are up on the bank</span></div>
+    </div></div>
+    <div class="rail"><div class="rn">Audio</div><div class="lane">
+      <div class="clip audio" style="left:6%; right:26%;">fight <span class="sub">-3 dB</span></div>
+      <div class="clip gen" style="left:36%; width:11%;">Nice freeze</div>
+    </div></div>
+    <div class="rail"><div class="rn">Text</div><div class="lane">
+      <div class="clip text here" style="left:18%; width:22%;">Hello</div>
+      <div class="clip text" style="left:44%; width:11%;">Hold</div>
+    </div></div>
+    <div class="rail"><div class="rn">Scene</div><div class="lane band">
+      <div class="clip scene" style="left:6%; right:26%; top:3px; bottom:3px;">scene demo</div>
+    </div></div>
+    <div class="playhead" style="left:33%; height:204px;"><span class="pcap">3.4s</span></div>
+  </div>
+
+  <div class="notes">
+    <span class="cnote bad">Gain / Fade / Split / Delete sit nowhere near anything they could change</span>
+    <span class="cnote bad">present while illegal; the answer arrives after the click</span>
+    <span class="cnote warn">“Gain -3 dB” reads relative. SetGain { db } is absolute. Twice is not −6.</span>
+  </div>
+
+  <div class="utter bad">
+    <div class="uh"><b>click → refusal</b><span class="ro">the bank answers after the click, not before</span></div>
+    <div class="cl"><span class="b">Gain -3 dB</span> <span class="g">with here = title “Hello” →</span> set-gain is not legal for title “Hello” (<span class="b">needs-source-binding</span>). <span class="g">A click spent to learn that the control should not have been there.</span></div>
+    <div class="cl"><span class="b">Fade</span> <span class="g">with here = source “fight” →</span> rewrites <span class="w">for 0.5s</span> to <span class="w">for 500ms</span> <span class="g">— same meaning, new file bytes, new Undo entry.</span></div>
+    <div class="cl"><span class="b">Gain -3 dB</span> <span class="g">with here = source “fight” →</span> rewrites <span class="w">by -3</span> to <span class="w">by -3</span> <span class="g">— byte-identical source, new Undo entry.</span></div>
+  </div>
+
+  <footer><span>Both audio-ish buttons are semantic no-ops on the checked-in Alpha fixture. Their observable effect there is an Undo entry.</span><span>docs/sketches/toolbar-gen2-opus · scene A</span></footer>
+</section>
+
+<!-- ============================ B — source is here ============================ -->
+<section class="board" id="b">
+  <header>
+    <h1>B · <em>After</em> — here is <span class="t">source “fight”</span>: three handles, drawn on the thing they change</h1>
+    <span class="tag">trim · set-fade · set-gain</span>
+  </header>
+
+  <div class="strip">
+    <span class="lbl">session</span>
+    <span class="btn">Open Video…</span><span class="btn go">Play</span><span class="btn">Pause</span>
+    <span class="btn">Seek</span><span class="btn">Scrub</span><span class="btn">Zoom In</span><span class="btn">Zoom Out</span>
+    <span class="btn go">Save</span><span class="btn">Undo</span><span class="btn">Redo</span><span class="btn go">Resolve</span>
+    <span class="btn">Copy locus JSON</span>
+    <span class="stat">Renderer · <b>CPU</b></span><span class="stat">Audio · <b>idle</b></span>
+    <span class="aside">no SemanticEdit on this row</span>
+  </div>
+
+  <div class="body">
+    <div class="pane">
+      <div class="ph"><span>Canvas</span><span>here · <span class="on">source “fight”</span> · a source has no overlay, so no overlay handles</span></div>
+      <div class="canvas">
+        <div class="frame"></div><div class="grain"></div>
+        <div class="fadeveil"></div>
+        <div class="ovl title">Hello</div>
+        <div class="ovl callout">Hold</div>
+      </div>
+    </div>
+    <div class="pane">
+      <div class="ph"><span>VEL · main.vel</span><span>examples/gameplay-commentary</span></div>
+      <div class="vel">
+        <span class="row"><span class="ln">11</span><span class="k">scene</span> <span class="n">demo</span> {</span>
+        <span class="row hl"><span class="ln">12</span>&nbsp;&nbsp;<span class="n">game</span>[<span class="s">10s</span>..<span class="s">20s</span>] <span class="k">as</span> <span class="n">fight</span></span>
+        <span class="row"><span class="ln">14</span>&nbsp;&nbsp;<span class="k">freeze</span> <span class="n">fight</span> <span class="k">at</span> <span class="s">5.2s</span> <span class="k">for</span> <span class="s">1.5s</span></span>
+        <span class="row"><span class="ln">16</span>&nbsp;&nbsp;<span class="k">fade</span> <span class="n">fight</span> { <span class="k">at</span> <span class="s">0s</span> <span class="k">for</span> <span class="s">0.5s</span> }</span>
+        <span class="row"><span class="ln">20</span>&nbsp;&nbsp;<span class="k">title</span> <span class="s">"Hello"</span> { <span class="k">at</span> <span class="s">2s</span> <span class="k">for</span> <span class="s">3s</span> }</span>
+        <span class="row"><span class="ln">25</span>&nbsp;&nbsp;<span class="k">callout</span> <span class="s">"Hold"</span> { <span class="k">at</span> <span class="s">5.2s</span> <span class="k">for</span> <span class="s">1.5s</span> }</span>
+        <span class="row"><span class="ln">29</span>&nbsp;&nbsp;<span class="k">gain</span> <span class="n">fight</span> <span class="k">by</span> <span class="s">-3</span></span>
+        <span class="row"><span class="ln">31</span>&nbsp;&nbsp;<span class="k">speech</span> <span class="s">"Nice freeze"</span> { <span class="k">at</span> <span class="s">5.2s</span> <span class="k">for</span> <span class="s">1.5s</span> }</span>
+        <span class="row"><span class="ln">34</span>}</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="rails">
+    <div class="rh"><span>Timeline</span><span class="on">here · source “fight” · main.vel:12</span><span>0s ————————— 10s</span></div>
+    <div class="rail"><div class="rn">Video</div><div class="lane">
+      <div class="clip here" style="left:6%; right:26%;">
+        <span style="margin-left:96px">fight</span> <span class="sub">game[10s..20s]</span>
+        <div class="h-fade"><span class="cap">0.5s</span><div class="grip"></div></div>
+        <div class="h-edge l"></div><div class="h-edge r"></div>
+      </div>
+    </div></div>
+    <div class="rail"><div class="rn">Audio</div><div class="lane">
+      <div class="clip audio here" style="left:6%; right:26%;">
+        fight <span class="sub">audio placement</span>
+        <div class="gainline" style="top:29px;"><div class="grip"></div><div class="db">-3 dB</div></div>
+      </div>
+      <div class="clip gen" style="left:36%; width:11%;">Nice freeze</div>
+    </div></div>
+    <div class="rail"><div class="rn">Text</div><div class="lane">
+      <div class="clip text" style="left:18%; width:22%;">Hello</div>
+      <div class="clip text" style="left:44%; width:11%;">Hold</div>
+    </div></div>
+    <div class="rail"><div class="rn">Scene</div><div class="lane band">
+      <div class="clip scene" style="left:6%; right:26%; top:3px; bottom:3px;">scene demo <span class="sub">not here — no cut lane, no ✕</span></div>
+    </div></div>
+    <div class="playhead" style="left:33%; height:204px;"><span class="pcap">3.4s</span></div>
+  </div>
+
+  <div class="notes">
+    <span class="cnote">head wedge → set-fade (fade_in), drag right</span>
+    <span class="cnote">edges → trim in / out, x snaps to the playhead</span>
+    <span class="cnote">gain line → set-gain, absolute dB, spans the whole binding because the scope is the whole binding</span>
+    <span class="cnote warn">no tail wedge: SemanticEdit::SetFade carries fade_in only</span>
+  </div>
+
+  <div class="utter">
+    <div class="uh"><b>one utterance</b><span class="ro">reading — commits nothing</span></div>
+    <div class="cl"><span class="v">trim → source:fight</span> (source-range: set in/out on this source binding) is legal and <span class="commits">this Video-rail edge commits it</span>. <span class="g">I / O accelerate it at the playhead, live only while the edge is drawn.</span></div>
+    <div class="cl"><span class="v">set-fade → source:fight</span> (source-binding: set fade on this source) is legal and <span class="commits">this Video-rail head wedge commits it</span>. <span class="g">fade_in only — fade_out exists in Core and has no SemanticEdit, so no tail wedge is drawn.</span></div>
+    <div class="cl"><span class="v">set-gain → source:fight</span> (source-binding: set gain on this source) is legal and <span class="commits">this Audio-rail gain line commits it</span>. <span class="g">Now −3 dB. The drag sets the value; it does not add to it.</span></div>
+    <div class="cl"><span class="w">split</span>, <span class="w">delete</span>, <span class="w">reorder-scene</span> <span class="g">→ legal for</span> <span class="w">scene demo</span><span class="g">, committed on the Timeline scene band — a relation, not here.</span> <span class="nav">Navigate</span> <span class="g">shows the band; your click points it. Nothing retargets on its own.</span></div>
+  </div>
+
+  <footer><span>One LocusId on two rails. The Audio block is a second projection of one source binding, not a second selection.</span><span>scene B</span></footer>
+</section>
+
+<!-- ============================ C — scene is here ============================ -->
+<section class="board" id="c">
+  <header>
+    <h1>C · <em>After</em> — here is <span class="t">scene “demo”</span>: cut lane and delete handle on the band</h1>
+    <span class="tag">split · delete · reorder-scene</span>
+  </header>
+
+  <div class="strip">
+    <span class="lbl">session</span>
+    <span class="btn">Open Video…</span><span class="btn go">Play</span><span class="btn">Pause</span>
+    <span class="btn">Seek</span><span class="btn">Scrub</span><span class="btn">Zoom In</span><span class="btn">Zoom Out</span>
+    <span class="btn go">Save</span><span class="btn">Undo</span><span class="btn">Redo</span><span class="btn go">Resolve</span>
+    <span class="btn">Copy locus JSON</span>
+    <span class="stat">Renderer · <b>CPU</b></span><span class="stat">Audio · <b>idle</b></span>
+    <span class="aside">byte-for-byte the same row as scene B — it reads on no locus</span>
+  </div>
+
+  <div class="body">
+    <div class="pane">
+      <div class="ph"><span>Canvas</span><span>here · <span class="on">scene “demo”</span> · a scene has no overlay, so no overlay handles</span></div>
+      <div class="canvas">
+        <div class="frame"></div><div class="grain"></div>
+        <div class="ovl title">Hello</div>
+        <div class="ovl callout">Hold</div>
+      </div>
+    </div>
+    <div class="pane">
+      <div class="ph"><span>VEL · main.vel</span><span>examples/gameplay-commentary</span></div>
+      <div class="vel">
+        <span class="row hl"><span class="ln">11</span><span class="k">scene</span> <span class="n">demo</span> {</span>
+        <span class="row"><span class="ln">12</span>&nbsp;&nbsp;<span class="n">game</span>[<span class="s">10s</span>..<span class="s">20s</span>] <span class="k">as</span> <span class="n">fight</span></span>
+        <span class="row"><span class="ln">14</span>&nbsp;&nbsp;<span class="k">freeze</span> <span class="n">fight</span> <span class="k">at</span> <span class="s">5.2s</span> <span class="k">for</span> <span class="s">1.5s</span></span>
+        <span class="row"><span class="ln">16</span>&nbsp;&nbsp;<span class="k">fade</span> <span class="n">fight</span> { <span class="k">at</span> <span class="s">0s</span> <span class="k">for</span> <span class="s">0.5s</span> }</span>
+        <span class="row"><span class="ln">20</span>&nbsp;&nbsp;<span class="k">title</span> <span class="s">"Hello"</span> { <span class="k">at</span> <span class="s">2s</span> <span class="k">for</span> <span class="s">3s</span> }</span>
+        <span class="row"><span class="ln">25</span>&nbsp;&nbsp;<span class="k">callout</span> <span class="s">"Hold"</span> { <span class="k">at</span> <span class="s">5.2s</span> <span class="k">for</span> <span class="s">1.5s</span> }</span>
+        <span class="row"><span class="ln">29</span>&nbsp;&nbsp;<span class="k">gain</span> <span class="n">fight</span> <span class="k">by</span> <span class="s">-3</span></span>
+        <span class="row"><span class="ln">31</span>&nbsp;&nbsp;<span class="k">speech</span> <span class="s">"Nice freeze"</span> { <span class="k">at</span> <span class="s">5.2s</span> <span class="k">for</span> <span class="s">1.5s</span> }</span>
+        <span class="row"><span class="ln">34</span>}</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="rails">
+    <div class="rh"><span>Timeline</span><span class="on">here · scene “demo” · main.vel:11</span><span>0s ————————— 10s</span></div>
+    <div class="rail"><div class="rn">Video</div><div class="lane">
+      <div class="clip" style="left:6%; right:26%;">fight <span class="sub">not here — no edges, no wedge</span></div>
+    </div></div>
+    <div class="rail"><div class="rn">Audio</div><div class="lane">
+      <div class="clip audio" style="left:6%; right:26%;">fight <span class="sub">-3 dB · no gain line</span></div>
+      <div class="clip gen" style="left:36%; width:11%;">Nice freeze</div>
+    </div></div>
+    <div class="rail"><div class="rn">Text</div><div class="lane">
+      <div class="clip text" style="left:18%; width:22%;">Hello</div>
+      <div class="clip text" style="left:44%; width:11%;">Hold</div>
+    </div></div>
+    <div class="rail"><div class="rn">Scene</div><div class="lane band">
+      <div class="clip scene here" style="left:6%; right:26%; top:3px; bottom:3px;">
+        <span style="margin-left:2px">scene demo</span> <span class="sub">body drag → reorder-scene</span>
+        <div class="cutlane"></div>
+        <div class="cutmark" style="left:46%;"><span class="cap">split at 15.2s of game</span></div>
+        <div class="h-del">✕</div>
+      </div>
+    </div></div>
+    <div class="playhead" style="left:33%; height:204px;"><span class="pcap">3.4s</span></div>
+  </div>
+
+  <div class="notes">
+    <span class="cnote warn">cut lane → split at the source time under the pointer; S cuts at the playhead</span>
+    <span class="cnote bad">✕ → delete, drawn only while this band is here; Delete key live only then</span>
+    <span class="cnote">band body → reorder-scene. Three regions, three verbs, no region doing two jobs.</span>
+  </div>
+
+  <div class="utter">
+    <div class="uh"><b>one utterance</b><span class="ro">reading — commits nothing</span></div>
+    <div class="cl"><span class="v">split → scene:demo</span> (scene: split this scene at a source time) is legal and <span class="commits">this cut lane commits it</span>. <span class="g">at comes from the pointer x through map_timeline_to_source — the same call the deleted button made from the playhead.</span></div>
+    <div class="cl"><span class="v">delete → scene:demo</span> (scene: delete this scene) is legal and <span class="commits">this ✕ handle commits it</span>.</div>
+    <div class="cl"><span class="v">reorder-scene → scene:demo</span> (sequence: reorder this scene in the sequence) is legal and <span class="commits">this band body commits it</span>.</div>
+    <div class="cl"><span class="w">trim</span>, <span class="w">set-gain</span>, <span class="w">set-fade</span> <span class="g">need a source binding.</span> scene demo <span class="g">declares one —</span> <span class="w">point the video clip</span><span class="g">. No first-match target is invented here.</span></div>
+  </div>
+
+  <footer><span>A video click still points the source clip. The scene is reached by clicking its band, never by promotion.</span><span>scene C</span></footer>
+</section>
+
+<!-- ============================ D — nothing legal, nothing drawn ============================ -->
+<section class="board" id="d">
+  <header>
+    <h1>D · <em>Fail early</em> — here is <span class="t">speech “Nice freeze”</span>: the Engine names no legal edit, so nothing is drawn</h1>
+    <span class="tag">structurally-absent ≠ silence</span>
+  </header>
+
+  <div class="strip">
+    <span class="lbl">session</span>
+    <span class="btn">Open Video…</span><span class="btn go">Play</span><span class="btn">Pause</span>
+    <span class="btn">Seek</span><span class="btn">Scrub</span><span class="btn">Zoom In</span><span class="btn">Zoom Out</span>
+    <span class="btn go">Save</span><span class="btn">Undo</span><span class="btn">Redo</span><span class="btn go">Resolve</span>
+    <span class="btn">Copy locus JSON</span>
+    <span class="stat">Renderer · <b>CPU</b></span><span class="stat">Audio · <b>idle</b></span>
+    <span class="aside">still the same row — nothing here reads on the locus</span>
+  </div>
+
+  <div class="body">
+    <div class="pane">
+      <div class="ph"><span>Canvas</span><span>here · <span class="on">speech “Nice freeze”</span> · generated audio has no picture, and gets no overlay</span></div>
+      <div class="canvas">
+        <div class="frame"></div><div class="grain"></div>
+        <div class="ovl callout">Hold</div>
+      </div>
+    </div>
+    <div class="pane">
+      <div class="ph"><span>VEL · main.vel</span><span>examples/gameplay-commentary</span></div>
+      <div class="vel">
+        <span class="row"><span class="ln">11</span><span class="k">scene</span> <span class="n">demo</span> {</span>
+        <span class="row"><span class="ln">12</span>&nbsp;&nbsp;<span class="n">game</span>[<span class="s">10s</span>..<span class="s">20s</span>] <span class="k">as</span> <span class="n">fight</span></span>
+        <span class="row"><span class="ln">14</span>&nbsp;&nbsp;<span class="k">freeze</span> <span class="n">fight</span> <span class="k">at</span> <span class="s">5.2s</span> <span class="k">for</span> <span class="s">1.5s</span></span>
+        <span class="row"><span class="ln">16</span>&nbsp;&nbsp;<span class="k">fade</span> <span class="n">fight</span> { <span class="k">at</span> <span class="s">0s</span> <span class="k">for</span> <span class="s">0.5s</span> }</span>
+        <span class="row"><span class="ln">20</span>&nbsp;&nbsp;<span class="k">title</span> <span class="s">"Hello"</span> { <span class="k">at</span> <span class="s">2s</span> <span class="k">for</span> <span class="s">3s</span> }</span>
+        <span class="row"><span class="ln">25</span>&nbsp;&nbsp;<span class="k">callout</span> <span class="s">"Hold"</span> { <span class="k">at</span> <span class="s">5.2s</span> <span class="k">for</span> <span class="s">1.5s</span> }</span>
+        <span class="row"><span class="ln">29</span>&nbsp;&nbsp;<span class="k">gain</span> <span class="n">fight</span> <span class="k">by</span> <span class="s">-3</span></span>
+        <span class="row hl"><span class="ln">31</span>&nbsp;&nbsp;<span class="k">speech</span> <span class="s">"Nice freeze"</span> { <span class="k">at</span> <span class="s">5.2s</span> <span class="k">for</span> <span class="s">1.5s</span> }</span>
+        <span class="row"><span class="ln">34</span>}</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="rails">
+    <div class="rh"><span>Timeline</span><span class="on">here · speech “Nice freeze” · main.vel:31</span><span>0s ————————— 10s</span></div>
+    <div class="rail"><div class="rn">Video</div><div class="lane">
+      <div class="clip" style="left:6%; right:26%;">fight</div>
+    </div></div>
+    <div class="rail"><div class="rn">Audio</div><div class="lane">
+      <div class="clip audio" style="left:6%; right:26%;">fight <span class="sub">-3 dB</span></div>
+      <div class="clip gen here" style="left:36%; width:11%;">Nice freeze</div>
+    </div></div>
+    <div class="rail"><div class="rn">Text</div><div class="lane">
+      <div class="clip text" style="left:18%; width:22%;">Hello</div>
+      <div class="clip text" style="left:44%; width:11%;">Hold</div>
+    </div></div>
+    <div class="rail"><div class="rn">Scene</div><div class="lane band">
+      <div class="clip scene" style="left:6%; right:26%; top:3px; bottom:3px;">scene demo</div>
+    </div></div>
+    <div class="playhead" style="left:33%; height:204px;"><span class="pcap">3.4s</span></div>
+  </div>
+
+  <div class="notes">
+    <span class="cnote off">pointable, and correctly so — a drawn block that cannot be pointed is a lie</span>
+    <span class="cnote off">zero handles, because legal_edits_for(Speech) is empty</span>
+    <span class="cnote bad">under the bank this state showed six clickable controls and refused all six</span>
+  </div>
+
+  <div class="utter">
+    <div class="uh"><b>one utterance</b><span class="ro">reading — commits nothing</span></div>
+    <div class="cl"><span class="g">The Engine names no legal edit for</span> speech “Nice freeze” <span class="g">(</span><span class="b">structurally-absent</span><span class="g">). Generated speech is resolved into the lock, not edited in place.</span></div>
+    <div class="cl"><span class="w">trim</span>, <span class="w">set-gain</span>, <span class="w">set-fade</span> <span class="g">→ legal for</span> <span class="w">source fight</span><span class="g">, committed on the Video and Audio rails — point that clip.</span></div>
+    <div class="cl"><span class="w">split</span>, <span class="w">delete</span>, <span class="w">reorder-scene</span> <span class="g">→ legal for</span> <span class="w">scene demo</span><span class="g">, committed on the scene band —</span> <span class="nav">Navigate</span><span class="g">, then point it.</span></div>
+    <div class="cl g">An empty legal set is a sentence, not a blank line. Today the utterance says nothing here; that is the leftover this rule closes.</div>
+  </div>
+
+  <footer><span>Fail early, not fail after the click: with the bank gone, the only refusals left belong to routes that never had a pointer.</span><span>scene D</span></footer>
+</section>
+
+<script>
+  const want = new URLSearchParams(location.search).get('scene') || 'a';
+  (document.getElementById(want) || document.getElementById('a')).classList.add('on');
+</script>
+</body>
+</html>
