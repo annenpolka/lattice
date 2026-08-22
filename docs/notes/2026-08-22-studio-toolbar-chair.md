@@ -227,10 +227,147 @@ command invoke can be global in input while gated by the one Engine legal set.
 That may preserve speed without a standing visual claim, but the pack neither
 specifies nor validates such a system.
 
-## Chair boundary for the next conversation
+## Phase III absorb
 
-The decision frame should compare objects by these tests, without reopening the
-spine:
+This section absorbs the six isolated vote addenda without converting their
+different motions or test readings into one voice. It records concurrence,
+contradictions, and residue. It is not a winner selection and does not open
+Phase IV.
+
+### Addenda read
+
+| PR | Vote HEAD read | Motion kept distinct |
+|---|---|---|
+| [#25 — Studio global verb row review — semantics](https://github.com/annenpolka/lattice/pull/25) | `1e8ebf5639b2347432d60a21bb5737d07e800dd0` | DELETE the fixed `SemanticEdit` bank; KEEP a session strip grouped by authority; STEAL disclosure and commit into **Route Ledger + Projection Commit Affordance**. |
+| [#26 — Studio toolbar observe — hierarchy](https://github.com/annenpolka/lattice/pull/26) | `7b1f1d67624c476707568d255d83c2fa61dfb08a` | DELETE the locus-taking bank; KEEP a single-tier session/header strip, especially Save, Undo, Redo, Resolve, and quiet status. |
+| [#27 — Studio toolbar observe — structure](https://github.com/annenpolka/lattice/pull/27) | `c149d8c3620b2df3cc6c11a6b2130df00410bf1b` | DELETE the locus-taking bank; name a non-verb session strip grouped by owner; keep verbs on Timeline, Canvas, and Inspector. |
+| [#28 — Studio toolbar observe — affordance](https://github.com/annenpolka/lattice/pull/28) | `c958c4ea8e2ec536d0740701ea13f530bbbcf134` | DELETE the global verb bank; STEAL transport to Timeline, session operations to a thin strip, and Resolve to a phase drawer. Current row: tests 1/2/6 FAIL, 3/4/5 PASS. |
+| [#29 — Studio toolbar observe — interaction](https://github.com/annenpolka/lattice/pull/29) | `d730e572d6b320d2dbb9fd1d6b2fa550276c4652` | DELETE Set In/Out, Split, Delete, Gain, and Fade as a locus-taking bank; KEEP non-locus session chrome as a separate object; make no STEAL into another global verb home. |
+| [#30 — Studio toolbar observe — first principles](https://github.com/annenpolka/lattice/pull/30) | `b8c25dd4866f1a0bfbfd8b35729bf8bf498fc844` | DELETE the locus-taking bank; STEAL verbs to local surfaces; keep a predicate-defined session strip. Current bank: tests 1/2/5/6 FAIL, 3/4 PASS. |
+
+The PR #30 vote HEAD is confirmed as
+`b8c25dd4866f1a0bfbfd8b35729bf8bf498fc844`.
+
+### What is jointly rejected
+
+All six addenda reject the same narrow object: a fixed, always-visible global
+bank containing Set In, Set Out, Split at Playhead, Delete Selected Clip,
+Gain -3 dB, and Fade as standing invitations to locus-taking
+`SemanticEdit`s. None votes to repair that object through grouping, color,
+renaming, enablement, or another global verb dock.
+
+The rejection is narrower than “delete top chrome.” Every addendum permits some
+non-locus global session/application chrome, although they disagree about its
+membership and placement. They also agree that the current commit gate already
+preserves Engine-only legality, one here, fail-closed refusal, and no hidden
+target search or promotion. The vote is against the bank's invitation,
+disclosure, route naming, and authority mix—not against those spine properties.
+
+This concurrence does not select the #25 named object, the #28 redistribution,
+the #30 local-surface motion, or any other packet as the shipping answer.
+
+### Contradictions absorbed, not resolved
+
+#### Test 5: named route versus nameable place
+
+#28 scores the current row PASS because the utterance names Toolbar, Timeline,
+Canvas, or Inspector and omits no legal edit. #29 scores the bank FAIL because
+Toolbar becomes a circular home for its own orphan buttons. #30 also scores it
+FAIL, qualified: `Toolbar` is named but is not a place in which the target can
+be pointed, and the row's duplicate trim route is not the route the utterance
+names. #25 and #26 score their proposed replacements PASS by requiring local or
+explicitly `unrouted` disclosure; that is a requirement of those proposed
+objects, not evidence that the local routes already exist.
+
+The unresolved criterion is whether “named route” means any routing enum value
+spoken without omission, or a projection where the target is rendered and a
+commit can be initiated. The six addenda do not share that definition.
+
+#### STEAL now, name debt, or redistribute command classes
+
+#25 names Route Ledger + Projection Commit Affordance. #27 and #30 move verbs to
+local surfaces. #28 additionally redistributes transport, Resolve, telemetry,
+and developer controls to different objects. #29 deliberately offers no STEAL
+for the six buttons and leaves the orphan routes as named leftovers rather than
+smuggling a shipping choice into the vote.
+
+These motions agree on DELETE but are not interchangeable. “STEAL to local
+surfaces” needs target-specific gestures and parameter entry. “Leave spoken
+unrouted” preserves the spine but reduces immediate reachability. “Route Ledger”
+may remain disclosure or may become an invocation object; those are different
+interaction contracts.
+
+#### Session strip membership and authority
+
+#26's retained strip is narrow and visually specific: Save, Undo, Redo, Resolve,
+and status. #27 groups a broader non-verb strip by state owner. #28 removes
+transport to Timeline and Resolve to a phase drawer. #29 keeps transport,
+renderer request, Save, Resolve, Open Video, Zoom, and locus copy eligible for a
+separate global object. #30 defines membership by the predicate
+`commits_semantic_edit == false` and then groups by authority.
+
+Thus all six permit a session strip, but there is no joint strip design.
+“Non-locus-taking” is the shared admission test; it does not settle grouping,
+rank, disclosure, or physical location.
+
+#### Test 3 describes a gate, not a truthful invitation
+
+The vote tables phrase test 3 differently. #28 and #30 mark Engine-only legality
+PASS. #27 and #29 distinguish a gate pass from a surface failure because the
+bank authors an invitation set before consulting Engine. These are compatible
+facts attached to different tests: Engine remains the only commit authority,
+while the rendered bank can still imply a broader offer. The chair does not
+convert this wording difference into a vote split about the spine.
+
+### What remains open
+
+#### Gain and fade
+
+The addenda do not choose between a Timeline audio binding control, an Inspector
+property with explicit dB/duration, or more than one projection route. Any
+answer must disclose the source target and parameter, use the one here, and
+avoid frozen magic values masquerading as complete verbs.
+
+#### Split and delete
+
+The addenda do not choose Timeline, Sequence, or both for Scene structural
+commits. Video click remains Source, so neither action may silently promote the
+pointed clip to its related Scene. A chosen route must make the Scene target
+explicit before commit.
+
+#### Utterance as disclosure or commit
+
+#25's Route Ledger is explicitly the one utterance, while its projection
+affordances commit. #28 treats Inspector as the primary disclosure surface.
+#29 refuses to STEAL the buttons into another global home. #30 says correcting a
+global row converges on the utterance/Inspector but leaves actual route ownership
+undecided.
+
+The open question is whether an utterance clause only names legal and unrouted
+work, navigates to a committing projection, or itself becomes an Inspector
+commit affordance. Making it clickable is not a neutral presentation change: it
+must define focus, target visibility, parameter entry, and refusal without
+creating a second legal set or utterance.
+
+#### Transition and reachability
+
+DELETE is unanimous as an object judgment, not as an immediate implementation
+sequence. `set-gain`, `set-fade`, `split`, and `delete` currently rely on
+Toolbar routes. Before those routes disappear, each needs a named local route
+or an explicit `unrouted` clause. The addenda disagree on whether spoken
+unrouted is an acceptable intermediate product state; none authorizes silently
+dropping a legal edit.
+
+### Phase III boundary
+
+The chair absorbs the unanimous rejection and preserves the disagreements
+above. There is still no observer winner, replacement winner, implementation
+motion, or Phase IV decision.
+
+## Chair tests retained
+
+The Phase II decision frame remains useful for reading the absorbed votes,
+without reopening the spine:
 
 1. Does the object render a standing invitation for a locus-taking edit?
 2. Is target, scope, effect, parameter, and committing projection disclosed
@@ -263,4 +400,4 @@ the winner.
 
 No toolbar styling, layout, widget design, Studio/GPUI/crate implementation,
 observer-branch edits, observer-PR merges, observer ranking, winner selection,
-or Phase III vote.
+a new chair vote, or Phase IV.
