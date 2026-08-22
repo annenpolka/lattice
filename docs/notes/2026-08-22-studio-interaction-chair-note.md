@@ -1,7 +1,9 @@
 # Studio interaction model chair note
 
-Date: 2026-08-22  
-Status: discussion input; observation and reconstruction only  
+Date: 2026-08-22
+
+Status: discussion input; observation and reconstruction only
+
 Scope: interaction-model mutations, not a UI proposal
 
 ## Chair frame
