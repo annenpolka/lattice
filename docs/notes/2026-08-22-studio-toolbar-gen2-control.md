@@ -14,12 +14,12 @@ new pointing rule.
 
 Sketch stills (PNG, no mp4):
 
-- [Full chrome after the bank](https://github.com/annenpolka/lattice/blob/HEAD_PLACEHOLDER/docs/sketches/toolbar-gen2-control/still-full-chrome.png?raw=true)
-- [Thin session strip](https://github.com/annenpolka/lattice/blob/HEAD_PLACEHOLDER/docs/sketches/toolbar-gen2-control/still-session-strip.png?raw=true)
-- [Source here: gain/fade unrouted](https://github.com/annenpolka/lattice/blob/HEAD_PLACEHOLDER/docs/sketches/toolbar-gen2-control/still-source-unrouted.png?raw=true)
-- [Scene here: split/delete unrouted](https://github.com/annenpolka/lattice/blob/HEAD_PLACEHOLDER/docs/sketches/toolbar-gen2-control/still-scene-unrouted.png?raw=true)
-- [Overlap lock unchanged](https://github.com/annenpolka/lattice/blob/HEAD_PLACEHOLDER/docs/sketches/toolbar-gen2-control/still-overlap.png?raw=true)
-- [Title fields only on Title](https://github.com/annenpolka/lattice/blob/HEAD_PLACEHOLDER/docs/sketches/toolbar-gen2-control/still-title-inspector.png?raw=true)
+- [Full chrome after the bank](https://github.com/annenpolka/lattice/blob/18f4a8a6921ab401a8e974d82058f6ebab7ea071/docs/sketches/toolbar-gen2-control/still-full-chrome.png?raw=true)
+- [Thin session strip](https://github.com/annenpolka/lattice/blob/18f4a8a6921ab401a8e974d82058f6ebab7ea071/docs/sketches/toolbar-gen2-control/still-session-strip.png?raw=true)
+- [Source here: gain/fade unrouted](https://github.com/annenpolka/lattice/blob/18f4a8a6921ab401a8e974d82058f6ebab7ea071/docs/sketches/toolbar-gen2-control/still-source-unrouted.png?raw=true)
+- [Scene here: split/delete unrouted](https://github.com/annenpolka/lattice/blob/18f4a8a6921ab401a8e974d82058f6ebab7ea071/docs/sketches/toolbar-gen2-control/still-scene-unrouted.png?raw=true)
+- [Overlap lock unchanged](https://github.com/annenpolka/lattice/blob/18f4a8a6921ab401a8e974d82058f6ebab7ea071/docs/sketches/toolbar-gen2-control/still-overlap.png?raw=true)
+- [Title fields only on Title](https://github.com/annenpolka/lattice/blob/18f4a8a6921ab401a8e974d82058f6ebab7ea071/docs/sketches/toolbar-gen2-control/still-title-inspector.png?raw=true)
 
 The HTML source for those stills is
 [`docs/sketches/toolbar-gen2-control/index.html`](../sketches/toolbar-gen2-control/index.html).
