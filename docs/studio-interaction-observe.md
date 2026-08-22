@@ -124,6 +124,27 @@ Pixels stay ephemeral. Commit writes normalized `position` / `scale` through Eng
 
 Apply edit / Review always call title APIs (`apply_title_text` / `propose_title_text`). `target_locus_for(Title)` accepts Title, Scene, or Source. Engine `apply_title` will **insert** a title when the locus is Scene/Source/Sequence (`insert_title`). Callout falls through to the scene locus. The Inspector field is labeled `Title text` for every locus.
 
+## Proof shots (this capture)
+
+Committed PNGs only. No Studio UI code was changed. Trim hit-test is the one live-impossible case: the crop shows the painted handles; the one-line cite is that `tl-{id}-in` / `tl-{id}-out` set `debug_selector`, size, `bg`, and `cursor(ResizeLeftRight)` and do **not** attach `on_mouse_down` (`crates/lattice-studio/src/main.rs`, the two handle `div`s under `if handles`).
+
+| Claim | Path |
+|---|---|
+| 1 open: title current, playhead 0s, Canvas empty | [`screenshots/observe-b-open-title-0s-empty-canvas.png`](screenshots/observe-b-open-title-0s-empty-canvas.png) |
+| 2 Video body click → `Clicked` / `scene:demo` | [`screenshots/observe-b-video-click-scene-demo.png`](screenshots/observe-b-video-click-scene-demo.png) |
+| 3 Audio rail scrub **and** `here` jumps | [`screenshots/observe-b-audio-rail-scrub-locus-jump.png`](screenshots/observe-b-audio-rail-scrub-locus-jump.png) |
+| 4 Title field on callout | [`screenshots/observe-b-callout-hold.png`](screenshots/observe-b-callout-hold.png) |
+| 4 Title field on scene | [`screenshots/observe-b-video-click-scene-demo.png`](screenshots/observe-b-video-click-scene-demo.png) |
+| 4 scene Apply → `insert_title` (`title "demo" { at 0s for 3s }`) | [`screenshots/observe-b-scene-apply-insert-title.png`](screenshots/observe-b-scene-apply-insert-title.png) |
+| 5 overlay absent, preview off | [`screenshots/observe-b-open-title-0s-empty-canvas.png`](screenshots/observe-b-open-title-0s-empty-canvas.png) |
+| 5 overlay absent, preview on, playhead outside title span | [`screenshots/observe-b-preview-open-no-overlay.png`](screenshots/observe-b-preview-open-no-overlay.png) |
+| 6 trim handles drawn (not their own mouse-down target) | [`screenshots/observe-b-trim-handles-drawn.png`](screenshots/observe-b-trim-handles-drawn.png) |
+| 7 Linux `Open Video…` without `LATTICE_OPEN_VIDEO` | [`screenshots/observe-b-open-video-linux.png`](screenshots/observe-b-open-video-linux.png) |
+| 7 GPU DX12 typed error, no silent CPU fallback | [`screenshots/observe-b-gpu-dx12-error.png`](screenshots/observe-b-gpu-dx12-error.png) |
+| 8 same-title Review → `@@ no line changes @@` | [`screenshots/observe-b-review-no-line-changes.png`](screenshots/observe-b-review-no-line-changes.png) |
+
+Earlier shots that still match the same facts are kept: `observe-b-timeline-basic-open.png`, `observe-b-scene-inspector.png`. `observe-b-after-play-scrub-clip-tree.png` is **not** a clean claim-2 proof (SEQUENCE scene was clicked after the Video body).
+
 ## User-visible sequences (this VM)
 
 ### A. Linux smoke, preview off (`timeline-basic`)
@@ -131,6 +152,8 @@ Apply edit / Review always call title APIs (`apply_title_text` / `propose_title_
 Open: locus `demo:title:1` / Hello, playhead `0s`, Canvas empty, VEL highlight on `title "Hello"`, Inspector has Go to definition.
 
 ![Open, preview detached](screenshots/observe-b-timeline-basic-open.png)
+
+![Open: title current, 0s, empty Canvas](screenshots/observe-b-open-title-0s-empty-canvas.png)
 
 Documented smoke: Play (audio monitor disabled ⇒ `audio_no_windows`, so Play is allowed) → ruler scrub to ≥ half duration → Video clip click → SEQUENCE scene click.
 
@@ -146,6 +169,28 @@ SEQUENCE scene click: already scene:demo
 ```
 
 ![After Play, scrub, Video click, scene click](screenshots/observe-b-after-play-scrub-clip-tree.png)
+
+Video-clip body only (50% of the Video rail, inside the clip, away from the 8px edges): `Reorder` `moved=false` → `Clicked` → `point_scene` → `scene:demo`. Playhead stays `0s`. Inspector heading is `scene "demo"`; Title text is still `demo`.
+
+![Video click lands on scene:demo](screenshots/observe-b-video-click-scene-demo.png)
+
+Audio rail at 62.5% (2.5s) while locus was `scene:demo`: `Scrub` commit `2.500045s` **and** `point_from_timeline_time` → `demo:callout:2` / Hold (spec 4 beats the longer title). Inspector Title text is `Hold`.
+
+![Audio rail scrubs and retargets here](screenshots/observe-b-audio-rail-scrub-locus-jump.png)
+
+Scene locus + Apply edit with draft `demo` inserts a new title (working source only; disk fixture unchanged until Save):
+
+```vel
+title "demo" { at 0s for 3s }
+```
+
+SEQUENCE gains `title demo`. Text rail shows `demo` from 0s. Explainable as Engine `apply_title` → `insert_title` when the locus is Scene.
+
+![Scene Apply inserts title demo](screenshots/observe-b-scene-apply-insert-title.png)
+
+Trim chrome after the scene is current: white in/out bars on `demo:video:3`. Crop at playhead 2.50s so the left bar is not under the playhead.
+
+![Trim handles drawn](screenshots/observe-b-trim-handles-drawn.png)
 
 After this, Inspector is `scene "demo"` with `Title text = demo` and no Go to definition. VEL may keep a leftover line highlight (scene has no `source_span` to project).
 
