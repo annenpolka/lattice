@@ -265,11 +265,59 @@ A global top-of-window verb button row is an artifact of early test scaffolding.
 
 ## 6. Visual claims (live captures) vs frozen mockup references
 
-- **Live Studio Window Capture (Current @ `617991b`)**: `https://github.com/annenpolka/lattice/blob/617991b9750c902cf062976470610f59927f1893/docs/notes/assets/2026-08-22-studio-toolbar/toolbar-top-row.png?raw=true`
-- **Live Toolbar Row Crop (Current @ `617991b`)**: `https://github.com/annenpolka/lattice/blob/617991b9750c902cf062976470610f59927f1893/docs/notes/assets/2026-08-22-studio-toolbar/toolbar-button-row-cropped.png?raw=true`
+- **Live Studio Window Capture (Current @ `e99b035`)**: `https://github.com/annenpolka/lattice/blob/e99b03545e30b5a300cb695424d2219cb622989d/docs/notes/assets/2026-08-22-studio-toolbar/toolbar-top-row.png?raw=true`
+- **Live Toolbar Row Crop (Current @ `e99b035`)**: `https://github.com/annenpolka/lattice/blob/e99b03545e30b5a300cb695424d2219cb622989d/docs/notes/assets/2026-08-22-studio-toolbar/toolbar-button-row-cropped.png?raw=true`
 
 For historical comparison against frozen design mockups (pre-spine):
 - Frozen manipulate mockup: `https://github.com/annenpolka/lattice/blob/85b589ec260554f851c214731e607c7727c7cae8/docs/mockups/studio/screens/manipulate.jpg?raw=true`
 - Frozen navigate mockup: `https://github.com/annenpolka/lattice/blob/85b589ec260554f851c214731e607c7727c7cae8/docs/mockups/studio/screens/navigate.jpg?raw=true`
 - Frozen review mockup: `https://github.com/annenpolka/lattice/blob/85b589ec260554f851c214731e607c7727c7cae8/docs/mockups/studio/screens/review.jpg?raw=true`
+
+---
+
+## 7. Phase III Vote Addendum: Affordance Evaluation of the Global Verb Bank
+
+Under the Chair's narrow claim (*"the current fixed always-visible bank of locus-taking SemanticEdit buttons is not a coherent global verb surface; a session strip may remain global"*), here is the formal affordance evaluation against the six criteria:
+
+### The Six Tests
+
+1. **Standing invitation for a locus-taking edit?**
+   - **FAIL**: A persistent, static row of buttons (`Set In`, `Set Out`, `Split`, `Delete`, `Gain -3 dB`, `Fade`) is a permanent standing invitation to click. For a first-time editor, it promises global readiness, but in reality 50%+ of clicks result in rejection because the pointed locus does not match the verb's required kind.
+
+2. **Target / scope / effect / parameter / committing projection disclosed before commit?**
+   - **FAIL**: The buttons are blind labels ("Split at Playhead", "Gain -3 dB"). They disclose neither what entity is being targeted, nor the scope of the mutation, nor the fact that `Gain`/`Fade` apply hardcoded magic numbers rather than user-specified values, nor which surface actually routes the action.
+
+3. **Engine only legality authority?**
+   - **PASS**: At the engine/spine level (`85b589e`), `legal_edits_for` and `is_legal_verb` remain the sole legality authority. The toolbar itself cannot bypass engine legality and correctly fails closed.
+
+4. **Uses the one here, fail-closed, no target search/promotion?**
+   - **PASS**: The spine strictly uses the one pointed `here` with no silent `target_source_locus` or `target_scene_locus` fallthrough. Clicking `Split` on a Source clip fails closed and refuses to silently promote to the Scene.
+
+5. **Every legal edit has a named route or is spoken unrouted?**
+   - **PASS**: `routed_verbs` and `utterance` properly disclose whether an edit commits on Toolbar, Timeline, Canvas, or Inspector, and speaks unrouted gaps without silent omission.
+
+6. **Non-verb global controls grouped by actual authority?**
+   - **FAIL**: The global toolbar conflates 5 disparate domains (Document lifecycle `Open`/`Save`/`Undo`, Engine hardware telemetry `Renderer`/`Audio`/`CPU`/`GPU`, Transport clock `Play`/`Pause`/`Seek`/`Scrub`, Phase boundary `Resolve`, and Debug serializers `Copy locus JSON`) in a single un-zoned strip.
+
+---
+
+### Object Verdict: **DELETE the Global Verb Bank; STEAL Global Controls to Dedicated Surfaces**
+
+From a first-time editor's affordance lens:
+
+- **DELETE: Fixed bank of locus-taking SemanticEdit buttons**
+  - Eliminate `Set In`, `Set Out`, `Split at Playhead`, `Delete Selected Clip`, `Gain -3 dB`, and `Fade` from the global top row. Locus-dependent verbs have no place in an always-visible global bar because they fundamentally mislead the editor about tool readiness.
+  - Verbs belong **strictly on the projection that commits them**:
+    - Trimming / Reordering / Splitting $\to$ Direct **Timeline** manipulation and track-anchored contextual affordances.
+    - Translation / Resizing $\to$ Direct **Canvas** gestures.
+    - Parametric adjustments (Gain dB, Fade ms, Title text) $\to$ **Inspector**, where parameters and full `(verb, target, scope, effect)` disclosures live.
+
+- **STEAL / REDISTRIBUTE: Non-verb controls to appropriate architectural homes**
+  - **Transport controls** (`Play`, `Pause`, continuous time scrubber) $\to$ Steal to the **Timeline transport header / clock dock**. Eliminate pseudo-verb push buttons `Seek` (rewind to 0s) and `Scrub` (one-off frame refresh).
+  - **Document & Session strip** (`Save`, `Undo`, `Redo`, project label) $\to$ Retain as a thin, dedicated **Global Session Strip / Titlebar**, with color accurately reflecting session dirty state.
+  - **Phase boundary** (`Resolve`) $\to$ Steal to a dedicated **Phase status indicator / Lock review drawer** with clear disclosure of external provider I/O.
+  - **Telemetry & Dev tools** (`CPU/GPU DX12`, `Copy locus JSON`) $\to$ Move to status bar / dev-agent drawers.
+
+This aligns the UI directly with the verb-license spine: **no global verb home, verbs only where projections commit, and the Inspector as the primary spoken disclosure surface.**
+
 
