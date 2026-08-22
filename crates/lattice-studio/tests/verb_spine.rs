@@ -374,7 +374,8 @@ fn timeline_source_utterance_speaks_toolbar_for_gain_and_fade() {
         .into_iter()
         .find(|locus| locus.kind == LocusKind::Source)
         .unwrap();
-    session.point_at(source.id);
+    let source_id = source.id.clone();
+    session.point_at(source_id.clone());
     session.touch_projection(Projection::Timeline);
     let utterance = session.utterance();
     assert!(utterance.routed.iter().any(|verb| verb == "trim"));
@@ -413,7 +414,7 @@ fn timeline_source_utterance_speaks_toolbar_for_gain_and_fade() {
         state["legal"].as_array().is_some_and(|edits| edits
             .iter()
             .any(|edit| edit["verb"] == "trim"
-                && edit["target"] == source.id.as_str()
+                && edit["target"] == source_id.as_str()
                 && edit["scope"] == "source-range")),
         "{state}"
     );
