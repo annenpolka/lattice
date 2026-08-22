@@ -1,0 +1,23 @@
+1787364280.836 pid=44714 tid=ThreadId(1) start exe=/workspace/target/debug/lattice-studio cwd=/workspace vel=/tmp/lattice-studio-ui-fixtures/timeline-basic/main.vel fixture=timeline-basic log=/tmp/capture/run2-selection/studio.log preview=off autoplay=off smoke=120000ms rustc=0.1.0
+1787364280.836 pid=44714 tid=ThreadId(1) renderer requested=require_cpu
+1787364280.836 pid=44714 tid=ThreadId(1) compile/open /tmp/lattice-studio-ui-fixtures/timeline-basic/main.vel
+1787364281.657 pid=44714 tid=ThreadId(1) ui fixture=timeline-basic
+1787364281.657 pid=44714 tid=ThreadId(1) semantic_state {"locus":{"id":"demo:title:1","kind":"title","label":"Hello"},"playhead":"0s","duration":"4s","playing":false,"interaction":"idle","gesture":{"kind":"none"},"drag":null,"last_gesture_error":null,"fixture":"timeline-basic","reason":"open"}
+1787364281.657 pid=44714 tid=ThreadId(1) open ok dirty=false playhead=Time { num: 0, den: 1 } diagnostics=0
+1787364281.657 pid=44714 tid=ThreadId(1) smoke timeout 120000ms
+1787364281.657 pid=44714 tid=ThreadId(1) Application::run
+1787364281.752 pid=44714 tid=ThreadId(1) open_window
+1787364281.832 pid=44714 tid=ThreadId(1) StudioView::new
+1787364281.832 pid=44714 tid=ThreadId(1) preview worker spawned
+1787364281.832 pid=44714 tid=ThreadId(1) audio monitor explicitly disabled
+1787364281.832 pid=44714 tid=ThreadId(1) first paint preview=none
+1787364281.832 pid=44714 tid=ThreadId(1) semantic_state {"locus":{"id":"demo:title:1","kind":"title","label":"Hello"},"playhead":"0s","duration":"4s","playing":false,"interaction":"idle","gesture":{"kind":"none"},"drag":null,"last_gesture_error":null,"fixture":"timeline-basic","reason":"first-paint"}
+1787364281.997 pid=44714 tid=ThreadId(1) open_window ok
+1787364281.997 pid=44714 tid=ThreadId(1) activate
+1787364282.000 pid=44714 tid=ThreadId(1) smoke_geom {"play":{"x":1115.0,"y":67.0,"w":51.0,"h":30.0},"ruler":{"x":72.0,"y":685.0,"w":640.0,"h":23.0},"rail":{"x":72.0,"w":640.0},"tracks":[{"name":"Video","x":72.0,"y":723.0,"w":640.0,"h":22.0},{"name":"Audio","x":72.0,"y":755.0,"w":640.0,"h":22.0},{"name":"Text","x":72.0,"y":787.0,"w":640.0,"h":22.0}],"tree":[{"id":"sequence:main","kind":"sequence","label":"main","x":16.0,"y":150.0,"w":183.0,"h":23.0},{"id":"scene:demo","kind":"scene","label":"demo","x":30.0,"y":173.0,"w":183.0,"h":22.0},{"id":"source:clip","kind":"source","label":"clip","x":44.0,"y":196.0,"w":183.0,"h":23.0},{"id":"demo:title:1","kind":"title","label":"Hello","x":44.0,"y":218.0,"w":183.0,"h":23.0},{"id":"demo:callout:2","kind":"callout","label":"Hold","x":44.0,"y":241.0,"w":183.0,"h":22.0}]}
+1787364299.099 pid=44714 tid=ThreadId(1) preview queue tree
+1787364299.099 pid=44714 tid=ThreadId(1) semantic_state {"locus":{"id":"sequence:main","kind":"sequence","label":"main"},"playhead":"0s","duration":"4s","playing":false,"interaction":"idle","gesture":{"kind":"none"},"drag":null,"last_gesture_error":null,"fixture":"timeline-basic","reason":"tree-select","focused":"studio"}
+1787364300.034 pid=44714 tid=ThreadId(1) preview queue tree
+1787364300.034 pid=44714 tid=ThreadId(1) semantic_state {"locus":{"id":"demo:title:1","kind":"title","label":"Hello"},"playhead":"1s","duration":"4s","playing":false,"interaction":"idle","gesture":{"kind":"none"},"drag":null,"last_gesture_error":null,"fixture":"timeline-basic","reason":"tree-select","focused":"studio"}
+1787364300.966 pid=44714 tid=ThreadId(1) preview queue tree
+1787364300.966 pid=44714 tid=ThreadId(1) semantic_state {"locus":{"id":"scene:demo","kind":"scene","label":"demo"},"playhead":"1s","duration":"4s","playing":false,"interaction":"idle","gesture":{"kind":"none"},"drag":null,"last_gesture_error":null,"fixture":"timeline-basic","reason":"tree-select","focused":"studio"}
