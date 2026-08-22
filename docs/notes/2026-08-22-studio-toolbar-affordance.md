@@ -205,7 +205,65 @@ A first-time editor cannot rely on color to understand system state, readiness, 
 
 ---
 
-## 4. Visual references & frozen mockup claims
+## 4. Visual claims & live captures
+
+Live capture of the current top-of-window button row and layout (`--ui-fixture timeline-basic` on X11):
+
+![Studio live window capture](assets/2026-08-22-studio-toolbar/toolbar-top-row.png)
+
+*Figure 1: Live Studio window at commit `85b589e`. The top row flattens document operations, locus-bound semantic edits (`Set In`/`Set Out`/`Split`/`Delete`/`Gain`/`Fade`), engine telemetry, transport push-buttons (`Play`/`Pause`/`Seek`/`Scrub`), compiler phase triggers (`Resolve`), debug serializers (`Copy locus JSON`), and viewport zoom into an undifferentiated horizontal strip.*
+
+![Studio live top button row crop](assets/2026-08-22-studio-toolbar/toolbar-button-row-cropped.png)
+
+*Figure 2: Close-up of the 22 top-row elements showing standard button styling, teal accent overload (`Save`, `Resolve`, `Play`, active `CPU`), and status text.*
+
+---
+
+## 5. 根本的見直し (Radical Rethink): Is a global top-of-window verb button row the right object?
+
+The verb-license spine establishes strict architectural invariants:
+- **One locus, one legal set, one utterance**: The Engine names what is legal for the currently pointed locus.
+- **Touched projection is routing only**: Gestures on a surface commit real edits; when routing differs from legality, the difference is spoken.
+- **Hard pointing locks**: Clicking a video clip points `Source` (not `Scene`); overlap resolution is projection-local; playhead scrub never re-points.
+
+Given these invariants, **is a global top-of-window verb button row even the right object for a first-time editor?**
+
+Cosmetic polish (renaming buttons, reordering them, or tweaking colors) does not resolve the foundational affordance contradiction:
+
+### 1. The inherent falsehood of a global verb bar under a locus-centric compiler
+A persistent, always-visible global button row presents the affordance: *"I am a set of global tools you can click at any time to perform an action."*  
+In Lattice, however:
+- `Split` is only legal on `Scene`.
+- `Trim` (In/Out), `Gain`, `Fade` are only legal on `Source`.
+- `Title` text is only legal on `Title`.
+- Overlays (`Title`/`Callout`) accept position and scale on `Canvas`.
+
+When buttons live in a global top bar detached from the surfaces where those entities live, clicking them inevitably triggers refusals and spoken gap explanations (e.g. clicking a clip then clicking `Split` produces `split is not legal for source (needs-scene)`). A global verb bar constantly invites the editor to click actions that are illegal for what they just touched.
+
+### 2. Radical rethink: No global verb home; verbs live only where projections commit
+Instead of maintaining a global toolbar as a catch-all "button dock", the editor interface should eliminate the top verb bar entirely:
+- **Timeline is the commit home for temporal & sequence edits**:
+  - Direct trimming via clip boundary drag handles (not discrete `Set In`/`Set Out` buttons).
+  - Direct scene splitting and reordering via timeline gestures or contextual split affordances anchored to the playhead on the Scene track.
+- **Canvas is the commit home for spatial placement**:
+  - Direct translation (drag) and four-corner aspect-preserving resize on overlays (not macro coordinates).
+- **Inspector is the commit home for parametric properties & disclosures**:
+  - Title text, timing fields, gain dB sliders, and fade duration inputs appear in the Inspector **only when the corresponding locus is pointed**.
+  - The Inspector speaks the complete legal set, disclosing `(verb, target, scope, effect)` and navigating to related loci (e.g. navigating from pointed `Source` to related `Scene`) rather than offering blind push-buttons.
+- **Transport controls belong to the Timeline / Preview transport dock**:
+  - `Play` / `Pause` belong on the timeline playback clock (with proper toggle state reflecting playback).
+  - `Seek` and `Scrub` are continuous timeline navigation gestures, not discrete top-level buttons that teleport to `0s` or trigger one-off frame syncs.
+- **Phase boundaries & document operations belong in window/application chrome**:
+  - `Save`, `Undo`, `Redo` belong in standard application menus / titlebar chrome.
+  - `Resolve` (the boundary between compilation and external provider I/O) belongs in a dedicated phase status banner or review/lock workspace panel with clear disclosure of provider I/O.
+  - `Copy locus JSON` belongs in developer/agent debug tooling, not prime end-user editorial real estate.
+
+### 3. Conclusion
+A global top-of-window verb button row is an artifact of early test scaffolding. For a first-time editor operating under the verb-license spine, verbs should exist **only on the projections that actually commit them**, backed by the Inspector's spoken disclosure of the Engine's legal set.
+
+---
+
+## 6. Visual references & frozen mockup claims
 
 For visual verification against frozen Studio interaction boards:
 - Manipulate board reference: `https://github.com/annenpolka/lattice/blob/85b589ec260554f851c214731e607c7727c7cae8/docs/mockups/studio/screens/manipulate.jpg?raw=true`
