@@ -167,19 +167,31 @@ fn import_edit_undo_playhead_and_save() {
     let original = session.source().to_string();
 
     session.seek(lattice_engine::Time::seconds(2));
+    let scene = session
+        .loci()
+        .unwrap()
+        .into_iter()
+        .find(|locus| locus.kind == lattice_engine::LocusKind::Scene)
+        .expect("scene");
+    session.point_at(scene.id.clone());
     session.split_at_playhead().expect("split");
     assert!(session.is_dirty());
     assert!(session.source().contains("clip_2") || session.source().contains("[2s.."));
 
+    let source = session
+        .loci()
+        .unwrap()
+        .into_iter()
+        .find(|locus| locus.kind == lattice_engine::LocusKind::Source)
+        .expect("source");
+    session.point_at(source.id);
     session.set_gain(-6).expect("gain");
-    session.apply_title_text("Hello").expect("title");
-    assert!(session.source().contains("Hello"));
     assert!(session.source().contains("gain"));
 
-    session.undo().expect("undo title");
-    assert!(!session.source().contains("title \"Hello\"") || session.source() != original);
+    session.undo().expect("undo gain");
+    assert!(!session.source().contains("gain") || session.source() != original);
     session.redo().expect("redo");
-    assert!(session.source().contains("Hello"));
+    assert!(session.source().contains("gain"));
 
     session.save().expect("save");
     assert!(!session.is_dirty());
@@ -604,7 +616,14 @@ fn preview_cache_key_uses_lock_stamp_not_mailbox_generation() {
         "cache key must include lock stamp: {locked_name}"
     );
 
-    session.apply_title_text("Hello").expect("title edit");
+    let source = session
+        .loci()
+        .unwrap()
+        .into_iter()
+        .find(|locus| locus.kind == lattice_engine::LocusKind::Source)
+        .expect("source");
+    session.point_at(source.id);
+    session.set_gain(-3).expect("source gain edit");
     let after_edit = session.request_preview_job();
     assert_ne!(
         after_edit.output, locked.output,

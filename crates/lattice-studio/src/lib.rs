@@ -13,6 +13,7 @@ mod semantic_state;
 mod session;
 pub mod trace;
 mod ui_fixture;
+mod verb;
 mod viewport;
 
 pub use audio::{
@@ -31,7 +32,7 @@ pub use gesture::{
 };
 pub use layout::{
     CanvasOverlay, CanvasView, InspectorView, ReviewView, SourceView, StudioLayout,
-    TimelineClipView, TimelineTrackView, TimelineView, TreeNode,
+    TimelineClipView, TimelineTrackView, TimelineView, TreeNode, UtteranceView,
 };
 pub use preview::{
     PLAYBACK_TICK, PreviewInbox, PreviewInboxStats, PreviewJob, PreviewMailbox, PreviewPush,
@@ -40,6 +41,10 @@ pub use preview::{
 pub use semantic_state::{snapshot as semantic_snapshot, write_geom_file, write_state_file};
 pub use session::{StudioSession, fit_preview_size};
 pub use ui_fixture::UiFixture;
+pub use verb::{
+    PointCandidate, Projection, SpokenClause, UnresolvedPointing, Utterance, refuse_edit,
+    routed_verbs, utterance,
+};
 pub use viewport::TimelineViewport;
 
 use lattice_engine::Engine;

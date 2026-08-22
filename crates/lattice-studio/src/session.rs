@@ -17,6 +17,7 @@ use crate::canvas::{
 use crate::gesture::{GestureOutcome, TimelineGesture};
 use crate::layout::{self, StudioLayout};
 use crate::preview::{PreviewJob, PreviewMailbox, playback_frame_at_or_before};
+use crate::verb::{self, Projection, UnresolvedPointing, Utterance, refuse_edit};
 use crate::viewport::{TimelineViewport, clamp_interaction_time};
 
 /// Engine-backed Studio state. No GPUI types.
@@ -42,6 +43,9 @@ pub struct StudioSession {
     pub(crate) last_gesture_error: Option<String>,
     pub(crate) frame_rate: Option<(i64, i64)>,
     pub(crate) snap_time: Option<Time>,
+    pub(crate) unresolved: Option<UnresolvedPointing>,
+    pub(crate) touched_projection: Projection,
+    pub(crate) last_spoken: Option<String>,
 }
 
 impl StudioSession {
@@ -72,6 +76,9 @@ impl StudioSession {
             last_gesture_error: None,
             frame_rate: None,
             snap_time: None,
+            unresolved: None,
+            touched_projection: Projection::Timeline,
+            last_spoken: None,
         };
         session.cache_source_size();
         session.fit_viewport();
@@ -145,6 +152,8 @@ impl StudioSession {
     }
 
     pub fn point_at(&mut self, id: LocusId) {
+        self.unresolved = None;
+        self.last_spoken = None;
         self.current = Some(id);
         self.sync_playhead_to_current();
     }
@@ -169,6 +178,7 @@ impl StudioSession {
             .loci()?
             .into_iter()
             .find(|locus| locus.id.as_str() == locus_id);
+        self.touched_projection = Projection::Canvas;
         if let Some(locus) = &found {
             self.point_at(locus.id.clone());
         }
@@ -369,6 +379,7 @@ impl StudioSession {
 
     /// Point from a byte offset in the VEL source.
     pub fn point_from_source_offset(&mut self, offset: u32) -> Result<Option<Locus>, EngineError> {
+        self.touched_projection = Projection::Source;
         let found = self.engine.locus_at_source(&self.compilation, offset)?;
         if let Some(locus) = &found {
             self.point_at(locus.id.clone());
@@ -376,14 +387,118 @@ impl StudioSession {
         Ok(found)
     }
 
-    /// Point from a time on the flattened timeline.
-    /// Playhead is the input; the locus follows. Do not seek again.
+    /// Coordinate point on the Timeline. Playhead is not here.
+    ///
+    /// One covering locus commits that identity. Several covering loci hold
+    /// pointing unresolved and list candidates on this projection only.
     pub fn point_from_timeline_time(&mut self, time: Time) -> Result<Option<Locus>, EngineError> {
-        let found = self.engine.locus_at_timeline(&self.compilation, time)?;
+        self.touched_projection = Projection::Timeline;
+        self.last_spoken = None;
+        let covering = self
+            .engine
+            .loci_covering_timeline(&self.compilation, time)?;
+        let covering = covering
+            .into_iter()
+            .filter(|locus| {
+                matches!(
+                    locus.kind,
+                    LocusKind::Title
+                        | LocusKind::Callout
+                        | LocusKind::Source
+                        | LocusKind::Scene
+                        | LocusKind::Speech
+                )
+            })
+            .collect::<Vec<_>>();
+        match covering.len() {
+            0 => Ok(None),
+            1 => {
+                let locus = covering.into_iter().next().expect("one covering locus");
+                self.unresolved = None;
+                self.current = Some(locus.id.clone());
+                Ok(Some(locus))
+            }
+            _ => {
+                self.current = None;
+                self.unresolved = Some(UnresolvedPointing {
+                    projection: Projection::Timeline,
+                    time: Some(time),
+                    candidates: covering,
+                });
+                self.last_spoken = Some(self.utterance().spoken_text());
+                Ok(None)
+            }
+        }
+    }
+
+    /// Identity-bearing video clip click: keep the source clip, never promote to Scene.
+    pub fn point_video_clip(&mut self, clip_id: &str) -> Result<Option<Locus>, EngineError> {
+        self.touched_projection = Projection::Timeline;
+        self.point_source_for_clip(clip_id)
+    }
+
+    pub fn pick_point_candidate(&mut self, id: LocusId) -> Result<Option<Locus>, EngineError> {
+        let allowed = self
+            .unresolved
+            .as_ref()
+            .is_none_or(|point| point.candidates.iter().any(|locus| locus.id == id));
+        if !allowed {
+            return Err(EngineError::Edit(
+                "candidate is not on the touched projection".into(),
+            ));
+        }
+        self.point_at(id);
+        self.current_locus()
+    }
+
+    #[must_use]
+    pub fn unresolved_pointing(&self) -> Option<&UnresolvedPointing> {
+        self.unresolved.as_ref()
+    }
+
+    #[must_use]
+    pub fn touched_projection(&self) -> Projection {
+        self.touched_projection
+    }
+
+    #[must_use]
+    pub fn last_spoken(&self) -> Option<&str> {
+        self.last_spoken.as_deref()
+    }
+
+    #[must_use]
+    pub fn utterance(&self) -> Utterance {
+        let here = self.current_locus().ok().flatten();
+        verb::utterance(
+            here.as_ref(),
+            self.unresolved.as_ref(),
+            self.touched_projection,
+        )
+    }
+
+    pub(crate) fn point_source_for_clip(
+        &mut self,
+        clip_id: &str,
+    ) -> Result<Option<Locus>, EngineError> {
+        self.unresolved = None;
+        self.last_spoken = None;
+        let Some(source_id) = source_id_for_clip(self, clip_id) else {
+            return Err(EngineError::Edit(format!(
+                "video clip `{clip_id}` has no source binding"
+            )));
+        };
+        let found = self.loci()?.into_iter().find(|locus| {
+            locus.kind == LocusKind::Source
+                && (locus.node_id == source_id || locus.id.as_str() == source_id)
+        });
         if let Some(locus) = &found {
             self.current = Some(locus.id.clone());
         }
         Ok(found)
+    }
+
+    pub fn touch_projection(&mut self, projection: Projection) {
+        self.touched_projection = projection;
     }
 
     pub fn current_locus(&self) -> Result<Option<Locus>, EngineError> {
@@ -428,19 +543,15 @@ impl StudioSession {
         &mut self,
         text: impl Into<String>,
     ) -> Result<EditProposal, EngineError> {
-        let locus = self
-            .current_locus()?
-            .ok_or_else(|| EngineError::Edit("no current locus".into()))?;
-        let proposal = self.engine.propose(
-            &self.compilation,
-            &locus,
-            SemanticEdit::Title {
-                text: Some(text.into()),
-                at: None,
-                duration: None,
-                opacity: None,
-            },
-        )?;
+        self.touched_projection = Projection::Inspector;
+        let edit = SemanticEdit::Title {
+            text: Some(text.into()),
+            at: None,
+            duration: None,
+            opacity: None,
+        };
+        let locus = self.target_locus_for(&edit)?;
+        let proposal = self.engine.propose(&self.compilation, &locus, edit)?;
         self.review = Some(proposal.clone());
         Ok(proposal)
     }
@@ -466,6 +577,7 @@ impl StudioSession {
 
     /// Everyday Manipulate: rewrite through Engine into the working source.
     pub fn apply_title_text(&mut self, text: &str) -> Result<(), EngineError> {
+        self.touched_projection = Projection::Inspector;
         self.apply_edit(SemanticEdit::Title {
             text: Some(text.into()),
             at: None,
@@ -475,8 +587,15 @@ impl StudioSession {
     }
 
     pub fn apply_edit(&mut self, edit: SemanticEdit) -> Result<(), EngineError> {
-        let locus = self.target_locus_for(&edit)?;
+        let locus = match self.target_locus_for(&edit) {
+            Ok(locus) => locus,
+            Err(err) => {
+                self.last_spoken = Some(err.to_string());
+                return Err(err);
+            }
+        };
         let proposal = self.engine.propose(&self.compilation, &locus, edit)?;
+        self.last_spoken = None;
         self.push_undo();
         let new_source = self
             .engine
@@ -485,6 +604,7 @@ impl StudioSession {
     }
 
     pub fn set_in_at_playhead(&mut self) -> Result<(), EngineError> {
+        self.touched_projection = Projection::Toolbar;
         let at = self.playhead_source_time()?;
         self.apply_edit(SemanticEdit::Trim {
             in_point: Some(at),
@@ -493,6 +613,7 @@ impl StudioSession {
     }
 
     pub fn set_out_at_playhead(&mut self) -> Result<(), EngineError> {
+        self.touched_projection = Projection::Toolbar;
         let at = self.playhead_source_time()?;
         self.apply_edit(SemanticEdit::Trim {
             in_point: None,
@@ -501,23 +622,23 @@ impl StudioSession {
     }
 
     pub fn split_at_playhead(&mut self) -> Result<(), EngineError> {
+        self.touched_projection = Projection::Toolbar;
         let at = self.playhead_source_time()?;
-        let scene = self.target_scene_locus()?;
-        self.current = Some(scene.id);
         self.apply_edit(SemanticEdit::Split { at })
     }
 
     pub fn delete_selected_clip(&mut self) -> Result<(), EngineError> {
-        let scene = self.target_scene_locus()?;
-        self.current = Some(scene.id);
+        self.touched_projection = Projection::Toolbar;
         self.apply_edit(SemanticEdit::Delete)
     }
 
     pub fn set_gain(&mut self, db: i32) -> Result<(), EngineError> {
+        self.touched_projection = Projection::Toolbar;
         self.apply_edit(SemanticEdit::SetGain { db })
     }
 
     pub fn set_fade(&mut self, fade_in: Time) -> Result<(), EngineError> {
+        self.touched_projection = Projection::Toolbar;
         self.apply_edit(SemanticEdit::SetFade {
             fade_in: Some(fade_in),
         })
@@ -680,7 +801,7 @@ impl StudioSession {
         self.playhead = self.time_at_timeline_ratio(num, den);
     }
 
-    /// Timeline click from a rail ratio: scrub and point the locus at that time.
+    /// Timeline click from a rail ratio: move the playhead only. Playhead is not here.
     pub fn click_timeline_ratio(
         &mut self,
         num: u32,
@@ -689,11 +810,11 @@ impl StudioSession {
         self.click_timeline(self.time_at_timeline_ratio(num, den))
     }
 
-    /// Timeline click: update playhead and the current locus.
+    /// Move the playhead. Does not re-point. Scrub is not here.
     pub fn click_timeline(&mut self, time: Time) -> Result<Option<Locus>, EngineError> {
         self.stop_transport_for_position_change();
         self.playhead = clamp_interaction_time(time, self.timeline_duration());
-        self.point_from_timeline_time(self.playhead)
+        self.current_locus()
     }
 
     pub fn step_clock(&mut self, dt: Time) {
@@ -1016,6 +1137,10 @@ impl StudioSession {
     }
 
     fn rebind_current(&mut self) {
+        if self.unresolved.is_some() {
+            self.current = None;
+            return;
+        }
         if let Some(id) = &self.current
             && self.engine.inspect(&self.compilation, id).is_ok()
         {
@@ -1099,126 +1224,14 @@ impl StudioSession {
     }
 
     pub(crate) fn target_locus_for(&self, edit: &SemanticEdit) -> Result<Locus, EngineError> {
-        match edit {
-            SemanticEdit::Title { .. } => {
-                let Some(locus) = self.current_locus()? else {
-                    return Err(EngineError::Edit(
-                        "title edit needs a current title, scene, or source locus".into(),
-                    ));
-                };
-                if matches!(
-                    locus.kind,
-                    LocusKind::Title | LocusKind::Scene | LocusKind::Source
-                ) {
-                    return Ok(locus);
-                }
-                if locus.scene_id.is_some() {
-                    return self.target_scene_locus();
-                }
-                Err(EngineError::Edit(
-                    "title edit needs a title, scene, or source locus".into(),
-                ))
-            }
-            SemanticEdit::Trim { .. } => self.target_source_locus(),
-            SemanticEdit::Split { .. }
-            | SemanticEdit::Delete
-            | SemanticEdit::ReorderScene { .. } => self.target_scene_locus(),
-            SemanticEdit::SetGain { .. } | SemanticEdit::SetFade { .. } => self
-                .target_source_locus()
-                .or_else(|_| self.target_scene_locus()),
-            SemanticEdit::Callout { .. } => {
-                let Some(locus) = self.current_locus()? else {
-                    return Err(EngineError::Edit(
-                        "callout edit needs a current locus".into(),
-                    ));
-                };
-                if locus.kind == LocusKind::Callout {
-                    return Ok(locus);
-                }
-                Err(EngineError::Edit(
-                    "callout edit needs a callout locus".into(),
-                ))
-            }
-            SemanticEdit::SetPosition { .. } => {
-                let Some(locus) = self.current_locus()? else {
-                    return Err(EngineError::Edit(
-                        "canvas position needs a current overlay locus".into(),
-                    ));
-                };
-                if matches!(locus.kind, LocusKind::Title | LocusKind::Callout) {
-                    return Ok(locus);
-                }
-                Err(EngineError::Edit(
-                    "canvas position needs a title or callout locus".into(),
-                ))
-            }
-            SemanticEdit::ResizeOverlay { .. } => {
-                let Some(locus) = self.current_locus()? else {
-                    return Err(EngineError::Edit(
-                        "canvas resize needs a current overlay locus".into(),
-                    ));
-                };
-                if matches!(locus.kind, LocusKind::Title | LocusKind::Callout) {
-                    return Ok(locus);
-                }
-                Err(EngineError::Edit(
-                    "canvas resize needs a title or callout locus".into(),
-                ))
-            }
+        let here = self.current_locus()?;
+        let Some(locus) = here else {
+            return Err(EngineError::Edit(refuse_edit(None, edit)));
+        };
+        if lattice_engine::is_legal_verb(&locus, verb::verb_for_edit(edit)) {
+            return Ok(locus);
         }
-    }
-
-    pub(crate) fn target_scene_locus(&self) -> Result<Locus, EngineError> {
-        let loci = self.loci()?;
-        if let Some(cur) = self.current_locus()? {
-            if cur.kind == LocusKind::Scene {
-                return Ok(cur);
-            }
-            if let Some(scene_id) = &cur.scene_id
-                && let Some(scene) = loci
-                    .iter()
-                    .find(|locus| locus.kind == LocusKind::Scene && locus.node_id == *scene_id)
-            {
-                return Ok(scene.clone());
-            }
-        }
-        if let Some(at) = self
-            .engine
-            .locus_at_timeline(&self.compilation, self.playhead)?
-        {
-            if at.kind == LocusKind::Scene {
-                return Ok(at);
-            }
-            if let Some(scene_id) = &at.scene_id
-                && let Some(scene) = loci
-                    .iter()
-                    .find(|locus| locus.kind == LocusKind::Scene && locus.node_id == *scene_id)
-            {
-                return Ok(scene.clone());
-            }
-        }
-        loci.into_iter()
-            .find(|locus| locus.kind == LocusKind::Scene)
-            .ok_or_else(|| EngineError::Edit("no scene locus".into()))
-    }
-
-    pub(crate) fn target_source_locus(&self) -> Result<Locus, EngineError> {
-        let loci = self.loci()?;
-        if let Some(cur) = self.current_locus()? {
-            if cur.kind == LocusKind::Source {
-                return Ok(cur);
-            }
-            if let Some(scene_id) = &cur.scene_id
-                && let Some(source) = loci.iter().find(|locus| {
-                    locus.kind == LocusKind::Source && locus.scene_id.as_deref() == Some(scene_id)
-                })
-            {
-                return Ok(source.clone());
-            }
-        }
-        loci.into_iter()
-            .find(|locus| locus.kind == LocusKind::Source)
-            .ok_or_else(|| EngineError::Edit("no source locus".into()))
+        Err(EngineError::Edit(refuse_edit(Some(&locus), edit)))
     }
 
     fn playhead_source_time(&self) -> Result<Time, EngineError> {
@@ -1365,4 +1378,17 @@ fn clamp_time(time: Time, max: Time) -> Time {
     } else {
         time
     }
+}
+
+fn source_id_for_clip(session: &StudioSession, clip_id: &str) -> Option<String> {
+    for scene in &session.compilation.project.scenes {
+        if let Some(placement) = scene
+            .placements
+            .iter()
+            .find(|placement| placement.id == clip_id)
+        {
+            return placement.source_id.clone();
+        }
+    }
+    None
 }

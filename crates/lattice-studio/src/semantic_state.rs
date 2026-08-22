@@ -20,6 +20,7 @@ pub fn snapshot(session: &StudioSession) -> Value {
         Ok(None) => Value::Null,
         Err(err) => json!({ "error": err.to_string() }),
     };
+    let utterance = session.utterance();
     json!({
         "locus": locus,
         "playhead": session.playhead().to_string(),
@@ -29,6 +30,15 @@ pub fn snapshot(session: &StudioSession) -> Value {
         "gesture": gesture_value(session.gesture()),
         "drag": drag_value(session),
         "last_gesture_error": session.last_gesture_error(),
+        "pointing": utterance.pointing,
+        "projection": session.touched_projection().as_str(),
+        "spoken": utterance.spoken.iter().map(|clause| &clause.text).collect::<Vec<_>>(),
+        "unresolved": session.unresolved_pointing().map(|point| {
+            json!({
+                "projection": point.projection.as_str(),
+                "candidates": point.candidates.iter().map(|locus| locus.id.as_str()).collect::<Vec<_>>(),
+            })
+        }),
     })
 }
 
@@ -44,6 +54,7 @@ fn interaction_mode(session: &StudioSession) -> &'static str {
     }
     match session.gesture() {
         TimelineGesture::None => "idle",
+        TimelineGesture::Point { .. } => "point",
         TimelineGesture::Scrub { .. } => "scrub",
         TimelineGesture::Trim { .. } => "trim",
         TimelineGesture::Reorder { .. } => "reorder",
@@ -55,6 +66,7 @@ fn interaction_mode(session: &StudioSession) -> &'static str {
 fn gesture_value(gesture: &TimelineGesture) -> Value {
     match gesture {
         TimelineGesture::None => json!({ "kind": "none" }),
+        TimelineGesture::Point { start_x } => json!({ "kind": "point", "start_x": start_x }),
         TimelineGesture::Scrub { start_playhead, .. } => {
             json!({ "kind": "scrub", "start_playhead": start_playhead.to_string() })
         }
@@ -140,7 +152,9 @@ fn drag_value(session: &StudioSession) -> Value {
         });
     }
     match session.gesture() {
-        TimelineGesture::None | TimelineGesture::Scrub { .. } => Value::Null,
+        TimelineGesture::None | TimelineGesture::Point { .. } | TimelineGesture::Scrub { .. } => {
+            Value::Null
+        }
         TimelineGesture::Trim {
             clip_id,
             preview_in,

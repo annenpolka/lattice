@@ -284,11 +284,26 @@ fn canvas_source_and_timeline_point_at_the_same_title_locus() {
 
     let range = title.timeline_span.expect("title timeline span");
     let inside = range.start;
-    let from_tl = session
-        .point_from_timeline_time(inside)
-        .unwrap()
-        .expect("timeline point");
-    assert_eq!(from_tl.id, title.id);
+    let from_tl = session.point_from_timeline_time(inside).unwrap();
+    if let Some(pointed) = from_tl {
+        assert_eq!(pointed.id, title.id);
+    } else {
+        let unresolved = session
+            .unresolved_pointing()
+            .expect("coordinate overlap stays unresolved");
+        assert!(
+            unresolved
+                .candidates
+                .iter()
+                .any(|locus| locus.id == title.id),
+            "title must be a candidate on the Timeline"
+        );
+        let picked = session
+            .pick_point_candidate(title.id.clone())
+            .unwrap()
+            .expect("pick title");
+        assert_eq!(picked.id, title.id);
+    }
     let engine_tl = engine
         .locus_at_timeline(&compilation, inside)
         .unwrap()
@@ -506,6 +521,7 @@ fn session_and_layout_have_no_gpui() {
     let viewport = include_str!("../src/viewport.rs");
     let preview = include_str!("../src/preview.rs");
     let interaction = include_str!("../src/interaction.rs");
+    let verb = include_str!("../src/verb.rs");
     assert!(!session.contains("gpui"), "session must stay GPUI-free");
     assert!(!layout.contains("gpui"), "layout must stay GPUI-free");
     assert!(!gesture.contains("gpui"), "gesture must stay GPUI-free");
@@ -515,6 +531,7 @@ fn session_and_layout_have_no_gpui() {
         !interaction.contains("gpui"),
         "interaction must stay GPUI-free"
     );
+    assert!(!verb.contains("gpui"), "verb spine must stay GPUI-free");
     let core = include_str!("../../../crates/lattice-core/Cargo.toml");
     assert!(!core.contains("gpui"));
 }

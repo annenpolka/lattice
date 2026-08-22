@@ -164,6 +164,33 @@ impl Engine {
         Ok(crate::locus::locus_at_timeline(&loci, time).cloned())
     }
 
+    /// All loci covering a timeline time, including Scene and Source via clip membership.
+    /// Does not rank or collapse. Studio uses this for overlap pointing.
+    pub fn loci_covering_timeline(
+        &self,
+        compilation: &Compilation,
+        time: Time,
+    ) -> Result<Vec<Locus>, EngineError> {
+        let timeline = flatten_project(&compilation.project)?;
+        let loci = crate::locus::loci_from_project(
+            &compilation.project,
+            &timeline,
+            compilation.origin.as_deref(),
+        );
+        Ok(crate::locus::loci_covering_timeline(
+            &compilation.project,
+            &timeline,
+            &loci,
+            time,
+        ))
+    }
+
+    /// Engine-named legal edits for a committed locus. Surfaces do not invent this set.
+    #[must_use]
+    pub fn legal_edits(&self, locus: &Locus) -> Vec<crate::legal::LegalEdit> {
+        crate::legal::legal_edits_for(locus)
+    }
+
     pub fn propose(
         &self,
         compilation: &Compilation,

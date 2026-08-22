@@ -7,6 +7,7 @@ use lattice_engine::{
 };
 
 use crate::session::StudioSession;
+use crate::verb::{self, PointCandidate, Utterance};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TreeNode {
@@ -52,6 +53,9 @@ pub struct InspectorView {
     pub defined_in: String,
     pub locus_id: Option<String>,
     pub go_to_definition: Option<Span>,
+    /// Title-shaped fields exist only when here is Title.
+    pub title_fields: bool,
+    pub utterance: UtteranceView,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -81,6 +85,17 @@ pub struct TimelineView {
     pub insertion_marker: Option<Time>,
     pub viewport_start: Time,
     pub viewport_duration: Time,
+    /// Overlap cards on this projection only. Not a cross-surface modal.
+    pub candidates: Vec<PointCandidate>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct UtteranceView {
+    pub here: String,
+    pub pointing: String,
+    pub legal: Vec<String>,
+    pub routed: Vec<String>,
+    pub spoken: Vec<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -130,7 +145,7 @@ pub fn from_session(session: &StudioSession) -> Result<StudioLayout, lattice_eng
             text: compilation.source.clone(),
             highlight: current.as_ref().and_then(|locus| locus.source_span),
         },
-        inspector: inspector_from_locus(current.as_ref(), session.path()),
+        inspector: inspector_from_locus(current.as_ref(), session.path(), &session.utterance()),
         timeline: timeline_view(session, &timeline, current.as_ref()),
         review: session.review_proposal().map(review_from_proposal),
         playhead: session.playhead(),
@@ -175,20 +190,6 @@ fn tree_from_compilation(
                     current,
                     Vec::new(),
                 ));
-                if source
-                    .time_map
-                    .segments
-                    .iter()
-                    .any(|segment| segment.rate.num() == 0)
-                {
-                    children.push(TreeNode {
-                        id: format!("freeze:{}", source.id),
-                        kind: "freeze".into(),
-                        label: "freeze".into(),
-                        selected: false,
-                        children: Vec::new(),
-                    });
-                }
             }
             for locus in loci {
                 if locus.scene_id.as_deref() != Some(scene.id.as_str()) {
@@ -305,14 +306,26 @@ fn canvas_from_plan(
     }
 }
 
-fn inspector_from_locus(locus: Option<&Locus>, path: &std::path::Path) -> InspectorView {
+fn inspector_from_locus(
+    locus: Option<&Locus>,
+    path: &std::path::Path,
+    utterance: &Utterance,
+) -> InspectorView {
+    let utterance = utterance_view(utterance);
     let Some(locus) = locus else {
+        let heading = if utterance.pointing == "unresolved-pointing" {
+            "unresolved pointing".into()
+        } else {
+            "(no locus)".into()
+        };
         return InspectorView {
-            heading: "(no locus)".into(),
+            heading,
             origin: String::new(),
             defined_in: String::new(),
             locus_id: None,
             go_to_definition: None,
+            title_fields: false,
+            utterance,
         };
     };
     let file = file_label(path);
@@ -332,6 +345,26 @@ fn inspector_from_locus(locus: Option<&Locus>, path: &std::path::Path) -> Inspec
         defined_in,
         locus_id: Some(locus.id.as_str().to_string()),
         go_to_definition: locus.source_span,
+        title_fields: locus.kind == LocusKind::Title,
+        utterance,
+    }
+}
+
+fn utterance_view(utterance: &Utterance) -> UtteranceView {
+    UtteranceView {
+        here: utterance.here.clone().unwrap_or_else(|| "(none)".into()),
+        pointing: utterance.pointing.clone(),
+        legal: utterance
+            .legal
+            .iter()
+            .map(|edit| format!("{} → {} ({})", edit.verb, edit.target.as_str(), edit.scope))
+            .collect(),
+        routed: utterance.routed.clone(),
+        spoken: utterance
+            .spoken
+            .iter()
+            .map(|clause| clause.text.clone())
+            .collect(),
     }
 }
 
@@ -365,16 +398,34 @@ fn timeline_view(
                 .map(|scene| scene.id.clone())
                 .unwrap_or_default();
             let overlay = matches!(kind.as_str(), "title" | "callout");
+            let source_id = session
+                .compilation()
+                .project
+                .scenes
+                .iter()
+                .find_map(|scene| {
+                    scene
+                        .placements
+                        .iter()
+                        .find(|placement| placement.id == clip.id)
+                        .and_then(|placement| placement.source_id.clone())
+                });
             let selected = current.is_some_and(|locus| {
                 if overlay {
                     return locus.id.as_str() == clip.id || locus.node_id == clip.id;
                 }
-                locus.id.as_str() == clip.id
-                    || locus.node_id == clip.id
-                    || locus.scene_id.as_deref() == Some(scene_id.as_str())
-                    || current_id
-                        .as_ref()
-                        .is_some_and(|id| id.as_str() == scene_id)
+                if locus.kind == LocusKind::Source {
+                    return source_id.as_deref() == Some(locus.node_id.as_str())
+                        || locus.id.as_str() == clip.id
+                        || locus.node_id == clip.id;
+                }
+                if locus.kind == LocusKind::Scene {
+                    return locus.scene_id.as_deref() == Some(scene_id.as_str())
+                        || current_id
+                            .as_ref()
+                            .is_some_and(|id| id.as_str() == scene_id);
+                }
+                locus.id.as_str() == clip.id || locus.node_id == clip.id
             });
             let (start, duration) = crate::interaction::ephemeral_clip_span(session, &clip.id)
                 .unwrap_or((clip.span.start, clip.span.duration));
@@ -403,6 +454,10 @@ fn timeline_view(
         insertion_marker: crate::interaction::insertion_marker(session),
         viewport_start: session.viewport().visible_start(),
         viewport_duration: session.viewport().visible_duration(),
+        candidates: session
+            .unresolved_pointing()
+            .map(verb::candidate_cards)
+            .unwrap_or_default(),
     }
 }
 

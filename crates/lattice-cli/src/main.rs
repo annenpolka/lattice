@@ -558,7 +558,14 @@ fn inspect_command(
     let compilation = engine.compile_path(file)?;
     let projection = engine.inspect(&compilation, &LocusId::new(locus))?;
     if json {
-        println!("{}", serde_json::to_string_pretty(&projection)?);
+        let mut value = serde_json::to_value(&projection)?;
+        if let Some(object) = value.as_object_mut() {
+            object.insert(
+                "legal".into(),
+                serde_json::to_value(engine.legal_edits(&projection.locus))?,
+            );
+        }
+        println!("{}", serde_json::to_string_pretty(&value)?);
     } else {
         println!("{}", projection.locus.id.as_str());
         println!("node {}", projection.core.node_id);

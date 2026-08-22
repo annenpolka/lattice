@@ -171,3 +171,53 @@ pub fn locus_at_timeline(loci: &[Locus], time: Time) -> Option<&Locus> {
             (locus.specificity(), i64::MAX - span)
         })
 }
+
+/// Every locus whose identity or relation occupies `time` on the flattened timeline.
+///
+/// Scene and Source loci do not store `timeline_span`; they are included when a
+/// placement they own covers `time`. This is the coordinate-point set. Ranking
+/// and identity-bearing clip hits are the caller's job.
+#[must_use]
+pub fn loci_covering_timeline(
+    project: &Project,
+    timeline: &Timeline,
+    loci: &[Locus],
+    time: Time,
+) -> Vec<Locus> {
+    loci.iter()
+        .filter(|locus| locus_covers_timeline(project, timeline, locus, time))
+        .cloned()
+        .collect()
+}
+
+fn locus_covers_timeline(
+    project: &Project,
+    timeline: &Timeline,
+    locus: &Locus,
+    time: Time,
+) -> bool {
+    match locus.kind {
+        LocusKind::Title | LocusKind::Callout | LocusKind::Speech | LocusKind::Placement => {
+            locus.contains_timeline_time(time)
+        }
+        LocusKind::Source => project.scenes.iter().any(|scene| {
+            scene.placements.iter().any(|placement| {
+                placement.source_id.as_deref() == Some(locus.node_id.as_str())
+                    && timeline
+                        .clips
+                        .iter()
+                        .any(|clip| clip.id == placement.id && clip.span.contains(time))
+            })
+        }),
+        LocusKind::Scene => project.scenes.iter().any(|scene| {
+            (scene.id == locus.node_id || locus.scene_id.as_deref() == Some(scene.id.as_str()))
+                && scene.placements.iter().any(|placement| {
+                    timeline
+                        .clips
+                        .iter()
+                        .any(|clip| clip.id == placement.id && clip.span.contains(time))
+                })
+        }),
+        LocusKind::Sequence | LocusKind::Media => false,
+    }
+}
