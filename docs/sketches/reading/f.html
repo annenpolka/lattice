@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>F · Freeze · the Reading</title>
+  <link rel="stylesheet" href="reading.css" />
+</head>
+<body>
+  <header class="top">
+    <div class="brand">
+      <div class="mark"></div>
+      <h1>The Reading <span>freeze</span></h1>
+    </div>
+    <nav class="scenes" aria-label="Scenes">
+      <a href="a.html">A</a>
+      <a href="b.html">B</a>
+      <a href="c.html">C</a>
+      <a href="d.html">D</a>
+      <a href="e.html">E</a>
+      <a class="here" href="f.html">F</a>
+      <a href="g.html">G</a>
+      <a href="h.html">H</a>
+    </nav>
+  </header>
+
+  <div class="scene-head">
+    <div>
+      <div class="k">Scene F</div>
+      <h2>Freeze is a Source reading, not a selectable row</h2>
+      <p>
+        Selectable implies resolvable. A row that can be pointed at must resolve to a real
+        <code>LocusId</code>. Freeze has none. It is a zero-rate TimeMap segment disclosed on
+        the Source that owns it.
+      </p>
+    </div>
+  </div>
+
+  <div class="page">
+    <div class="work">
+      <section class="witness live" aria-label="Witness">
+        <div class="cap">Witness <b>VEL caret · Source fight</b> <span class="tag">points</span></div>
+        <div class="body">
+          <div class="tree">
+            <a href="b.html">sequence main</a>
+            <div class="nest">
+              <a href="b.html">scene demo</a>
+              <div class="nest">
+                <a class="here" href="f.html">source fight</a>
+                <div class="explain">
+                  TimeMap hold (rate 0) · 5.2s for 1.5s<br />
+                  explain event · <code>Origin::Builtin</code><br />
+                  not a locus — not selectable
+                </div>
+                <a href="e.html">source score</a>
+                <a href="a.html">title Hello</a>
+                <span class="row">callout Hold</span>
+              </div>
+            </div>
+          </div>
+          <p class="note-line">
+            There is no <code>freeze:fight</code> row. Clicking an explanation does not call
+            <code>point_at</code> with an id no Locus has.
+          </p>
+        </div>
+      </section>
+
+      <aside class="reading" aria-label="Reading">
+        <div class="cap">Reading <b>Source · fight</b></div>
+        <div class="body">
+          <h3>Source · fight</h3>
+          <div class="clause">
+            <div class="n">Subject</div>
+            <p>
+              <code>LocusKind::Source</code> · <span class="chip">source:fight</span><br />
+              citation <code>main.vel:13</code> · <code>game[10s..20s] as fight</code>
+            </p>
+          </div>
+          <div class="clause">
+            <div class="n">Witness</div>
+            <p>VEL caret on the binding. The tree cites the same <code>LocusId</code>.</p>
+          </div>
+          <div class="clause">
+            <div class="n">Reason</div>
+            <p>Pointed at the source’s own span. Not derived, not ranked.</p>
+          </div>
+          <div class="clause">
+            <div class="n">When</div>
+            <p>a Source has no timeline range of its own; its TimeMap and placements do</p>
+          </div>
+          <div class="absence">
+            <strong>Freeze, explained.</strong>
+            Zero-rate TimeMap segment at 5.2s for 1.5s.
+            Existing explain event: “TimeMap hold (rate 0)”,
+            <code>Origin::Builtin { name }</code>.
+            Authored at <code>main.vel:16</code> as structure on this source, not as a second identity.
+          </div>
+          <div class="gap">
+            <strong>Named gap.</strong>
+            Core has no TimeMap edit. There is no <code>Core Freeze</code> verb,
+            and none is simulated.
+          </div>
+          <div class="verbs">
+            <div class="verb">
+              <div>
+                <div class="name">Trim in/out</div>
+                <div class="scope">this source binding</div>
+              </div>
+              <span class="target">source:fight</span>
+            </div>
+            <div class="verb">
+              <div>
+                <div class="name">Set gain</div>
+                <div class="scope">this scene’s named source</div>
+              </div>
+              <span class="target">source:fight</span>
+            </div>
+            <div class="verb">
+              <div>
+                <div class="name">Fade in</div>
+                <div class="scope">this source’s video, anchored at scene start</div>
+              </div>
+              <span class="target">source:fight</span>
+            </div>
+          </div>
+        </div>
+      </aside>
+    </div>
+
+    <section class="vel" aria-label="VEL">
+      <div class="cap">VEL <b>main.vel:13 is the locus · line 16 is the explanation</b></div>
+      <pre><span class="ln">12</span>  scene demo {
+<span class="ln">13</span>    <span class="hit">game[10s..20s] as fight</span>
+<span class="ln">14</span>    bgm[0s..10s] as score
+<span class="ln">16</span>    <span class="note">freeze fight at 5.2s for 1.5s</span>
+<span class="ln">18</span>    title "Hello" {</pre>
+    </section>
+  </div>
+</body>
+</html>

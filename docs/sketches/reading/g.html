@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>G · Review · the Reading</title>
+  <link rel="stylesheet" href="reading.css" />
+</head>
+<body>
+  <header class="top">
+    <div class="brand">
+      <div class="mark"></div>
+      <h1>The Reading <span>proposal</span></h1>
+    </div>
+    <nav class="scenes" aria-label="Scenes">
+      <a href="a.html">A</a>
+      <a href="b.html">B</a>
+      <a href="c.html">C</a>
+      <a href="d.html">D</a>
+      <a href="e.html">E</a>
+      <a href="f.html">F</a>
+      <a class="here" href="g.html">G</a>
+      <a href="h.html">H</a>
+    </nav>
+  </header>
+
+  <div class="scene-head">
+    <div>
+      <div class="k">Scene G</div>
+      <h2>Review is a Reading of a proposal</h2>
+      <p>
+        Same subject, scope, target, and absence clauses — plus the diff and the current picture.
+        It can go stale via <code>base_revision</code>. It is not a pane and not a gate.
+        Direct manipulation still commits without opening this.
+      </p>
+    </div>
+  </div>
+
+  <div class="page">
+    <div class="work pair">
+      <article class="reading proposal" aria-label="Title text proposal">
+        <div class="cap">Proposal Reading <b>after Title text</b></div>
+        <div class="body">
+          <h3>Title · Hello → Hold on</h3>
+          <div class="clause">
+            <div class="n">Subject</div>
+            <p><span class="chip">demo:title:1</span> · <code>main.vel:18</code> · kind Title</p>
+          </div>
+          <div class="clause">
+            <div class="n">Scope</div>
+            <p>definition text · <code>SemanticEdit::Title { text }</code></p>
+          </div>
+          <div class="clause">
+            <div class="n">Target</div>
+            <p><span class="chip">demo:title:1</span> — the proposal names the same locus the session holds</p>
+          </div>
+          <div class="stage game" style="margin-top:8px">
+            <div class="overlay">Hold on</div>
+          </div>
+          <div class="diff">
+            <div class="ctx">@@ title Hello · main.vel:18</div>
+            <div class="del">- title "Hello" {</div>
+            <div class="add">+ title "Hold on" {</div>
+            <div class="ctx">    at 1s for 3s</div>
+          </div>
+          <div class="actions">
+            <button type="button" class="primary">Apply</button>
+            <button type="button">Reject</button>
+          </div>
+          <p class="note-line">
+            Current VEL is unchanged until Apply. This is a projection of
+            <code>EditProposal</code> (<code>locus_id</code>, <code>edit</code>, <code>vel_diff</code>,
+            <code>base_revision</code>), not a checkpoint on the way to an edit.
+          </p>
+        </div>
+      </article>
+
+      <article class="reading proposal" aria-label="SetPosition proposal">
+        <div class="cap">Proposal Reading <b>after SetPosition</b></div>
+        <div class="body">
+          <h3>Title · Hello · moved</h3>
+          <div class="clause">
+            <div class="n">Subject</div>
+            <p><span class="chip">demo:title:1</span> · <code>main.vel:18</code> · kind Title</p>
+          </div>
+          <div class="clause">
+            <div class="n">Scope</div>
+            <p>this placement’s geometry · <code>SemanticEdit::SetPosition</code></p>
+          </div>
+          <div class="clause">
+            <div class="n">Target</div>
+            <p><span class="chip">demo:title:1</span> · visual is present · same shared locus</p>
+          </div>
+          <div class="stage game" style="margin-top:8px">
+            <div class="overlay moved">
+              Hello
+              <span class="handle tl"></span><span class="handle tr"></span>
+              <span class="handle bl"></span><span class="handle br"></span>
+            </div>
+          </div>
+          <div class="diff">
+            <div class="ctx">@@ title Hello · placement geometry</div>
+            <div class="del">- position 0.18 0.62</div>
+            <div class="add">+ position 0.48 0.28</div>
+            <div class="ctx">  scale 1.0</div>
+          </div>
+          <div class="absence">
+            <strong>Not a gate.</strong>
+            The canvas move already commits one SetPosition → one rewrite → one Undo.
+            This Reading is the leftover proposal, not a review that had to happen first.
+            Review is not title-text-only.
+          </div>
+          <div class="actions">
+            <button type="button" class="primary">Apply</button>
+            <button type="button">Reject</button>
+          </div>
+          <p class="note-line">
+            Stale if <code>base_revision</code> no longer matches — <code>EngineError::StaleProposal</code>.
+          </p>
+        </div>
+      </article>
+    </div>
+
+    <section class="vel" aria-label="VEL">
+      <div class="cap">VEL <b>current source — Review does not hide it</b></div>
+      <pre><span class="ln">18</span>    <span class="hit">title "Hello" {</span>
+<span class="ln">19</span>      at 1s for 3s
+<span class="ln">20</span>      opacity 90
+<span class="ln">21</span>    }</pre>
+    </section>
+  </div>
+</body>
+</html>

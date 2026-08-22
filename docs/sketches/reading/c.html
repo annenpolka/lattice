@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>C · Scrub Audio · the Reading</title>
+  <link rel="stylesheet" href="reading.css" />
+</head>
+<body>
+  <header class="top">
+    <div class="brand">
+      <div class="mark"></div>
+      <h1>The Reading <span>scrub</span></h1>
+    </div>
+    <nav class="scenes" aria-label="Scenes">
+      <a href="a.html">A</a>
+      <a href="b.html">B</a>
+      <a class="here" href="c.html">C</a>
+      <a href="d.html">D</a>
+      <a href="e.html">E</a>
+      <a href="f.html">F</a>
+      <a href="g.html">G</a>
+      <a href="h.html">H</a>
+    </nav>
+  </header>
+
+  <div class="scene-head">
+    <div>
+      <div class="k">Scene C</div>
+      <h2>Scrub the Audio rail across the title span</h2>
+      <p>
+        Ruler and rail background witness time. Scrub moves the playhead and nothing else.
+        The shared locus stays Title Hello even while time crosses 1s–4s.
+      </p>
+    </div>
+  </div>
+
+  <div class="page">
+    <div class="work">
+      <section class="witness live" aria-label="Witness">
+        <div class="cap">Witness of time <b>Audio rail background</b> <span class="tag">scrubs — does not point</span></div>
+        <div class="body">
+          <div class="stage game" data-stage data-empty-before data-span-start="1" data-span-end="4">
+            <div class="overlay">
+              Hello
+              <span class="handle tl"></span><span class="handle tr"></span>
+              <span class="handle bl"></span><span class="handle br"></span>
+            </div>
+          </div>
+          <div class="timebar">
+            <span>playhead</span>
+            <span class="t" data-playhead-label>2.4s</span>
+            <span class="sep">·</span>
+            <span>locus still <span class="chip">demo:title:1</span></span>
+            <span class="sep">·</span>
+            <button type="button" data-jump="0">0s</button>
+            <button type="button" data-jump="1.2">1.2s</button>
+            <button type="button" data-jump="2.4">2.4s</button>
+            <button type="button" data-jump="3.6">3.6s</button>
+          </div>
+          <div class="tl">
+            <div class="ruler">
+              <span style="left:0%">0s</span>
+              <span style="left:10%">1s</span>
+              <span style="left:24%">2.4s</span>
+              <span style="left:40%">4s</span>
+              <span style="left:100%">10s</span>
+            </div>
+            <div class="rail">
+              <div class="lab">Video</div>
+              <div class="track">
+                <a class="clip" style="left:0;width:100%" href="b.html">fight</a>
+                <div class="playhead" data-playhead data-duration="10" style="left:24%"></div>
+              </div>
+            </div>
+            <div class="rail">
+              <div class="lab">Text</div>
+              <div class="track">
+                <span class="clip text here" style="left:10%;width:30%">Hello</span>
+                <div class="playhead" data-playhead data-duration="10" style="left:24%"></div>
+              </div>
+            </div>
+            <div class="rail">
+              <div class="lab">Audio</div>
+              <div class="track scrub-hit" data-scrub data-duration="10">
+                <span class="clip audio" style="left:0;width:100%;pointer-events:none">score</span>
+                <div class="playhead" data-playhead data-duration="10" style="left:24%"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <aside class="reading" aria-label="Reading">
+        <div class="cap">Reading <b>unchanged subject</b></div>
+        <div class="body">
+          <h3>Title · Hello</h3>
+          <div class="clause">
+            <div class="n">Subject</div>
+            <p>
+              <code>LocusKind::Title</code> · Hello · <span class="chip">demo:title:1</span><br />
+              citation <code>main.vel:18</code>
+            </p>
+          </div>
+          <div class="clause">
+            <div class="n">Witness</div>
+            <p>Last pointing was the title. The Audio rail is witnessing time, not pointing.</p>
+          </div>
+          <div class="clause">
+            <div class="n">Reason</div>
+            <p>Scrub is not a pointing act. Time navigation does not call <code>locus_at_timeline</code>.</p>
+          </div>
+          <div class="clause">
+            <div class="n">When</div>
+            <p data-when data-span-start="1" data-span-end="4">
+              active 1s–4s; you are at <span class="mono">2.4s</span> <em>(inside)</em>
+            </p>
+          </div>
+          <div class="absence" data-scrub-note>
+            <strong>Scrub does not re-point.</strong>
+            Dragging the Audio rail across the title span moved the playhead only.
+            The shared locus is still <span class="chip">demo:title:1</span>.
+          </div>
+          <p class="note-line">
+            Drag the Audio rail, or use the time chips. Coupling exists only as named verbs:
+            Seek to here, or Read the playhead — neither is happening here.
+          </p>
+        </div>
+      </aside>
+    </div>
+
+    <section class="vel" aria-label="VEL">
+      <div class="cap">VEL <b>main.vel:18 — title still the citation</b></div>
+      <pre><span class="ln">13</span>    game[10s..20s] as fight
+<span class="ln">14</span>    bgm[0s..10s] as score
+<span class="ln">18</span>    <span class="hit">title "Hello" {</span>
+<span class="ln">19</span>    <span class="hit">  at 1s for 3s</span>
+<span class="ln">20</span>    <span class="hit">  opacity 90</span>
+<span class="ln">21</span>    <span class="hit">}</span></pre>
+    </section>
+  </div>
+  <script src="reading.js"></script>
+</body>
+</html>
