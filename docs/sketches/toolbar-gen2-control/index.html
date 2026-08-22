@@ -1,0 +1,740 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Studio toolbar gen2 — CONTROL</title>
+  <style>
+    :root {
+      --bg: #0c0e12;
+      --panel: #141821;
+      --line: #2a3140;
+      --text: #e8edf5;
+      --muted: #8b95a8;
+      --dim: #5c6678;
+      --teal: #3dd6c6;
+      --amber: #e8b86d;
+      --video: #4a3a6a;
+      --audio: #5a7a9a;
+      --stage: #1a2330;
+      --rail: #1a1f28;
+      --title-sel: #1c3d3a;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      background: #07080b;
+      color: var(--text);
+      font-family: "Segoe UI", "IBM Plex Sans", sans-serif;
+    }
+    body { padding: 28px 32px 40px; }
+    body.capture {
+      padding: 0;
+      background: var(--bg);
+      overflow: hidden;
+    }
+    body.capture .page-head,
+    body.capture .scene { display: none; }
+    body.capture .scene.capture-target {
+      display: block;
+      width: 1280px;
+      margin: 0;
+    }
+    body.capture .scene.capture-target h2,
+    body.capture .scene.capture-target .cap { display: none; }
+    body.capture .studio,
+    body.capture .note-strip {
+      border: none;
+    }
+    body.capture .note-strip {
+      width: 1280px;
+      height: 720px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      padding: 48px 36px;
+    }
+    .page-head { margin-bottom: 18px; max-width: 1280px; }
+    .page-head h1 { font-size: 20px; font-weight: 600; }
+    .page-head h1 span { color: var(--muted); font-weight: 500; }
+    .page-head p { color: var(--muted); font-size: 13px; margin-top: 6px; line-height: 1.45; }
+    .scene {
+      width: 1280px;
+      margin: 0 0 36px;
+    }
+    .scene h2 {
+      font-size: 13px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--teal);
+      margin-bottom: 8px;
+    }
+    .scene .cap {
+      color: var(--muted);
+      font-size: 12px;
+      margin-bottom: 10px;
+      line-height: 1.4;
+    }
+    .studio {
+      width: 1280px;
+      height: 720px;
+      background: var(--bg);
+      color: var(--text);
+      border: 1px solid var(--line);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .header {
+      display: flex;
+      align-items: center;
+      height: 36px;
+      padding: 0 12px;
+      background: var(--panel);
+      border-bottom: 1px solid var(--line);
+      flex-shrink: 0;
+    }
+    .brand { color: var(--teal); margin-right: 12px; }
+    .file { color: var(--muted); }
+    .strip {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 4px;
+      padding: 4px 8px;
+      background: var(--panel);
+      border-bottom: 1px solid var(--line);
+      flex-shrink: 0;
+    }
+    .btn {
+      padding: 4px 12px;
+      background: var(--line);
+      color: var(--text);
+      font-size: 13px;
+      line-height: 1.4;
+    }
+    .btn.teal { background: var(--teal); color: var(--text); }
+    .status { padding: 0 8px; color: var(--muted); font-size: 13px; }
+    .ghost {
+      padding: 4px 12px;
+      border: 1px dashed #5a2430;
+      color: #8a6a70;
+      font-size: 13px;
+      text-decoration: line-through;
+      background: #1a1014;
+    }
+    .body {
+      display: flex;
+      flex: 1;
+      min-height: 0;
+    }
+    .pane {
+      display: flex;
+      flex-direction: column;
+      border-right: 1px solid var(--line);
+      background: var(--panel);
+      min-width: 0;
+    }
+    .pane.seq { width: 200px; flex: none; }
+    .pane.canvas { flex: 1.15; }
+    .pane.vel { flex: 1; }
+    .pane.insp { width: 240px; flex: none; border-right: none; }
+    .ptitle {
+      padding: 4px 8px;
+      border-bottom: 1px solid var(--line);
+      color: var(--teal);
+      font-size: 13px;
+    }
+    .pbody { padding: 8px; flex: 1; overflow: hidden; font-size: 13px; }
+    .tree .row { padding: 2px 4px 2px 8px; }
+    .tree .row.d1 { padding-left: 22px; }
+    .tree .row.d2 { padding-left: 36px; }
+    .tree .row.sel { background: var(--title-sel); color: var(--teal); }
+    .stage {
+      margin: 12px;
+      height: calc(100% - 24px);
+      background: var(--stage);
+      border: 1px solid var(--line);
+      position: relative;
+    }
+    .frame {
+      position: absolute;
+      inset: 16px 20px;
+      background: #101820;
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+    }
+    .overlay {
+      border: 2px solid var(--teal);
+      padding: 4px 10px;
+      margin-bottom: 12px;
+      color: var(--text);
+      font-size: 18px;
+    }
+    .vel pre {
+      color: var(--text);
+      font-family: ui-monospace, "Cascadia Mono", monospace;
+      font-size: 12px;
+      line-height: 1.45;
+      white-space: pre;
+    }
+    .vel .hi { background: #1c3d3a; color: var(--teal); }
+    .insp .muted { color: var(--muted); }
+    .insp .teal { color: var(--teal); }
+    .insp .go {
+      display: inline-block;
+      margin-top: 8px;
+      padding: 4px 12px;
+      background: var(--teal);
+      color: var(--bg);
+    }
+    .insp .field-label { color: var(--muted); margin-top: 10px; }
+    .insp .field {
+      margin-top: 4px;
+      padding: 4px 8px;
+      border: 1px solid var(--teal);
+      background: #0c0e12;
+    }
+    .insp .rowbtns { display: flex; gap: 8px; margin-top: 8px; }
+    .utter { margin-top: 12px; }
+    .utter .h { color: var(--teal); }
+    .utter .m { color: var(--muted); }
+    .utter .line { margin-top: 4px; }
+    .export {
+      margin-top: 8px;
+      padding: 4px 12px;
+      border: 1px solid var(--teal);
+      display: inline-block;
+    }
+    .tl {
+      height: 160px;
+      border-top: 1px solid var(--line);
+      background: var(--panel);
+      flex-shrink: 0;
+    }
+    .ruler {
+      padding: 4px 8px 4px 72px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+    .cands { padding: 0 8px 4px; }
+    .cand {
+      display: inline-block;
+      margin: 0 4px 4px 0;
+      padding: 4px 8px;
+      background: #1a1f28;
+      border: 1px solid var(--teal);
+      font-size: 12px;
+    }
+    .track {
+      display: flex;
+      align-items: center;
+      height: 28px;
+      padding: 0 8px;
+      gap: 8px;
+    }
+    .tname { width: 56px; color: var(--muted); font-size: 13px; flex-shrink: 0; }
+    .rail {
+      position: relative;
+      width: 980px;
+      height: 22px;
+      background: var(--rail);
+    }
+    .clip {
+      position: absolute;
+      top: 0;
+      height: 22px;
+      padding: 0 6px;
+      font-size: 12px;
+      line-height: 22px;
+      overflow: hidden;
+      white-space: nowrap;
+    }
+    .clip.video { background: var(--video); }
+    .clip.text { background: var(--teal); color: var(--bg); }
+    .clip.audio { background: var(--audio); }
+    .clip.sel { outline: 1px solid #fff; }
+    .handle {
+      position: absolute;
+      top: 0;
+      width: 8px;
+      height: 22px;
+      background: #fff;
+    }
+    .handle.in { left: 0; }
+    .handle.out { right: 0; }
+    .playhead {
+      position: absolute;
+      top: 0;
+      width: 2px;
+      height: 22px;
+      background: var(--teal);
+    }
+    .note-strip {
+      width: 1280px;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      padding: 10px 12px;
+    }
+    .note-strip .gone { color: #8a6a70; text-decoration: line-through; }
+    .legend { font-size: 12px; color: var(--muted); margin-top: 8px; }
+  </style>
+</head>
+<body>
+  <header class="page-head">
+    <h1>Studio toolbar gen2 — <span>CONTROL</span></h1>
+    <p>
+      Honest current chrome minus the six locus-taking SemanticEdit buttons.
+      Thin session strip only. No new ontology. Utterance is disclosure-only.
+      set-gain, set-fade, split, and delete are explicitly unrouted.
+    </p>
+  </header>
+
+  <section class="scene" id="scene-full">
+    <h2>Scene A · full chrome after the bank</h2>
+    <p class="cap">Header, remaining session strip, four panes, timeline. The six verb-bank buttons are gone. Source clip fight is here. Timeline still commits trim on the clip edges.</p>
+    <div class="studio" data-still="still-full-chrome">
+      <div class="header"><span class="brand">Lattice</span><span class="file">main.vel · Scene demo</span></div>
+      <div class="strip">
+        <span class="btn">Open Video…</span>
+        <span class="status">Renderer · cpu</span>
+        <span class="status">Audio · ready</span>
+        <span class="btn teal">CPU</span>
+        <span class="btn">GPU DX12</span>
+        <span class="btn teal">Play</span>
+        <span class="btn">Pause</span>
+        <span class="btn">Seek</span>
+        <span class="btn">Scrub</span>
+        <span class="btn teal">Save</span>
+        <span class="btn">Undo</span>
+        <span class="btn">Redo</span>
+        <span class="btn teal">Resolve</span>
+        <span class="btn">Copy locus JSON</span>
+        <span class="btn">Zoom In</span>
+        <span class="btn">Zoom Out</span>
+      </div>
+      <div class="body">
+        <div class="pane seq">
+          <div class="ptitle">SEQUENCE</div>
+          <div class="pbody tree">
+            <div class="row">sequence main</div>
+            <div class="row d1">scene demo</div>
+            <div class="row d2 sel">source fight</div>
+            <div class="row d2">title Hello</div>
+            <div class="row d2">callout Hold</div>
+            <div class="row d2">speech Nice freeze</div>
+          </div>
+        </div>
+        <div class="pane canvas">
+          <div class="ptitle">Canvas</div>
+          <div class="stage"><div class="frame"><div class="overlay">Hello</div></div></div>
+        </div>
+        <div class="pane vel">
+          <div class="ptitle">VEL</div>
+          <div class="pbody vel"><pre>scene demo {
+  <span class="hi">game[10s..20s] as fight</span>
+
+  freeze fight at 5.2s for 1.5s
+  fade fight { at 0s for 0.5s }
+  title "Hello" { at 2s for 3s }
+  gain fight by -3
+}</pre></div>
+        </div>
+        <div class="pane insp">
+          <div class="ptitle">Inspector</div>
+          <div class="pbody insp">
+            <div>source "fight"</div>
+            <div class="muted">source</div>
+            <div class="teal">Defined in main.vel:12</div>
+            <div class="go">Go to definition</div>
+            <div class="utter">
+              <div class="h">Here · source "fight"</div>
+              <div class="m">pointing committed</div>
+              <div class="m">legal trim · set-gain · set-fade</div>
+              <div class="m">this gesture commits —</div>
+              <div class="line">trim → source:fight (source-range: set in/out on this source binding) is legal for this source and this Timeline gesture commits it.</div>
+              <div class="line">set-gain → source:fight (source-binding: set gain on this source) is legal for this source; no remaining chrome commits it.</div>
+              <div class="line">set-fade → source:fight (source-binding: set fade on this source) is legal for this source; no remaining chrome commits it.</div>
+            </div>
+            <div class="export">Render preview.mp4</div>
+          </div>
+        </div>
+      </div>
+      <div class="tl">
+        <div class="ruler">Timeline · 00:05.200</div>
+        <div class="track">
+          <div class="tname">Video</div>
+          <div class="rail">
+            <div class="clip video sel" style="left:80px;width:280px">fight<span class="handle in"></span><span class="handle out"></span></div>
+            <div class="playhead" style="left:220px"></div>
+          </div>
+        </div>
+        <div class="track">
+          <div class="tname">Text</div>
+          <div class="rail">
+            <div class="clip text" style="left:140px;width:90px">Hello</div>
+            <div class="clip text" style="left:220px;width:50px">Hold</div>
+            <div class="playhead" style="left:220px"></div>
+          </div>
+        </div>
+        <div class="track">
+          <div class="tname">Audio</div>
+          <div class="rail">
+            <div class="clip audio" style="left:220px;width:50px">Nice freeze</div>
+            <div class="playhead" style="left:220px"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="scene" id="scene-strip">
+    <h2>Scene B · thin session strip</h2>
+    <p class="cap">CONTROL keeps only what already exists that is not the six buttons. Struck labels are deleted, not relocated. Membership of a future session strip is not settled here.</p>
+    <div class="note-strip" data-still="still-session-strip">
+      <div class="strip" style="border:none;padding:0">
+        <span class="btn">Open Video…</span>
+        <span class="ghost">Set In</span>
+        <span class="ghost">Set Out</span>
+        <span class="ghost">Split at Playhead</span>
+        <span class="ghost">Delete Selected Clip</span>
+        <span class="status">Renderer · cpu</span>
+        <span class="status">Audio · ready</span>
+        <span class="btn teal">CPU</span>
+        <span class="btn">GPU DX12</span>
+        <span class="btn teal">Play</span>
+        <span class="btn">Pause</span>
+        <span class="btn">Seek</span>
+        <span class="btn">Scrub</span>
+        <span class="btn teal">Save</span>
+        <span class="btn">Undo</span>
+        <span class="btn">Redo</span>
+        <span class="btn teal">Resolve</span>
+        <span class="btn">Copy locus JSON</span>
+        <span class="ghost">Gain -3 dB</span>
+        <span class="ghost">Fade</span>
+        <span class="btn">Zoom In</span>
+        <span class="btn">Zoom Out</span>
+      </div>
+      <p class="legend">Ghosted = unanimous delete (locus-taking SemanticEdits). Solid = already-present session/application chrome that CONTROL keeps without adding new kinds.</p>
+    </div>
+  </section>
+
+  <section class="scene" id="scene-source">
+    <h2>Scene C · source here, gain/fade unrouted</h2>
+    <p class="cap">Video click still points the source clip. Engine still names trim, set-gain, set-fade. Timeline still commits trim. set-gain and set-fade have no remaining chrome. Utterance discloses that; it does not commit.</p>
+    <div class="studio" data-still="still-source-unrouted">
+      <div class="header"><span class="brand">Lattice</span><span class="file">main.vel · Scene demo</span></div>
+      <div class="strip">
+        <span class="btn">Open Video…</span>
+        <span class="status">Renderer · cpu</span>
+        <span class="status">Audio · ready</span>
+        <span class="btn teal">CPU</span>
+        <span class="btn">GPU DX12</span>
+        <span class="btn teal">Play</span>
+        <span class="btn">Pause</span>
+        <span class="btn">Seek</span>
+        <span class="btn">Scrub</span>
+        <span class="btn teal">Save</span>
+        <span class="btn">Undo</span>
+        <span class="btn">Redo</span>
+        <span class="btn teal">Resolve</span>
+        <span class="btn">Copy locus JSON</span>
+        <span class="btn">Zoom In</span>
+        <span class="btn">Zoom Out</span>
+      </div>
+      <div class="body">
+        <div class="pane seq">
+          <div class="ptitle">SEQUENCE</div>
+          <div class="pbody tree">
+            <div class="row">sequence main</div>
+            <div class="row d1">scene demo</div>
+            <div class="row d2 sel">source fight</div>
+            <div class="row d2">title Hello</div>
+          </div>
+        </div>
+        <div class="pane canvas">
+          <div class="ptitle">Canvas</div>
+          <div class="stage"><div class="frame"><div class="overlay">Hello</div></div></div>
+        </div>
+        <div class="pane vel">
+          <div class="ptitle">VEL</div>
+          <div class="pbody vel"><pre>  <span class="hi">game[10s..20s] as fight</span>
+  gain fight by -3
+  fade fight { at 0s for 0.5s }</pre></div>
+        </div>
+        <div class="pane insp">
+          <div class="ptitle">Inspector</div>
+          <div class="pbody insp">
+            <div>source "fight"</div>
+            <div class="muted">source</div>
+            <div class="teal">Defined in main.vel:12</div>
+            <div class="go">Go to definition</div>
+            <div class="utter">
+              <div class="h">Here · source "fight"</div>
+              <div class="m">pointing committed · disclosure only</div>
+              <div class="m">legal trim · set-gain · set-fade</div>
+              <div class="m">this Timeline gesture commits trim</div>
+              <div class="line">set-gain is legal for this source; unrouted — no remaining chrome commits it.</div>
+              <div class="line">set-fade is legal for this source; unrouted — no remaining chrome commits it.</div>
+              <div class="line">scene "demo" is a relation, not here. Navigate, do not retarget.</div>
+            </div>
+            <div class="export">Render preview.mp4</div>
+          </div>
+        </div>
+      </div>
+      <div class="tl">
+        <div class="ruler">Timeline · 00:05.200</div>
+        <div class="track">
+          <div class="tname">Video</div>
+          <div class="rail">
+            <div class="clip video sel" style="left:80px;width:280px">fight<span class="handle in"></span><span class="handle out"></span></div>
+            <div class="playhead" style="left:220px"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="scene" id="scene-scene">
+    <h2>Scene D · scene here, split/delete unrouted</h2>
+    <p class="cap">Engine still names split, delete, reorder-scene for the scene. Timeline still commits reorder-scene. split and delete have no remaining chrome. Pointing the video clip is still required for source verbs. No silent retarget.</p>
+    <div class="studio" data-still="still-scene-unrouted">
+      <div class="header"><span class="brand">Lattice</span><span class="file">main.vel · Scene demo</span></div>
+      <div class="strip">
+        <span class="btn">Open Video…</span>
+        <span class="status">Renderer · cpu</span>
+        <span class="status">Audio · ready</span>
+        <span class="btn teal">CPU</span>
+        <span class="btn">GPU DX12</span>
+        <span class="btn teal">Play</span>
+        <span class="btn">Pause</span>
+        <span class="btn">Seek</span>
+        <span class="btn">Scrub</span>
+        <span class="btn teal">Save</span>
+        <span class="btn">Undo</span>
+        <span class="btn">Redo</span>
+        <span class="btn teal">Resolve</span>
+        <span class="btn">Copy locus JSON</span>
+        <span class="btn">Zoom In</span>
+        <span class="btn">Zoom Out</span>
+      </div>
+      <div class="body">
+        <div class="pane seq">
+          <div class="ptitle">SEQUENCE</div>
+          <div class="pbody tree">
+            <div class="row">sequence main</div>
+            <div class="row d1 sel">scene demo</div>
+            <div class="row d2">source fight</div>
+            <div class="row d2">title Hello</div>
+          </div>
+        </div>
+        <div class="pane canvas">
+          <div class="ptitle">Canvas</div>
+          <div class="stage"><div class="frame"><div class="overlay">Hello</div></div></div>
+        </div>
+        <div class="pane vel">
+          <div class="ptitle">VEL</div>
+          <div class="pbody vel"><pre><span class="hi">scene demo {</span>
+  game[10s..20s] as fight
+  title "Hello" { at 2s for 3s }
+}</pre></div>
+        </div>
+        <div class="pane insp">
+          <div class="ptitle">Inspector</div>
+          <div class="pbody insp">
+            <div>scene "demo"</div>
+            <div class="muted">source</div>
+            <div class="teal">Defined in main.vel:11</div>
+            <div class="go">Go to definition</div>
+            <div class="utter">
+              <div class="h">Here · scene "demo"</div>
+              <div class="m">pointing committed · disclosure only</div>
+              <div class="m">legal split · delete · reorder-scene</div>
+              <div class="m">this Timeline gesture commits reorder-scene</div>
+              <div class="line">split is legal for this scene; unrouted — no remaining chrome commits it.</div>
+              <div class="line">delete is legal for this scene; unrouted — no remaining chrome commits it.</div>
+              <div class="line">trim, set-gain, set-fade need a source binding. Point the video clip — do not retarget.</div>
+            </div>
+            <div class="export">Render preview.mp4</div>
+          </div>
+        </div>
+      </div>
+      <div class="tl">
+        <div class="ruler">Timeline · 00:05.200</div>
+        <div class="track">
+          <div class="tname">Video</div>
+          <div class="rail">
+            <div class="clip video" style="left:80px;width:280px">fight</div>
+            <div class="playhead" style="left:220px"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="scene" id="scene-overlap">
+    <h2>Scene E · overlap lock unchanged</h2>
+    <p class="cap">A Timeline point that names several loci still lists cards on the touched Timeline. One shared LocusId after the pick. CONTROL does not move overlap to a global strip or a modal.</p>
+    <div class="studio" data-still="still-overlap">
+      <div class="header"><span class="brand">Lattice</span><span class="file">main.vel · Scene demo</span></div>
+      <div class="strip">
+        <span class="btn">Open Video…</span>
+        <span class="status">Renderer · cpu</span>
+        <span class="status">Audio · ready</span>
+        <span class="btn teal">CPU</span>
+        <span class="btn">GPU DX12</span>
+        <span class="btn teal">Play</span>
+        <span class="btn">Pause</span>
+        <span class="btn">Seek</span>
+        <span class="btn">Scrub</span>
+        <span class="btn teal">Save</span>
+        <span class="btn">Undo</span>
+        <span class="btn">Redo</span>
+        <span class="btn teal">Resolve</span>
+        <span class="btn">Copy locus JSON</span>
+        <span class="btn">Zoom In</span>
+        <span class="btn">Zoom Out</span>
+      </div>
+      <div class="body">
+        <div class="pane seq">
+          <div class="ptitle">SEQUENCE</div>
+          <div class="pbody tree">
+            <div class="row">sequence main</div>
+            <div class="row d1">scene demo</div>
+            <div class="row d2">title Hello</div>
+            <div class="row d2">title Hello</div>
+          </div>
+        </div>
+        <div class="pane canvas">
+          <div class="ptitle">Canvas</div>
+          <div class="stage"><div class="frame"></div></div>
+        </div>
+        <div class="pane vel">
+          <div class="ptitle">VEL</div>
+          <div class="pbody vel"><pre>  title "Hello" { at 2s for 3s }
+  title "Hello" { at 2s for 3s }</pre></div>
+        </div>
+        <div class="pane insp">
+          <div class="ptitle">Inspector</div>
+          <div class="pbody insp">
+            <div>unresolved pointing</div>
+            <div class="utter">
+              <div class="h">Here · (none)</div>
+              <div class="m">pointing unresolved-pointing</div>
+              <div class="line">This Timeline point named 2 loci. Pick one card. Here is unset.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="tl">
+        <div class="ruler">Timeline · 00:03.000</div>
+        <div class="cands">
+          <div style="color:var(--teal);font-size:13px;margin-bottom:4px">This Timeline point named several loci. Pick one. Here is unset.</div>
+          <span class="cand">title Hello · title · Timeline: title</span>
+          <span class="cand">title Hello · title · Timeline: title</span>
+        </div>
+        <div class="track">
+          <div class="tname">Text</div>
+          <div class="rail">
+            <div class="clip text" style="left:140px;width:90px">Hello</div>
+            <div class="clip text" style="left:140px;width:90px;opacity:0.55">Hello</div>
+            <div class="playhead" style="left:170px"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="scene" id="scene-title">
+    <h2>Scene F · Title fields only on Title</h2>
+    <p class="cap">Inspector title fields appear because here is Title. CONTROL does not add gain, fade, split, or delete fields. Utterance stays disclosure-only. Canvas still commits set-position / resize-overlay.</p>
+    <div class="studio" data-still="still-title-inspector">
+      <div class="header"><span class="brand">Lattice</span><span class="file">main.vel · Scene demo</span></div>
+      <div class="strip">
+        <span class="btn">Open Video…</span>
+        <span class="status">Renderer · cpu</span>
+        <span class="status">Audio · ready</span>
+        <span class="btn teal">CPU</span>
+        <span class="btn">GPU DX12</span>
+        <span class="btn teal">Play</span>
+        <span class="btn">Pause</span>
+        <span class="btn">Seek</span>
+        <span class="btn">Scrub</span>
+        <span class="btn teal">Save</span>
+        <span class="btn">Undo</span>
+        <span class="btn">Redo</span>
+        <span class="btn teal">Resolve</span>
+        <span class="btn">Copy locus JSON</span>
+        <span class="btn">Zoom In</span>
+        <span class="btn">Zoom Out</span>
+      </div>
+      <div class="body">
+        <div class="pane seq">
+          <div class="ptitle">SEQUENCE</div>
+          <div class="pbody tree">
+            <div class="row">sequence main</div>
+            <div class="row d1">scene demo</div>
+            <div class="row d2">source fight</div>
+            <div class="row d2 sel">title Hello</div>
+          </div>
+        </div>
+        <div class="pane canvas">
+          <div class="ptitle">Canvas</div>
+          <div class="stage"><div class="frame"><div class="overlay">Hello</div></div></div>
+        </div>
+        <div class="pane vel">
+          <div class="ptitle">VEL</div>
+          <div class="pbody vel"><pre>  <span class="hi">title "Hello" {
+    at 2s for 3s
+    opacity 90
+  }</span></pre></div>
+        </div>
+        <div class="pane insp">
+          <div class="ptitle">Inspector</div>
+          <div class="pbody insp">
+            <div>title "Hello"</div>
+            <div class="muted">invocation `title`</div>
+            <div class="teal">Defined in main.vel:20</div>
+            <div class="go">Go to definition</div>
+            <div class="field-label">Title text</div>
+            <div class="field">Hello</div>
+            <div class="rowbtns">
+              <span class="btn teal" style="color:var(--text)">Apply edit</span>
+              <span class="btn">Review</span>
+            </div>
+            <div class="utter">
+              <div class="h">Here · title "Hello"</div>
+              <div class="m">pointing committed · disclosure only</div>
+              <div class="m">legal title · set-position · resize-overlay</div>
+              <div class="m">this Inspector gesture commits title</div>
+              <div class="line">set-position / resize-overlay are legal for this title, committed on Canvas — not implied absent here.</div>
+            </div>
+            <div class="export">Render preview.mp4</div>
+          </div>
+        </div>
+      </div>
+      <div class="tl">
+        <div class="ruler">Timeline · 00:03.000</div>
+        <div class="track">
+          <div class="tname">Text</div>
+          <div class="rail">
+            <div class="clip text sel" style="left:140px;width:90px">Hello</div>
+            <div class="playhead" style="left:170px"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+  <script>
+    const params = new URLSearchParams(location.search);
+    const still = params.get("still");
+    if (still) {
+      const target = document.querySelector('[data-still="' + still + '"]');
+      if (target) {
+        document.body.classList.add("capture");
+        target.closest(".scene").classList.add("capture-target");
+      }
+    }
+  </script>
+</body>
+</html>
