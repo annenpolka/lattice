@@ -8,6 +8,14 @@ decision, not an implementation plan.
 Scope: the verb-license question only. No Studio, GPUI, Core, or sketch change is proposed here, and
 none is implied by anything below.
 
+Locked constraint: **the overlap UI is not open in this note.** Resolution of a point that names
+several loci is fixed to Projection-Local Verbs — a candidate list on the projection that was
+touched, no cross-surface modal, one shared `LocusId` after the pick — as drawn in scene D of its
+[sketch](https://github.com/annenpolka/lattice/blob/39fc7827e69a4b1d70608402ea1b01eefe7a05a1/docs/sketches/projection-local/index.html).
+Compass's coordinate probe, the Reading's rank-then-step, and click-to-commit are therefore out as
+overlap UI and are proposed nowhere below. The lock covers overlap only. It does not select a
+verb-license model, which is why the two questions are still open questions.
+
 ## What is being read
 
 Three second-generation interaction notes, each answering "what licenses a legal verb?" differently
@@ -53,18 +61,24 @@ Before the disagreement, the agreement. All three already hold, without arbitrat
 - No kind-driven property form survives. Compass refuses to populate a form by `LocusKind`,
   Projection-Local deletes the Inspector as a verb home, and the Reading deletes the pane outright.
 
-What is actually in dispute is one question plus one parameter.
+What was in dispute is one question — what licenses a verb — plus one parameter, overlap, which the
+locked constraint has closed.
 
-| | What licenses a verb | Where verbs appear | May a pointer-up leave "here" unset? |
+| | What licenses a verb | Where verbs appear | Overlap UI, as its own note proposed it |
 |---|---|---|---|
-| Semantic Compass | Engine legality for the committed locus. Surfaces do not license. | one Engine-derived list of transitions from here | **yes** — a coordinate-only probe stays unresolved until a candidate is chosen or cancelled |
-| Projection-Local Verbs | touched projection ∩ Engine legality | on the instrument you touched; no global verb home | **yes** — the failed point stays visible on that projection |
-| The Reading | Engine legality, spoken before it is offered, with ranking allowed only where a wrong guess costs a pointing | in the utterance, anchored at the witness that produced the pointing | **no** — rank, commit, state the collapse, step |
+| Semantic Compass | Engine legality for the committed locus. Surfaces do not license. | one Engine-derived list of transitions from here | identity-first, then an ownerless coordinate probe holding pointing unresolved until a candidate is chosen or cancelled — **out under the lock** |
+| Projection-Local Verbs | touched projection ∩ Engine legality | on the instrument you touched; no global verb home | candidate list on the touched projection, failed point stays visible, one shared `LocusId` after the pick — **this is the locked UI** |
+| The Reading | Engine legality, spoken before it is offered, with ranking allowed only where a wrong guess costs a pointing | in the utterance, anchored at the witness that produced the pointing | rank, commit immediately, state the collapse, step with one key — **out under the lock** |
 
 Note the shape of that table. Compass and the Reading are near-siblings on the license question and
-opponents on overlap. Projection-Local Verbs is the only genuine dissent on license and sides with
-Compass on overlap. No two of the three agree on both, which is why this reads as three models rather
-than two.
+were opponents on overlap. Projection-Local Verbs is the only genuine dissent on license and was the
+closer of the two to Compass on overlap. No two of the three agreed on both, which is why this reads
+as three models rather than two — and why closing the second axis does not close the first. The
+license question stays open below; only the overlap UI is settled.
+
+One consequence of the lock is worth pulling out before it recurs: the locked UI holds a point open
+until a card is chosen, so **"here" may be temporarily unset after a pointer-up.** That is a
+downstream fact the merged model has to carry, not a detail of one sketch.
 
 ## Question 1 — intuitive for whom, misread as what
 
@@ -108,7 +122,11 @@ domain — precisely the class of bug they came to remove.
 both about the loop rather than the vocabulary. Ranked-then-stated pointing is the only one of the
 three that never places a decision between pointer-up and the next gesture, so the fast path stays
 one gesture deep. And target and scope are stated before commit, so a habitual gesture can be
-verified without a round trip through a panel. Compass is a close second because one verb house means
+verified without a round trip through a panel. The lock removes the first reason — under
+Projection-Local's overlap UI a point into overlap does place a decision in the path — so the
+power-user case for the Reading now rests entirely on the second, which is the stronger half anyway:
+what a fast user needs most is to confirm the target of a habitual gesture without stopping, and that
+survives the lock intact. Compass is a close second because one verb house means
 "can I do X to this?" has an answer that does not depend on where the pointer currently is, which is
 the property keyboard-first invocation actually needs. Worst fit for this reader: Projection-Local
 Verbs — the same capability with different availability depending on the surface is the one thing
@@ -126,6 +144,10 @@ intuitive for a first-time human is the least expressible for the repo's other f
 Any merge has to carry that cost explicitly instead of discovering it later in the CLI surface.
 
 ### What each will be misread as
+
+These are misreads of the three notes as written, which is why two of them are about overlap
+mechanics the lock has since removed. A misread of a retired mechanism still matters: it is part of
+why the mechanism was worth retiring, and the same reflex will be aimed at whatever replaces it.
 
 **Semantic Compass**
 
@@ -152,7 +174,9 @@ Any merge has to carry that cost explicitly instead of discovering it later in t
   selection, which the shared-locus invariant forbids. The note is explicit that they are not; the
   surface will keep suggesting it.
 - *"A picker pane."* The overlap candidate list reads as persistent chrome and therefore as a second
-  subject — the failure its own sibling model names.
+  subject — the failure its own sibling model names. Because the lock makes this list *the* overlap
+  UI, this is the one misread on the page that has to be designed against rather than merely noted:
+  the list has to read as a point that has not landed yet, not as a place where things live.
 
 **The Reading**
 
@@ -207,20 +231,28 @@ That is one rule, and the shared base is already its entailment rather than an a
   three outcomes as *the* absence vocabulary for the merged model, because they are typed reasons
   rather than prose. Identity versus relation: displaying a relation never silently moves the center.
   Freeze as a temporal reading rather than a target.
-- **STEAL.** The Reading's ranking asymmetry, so the coordinate probe stops being the default cost of
-  pointing into overlap. And Projection-Local's routing table, so "one Engine list" can no longer be
-  read as one Engine panel.
+- **STEAL.** Projection-Local's routing table, so "one Engine list" can no longer be read as one
+  Engine panel. And Projection-Local's overlap list as the surface Compass left unowned: Compass
+  already has the right typed reason for an unresolved point and no place to put it.
 - **DELETE.** The implication that a single legal set requires a single surface — it is the source of
-  the better-Inspector misread and it is not load-bearing. Also `unresolved-pointing` as an ordinary
-  state, if the overlap parameter below resolves toward rank-then-state; it is the one reason in this
-  vocabulary a merged model might not need.
+  the better-Inspector misread and it is not load-bearing. And the coordinate probe as an ownerless,
+  cross-surface candidate set. "No view owns the candidates" is the one Compass sentence the lock
+  overrules, and it is worth being exact about how little else goes with it: the probe's *content* —
+  each candidate's identity, relation, span, provenance, and legal edit scopes — is what the locked
+  list shows. Only the ownership changes, from nobody to the projection that was touched. Compass's
+  `unresolved-pointing` reason is untouched and is kept, because the locked UI is the thing that needs
+  it.
 
 **Projection-Local Verbs**
 
 - **KEEP.** The hit grammar as the routing table: scrub / point / mutate, no region doing two jobs,
   rest state predicts the role, Canvas commits geometry, Timeline commits time, VEL commits definition
   text, overlays bound to `TimelineClip.id` / `LocusId` and never reverse-matched by visible text.
-  "The missing instrument speaks." No toolbar second target.
+  "The missing instrument speaks." No toolbar second target. And — by the locked constraint — the
+  overlap UI entire: the failed point stays visible on the projection that was touched, each candidate
+  carries its identity, its scope, and the verbs that projection would license for it, and the pick
+  commits one shared `LocusId` to Canvas, Timeline, Source, Review, and agent context. The list is not
+  project state, not per-view selection, and not in Undo.
 - **STEAL.** The global legal set. This is the fix for its own worst misread and it costs the model
   nothing it wanted: a locally uncommittable verb becomes "legal for this locus, committed on that
   projection" with a Navigate route, instead of a silence that reads as impossibility.
@@ -231,50 +263,66 @@ That is one rule, and the shared base is already its entailment rather than an a
 
 **The Reading**
 
-- **KEEP.** The spine asymmetry — rank only where the consequence is a reversible pointing; derive or
-  fail closed where the consequence is a source rewrite. It is the only rule in the three notes that
-  says *when* guessing is allowed, rather than asserting globally that it is or is not. Also: verbs
-  create their own inputs, so no draft outlives the locus it was copied from; selectable implies
+- **KEEP.** The fail-closed half of the spine asymmetry: where the consequence is a source rewrite,
+  derive the target from the locus's own fields or fail closed and say what is needed. That is the
+  half that deletes the project-wide first-match target fallthrough, and the lock does not touch it.
+  Also: verbs create their own inputs, so no draft outlives the locus it was copied from; selectable implies
   resolvable; geometry outlives pixels; scrub stops pointing; and the derivation living in Engine so
   Studio, `--json`, and an agent consume one answer. That last item is what keeps the merged model
   from being Studio-only.
 - **STEAL.** Compass's typed reason names, so the clauses have one stable set behind them in `--json`
   instead of per-clause prose. And Projection-Local's routing table, so the utterance can say *where*
   a verb commits and not merely that it is unavailable here.
-- **DELETE.** "Five panes are not the product" and "Space is not the editor's identity" as stated
-  deletions. Both are consequences the model does not need to claim, and both generate the
-  hide-the-UI misread. The testable claim survives without either: one utterance stays complete when
-  only one projection is visible — which is exactly what the sketch's
+- **DELETE.** The permissive half of the asymmetry — "ranking is allowed where the consequence is a
+  reversible pointing" — and with it rank-then-state-then-step as the overlap UI. The lock forecloses
+  it. What is left is simpler than the rule it came from, and that is a gain rather than a loss: the
+  merged model never ranks, on either side of the pointing/rewrite line. Also "Five panes are not the
+  product" and "Space is not the editor's identity" as stated deletions — both are consequences the
+  model does not need to claim, and both generate the hide-the-UI misread. The testable claim survives
+  without either: one utterance stays complete when only one projection is visible, which is exactly
+  what the sketch's
   [~800px screen](https://github.com/annenpolka/lattice/blob/4de0f5801adbe629722d188775630f7eddab5031/docs/sketches/reading/h.html)
-  already exercises. Also delete anchor-at-the-witness as a model-level commitment; the note concedes it does
+  already exercises. And anchor-at-the-witness as a model-level commitment: the note concedes it does
   not solve occlusion, and a merged model should not inherit an unsolved layout problem as an
   invariant.
 
-### The one thing the merge may not do: keep both overlap policies
+### Overlap is not a merge question: it is locked
 
-Everything above is a union with demotions. One question is not.
+Everything above is a union with demotions. Overlap is not, because it is not open. The overlap UI is
+Projection-Local's, as drawn in scene D of its sketch: a point at 2.40s that names `title Hello`,
+`scene demo`, and `source fight` does not collapse. The Timeline — the projection that was touched —
+says the point named several loci and lists them, each card carrying its `LocusId`, its scope, and the
+verbs *that* projection would license for it. Pointing stays unresolved until a card is chosen, and
+the choice commits one `LocusId` to Canvas, Timeline, Source, Review, and agent context. No
+cross-surface modal, no ownerless candidate set, no ranking, no click-to-commit.
 
-> After a pointer-up on a coordinate that names several loci, may "here" be temporarily unset?
+The lock is an input to the integration rather than a constraint bolted on top of it, because three
+things follow for the merged model:
 
-- Compass: **yes** — the probe is unresolved until a candidate is chosen or cancelled.
-- Projection-Local Verbs: **yes** — the failed point stays visible on the touched projection.
-- The Reading: **no** — rank, commit, state the collapse, step with one key; explicitly no modal, no
-  prompt, no obstruction.
+1. **An unresolved "here" is a reading, not an error.** The locked UI holds pointing open, so the
+   merged model must carry that state as a first-class disclosure. Compass already has the typed reason
+   for it and no surface to show it on; Projection-Local has the surface. That pairing is the whole
+   fix, and it retires the Reading's requirement that pointing never obstruct.
+2. **The resolution policy becomes uniform.** The Reading's asymmetry permitted ranking on the
+   pointing side because a wrong rank cost one keystroke. The lock withdraws that permission, so both
+   sides of the pointing/rewrite line now derive or disclose and neither ranks. The merged model comes
+   out simpler than the rule that motivated it: it does not guess, and the asymmetry survives only as
+   the argument for why rewrites in particular must not be guessed.
+3. **The candidate list is routing, not legality.** This is the spine doing its work on the locked UI.
+   Each card advertises what *this* projection would license for that candidate, which is a set of
+   routes — not a claim that the candidate's other legal verbs are absent. Without that reading the
+   list would reproduce Projection-Local's worst misread three cards at a time, which is exactly the
+   failure mode the spine exists to prevent.
 
-Both branches are consistent with the spine, because both agree that the consequence of a pointing is
-reversible and cheap. They disagree only on where the cost sits: before the commit as a
-disambiguation, or after it as a disclosure plus a step. Shipping both is not a merge. It is two
-pointing contracts in one editor, which is the "no region does two jobs" rule violated at the level of
-the model instead of at the level of the pixel.
-
-This parameter is decidable rather than arguable, and the notes already wrote the test between them.
-The distinguishing fixture is the tie: two invocations with identical spans and distinct `LocusId`s,
-which the Studio layout tests already build as duplicate overlays. The measure should be the
-Reading's, because it is the one bound to source consequences rather than to preference — committed
-edit correctness against a stated intent, with abandoned edits counted, not time-on-task and not
-which one people say they like. If pre-commit disambiguation does not improve correctness over
-rank-then-state, it is obstruction with a good story. If rank-then-state produces wrong commits on
-ties, ranking is buying nothing at exactly the point where it is least defensible.
+What the lock costs, stated rather than hidden: Projection-Local's own falsifier asked whether
+candidates on the touched projection add scope predictability *without* materially obstructing
+ordinary pointing. A lock forecloses the comparison that would have answered that, so the risk is now
+carried rather than tested away. It will show up first on dense ties — two invocations with identical
+spans and distinct `LocusId`s, which `crates/lattice-studio/tests/layout.rs` already builds as
+duplicate overlays. Under the locked UI that fixture stops being an arbiter between policies and
+becomes the stress test of the chosen one: whether a list whose cards differ only by `LocusId` still
+says anything a user can act on. That is a question about how the locked UI presents identity, and it
+is not an invitation to reopen the choice.
 
 Two smaller tensions do merge. They are recorded here so they are not rediscovered as blockers:
 
@@ -294,8 +342,8 @@ Two smaller tensions do merge. They are recorded here so they are not rediscover
 - It does not select a shipping model. The spine above is a proposal for how three existing notes
   could be read as one, offered as discussion input.
 - It does not implement anything, and nothing here should be read as a plan of record.
-- It does not resolve the overlap parameter. It names it as the one question a merge cannot dissolve
-  and points at the fixture that would settle it.
+- It does not reopen the overlap UI. That is locked to Projection-Local's candidate list on the
+  touched projection, and the note reads the lock as an integration input rather than as an option.
 - It does not fill the Core gaps the three notes name — no time-scoped audio edit, no `TimeMap` edit
   variant, and the bundling of definition and placement fields inside one `SemanticEdit::Title`
   variant. Naming a gap is not license to invent a filler.
