@@ -7,7 +7,7 @@ use lattice_engine::{
 };
 
 use crate::session::StudioSession;
-use crate::verb::{self, PointCandidate, Utterance};
+use crate::verb::{self, InvokedRecord, PointCandidate, Utterance};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TreeNode {
@@ -55,6 +55,10 @@ pub struct InspectorView {
     pub go_to_definition: Option<Span>,
     /// Title-shaped fields exist only when here is Title.
     pub title_fields: bool,
+    /// Property fields bound to this exact source `LocusId`, not `LocusKind`.
+    pub gain_db: Option<i32>,
+    pub fade_in: Option<Time>,
+    pub invoked: Vec<InvokedRecord>,
     pub utterance: UtteranceView,
 }
 
@@ -102,7 +106,13 @@ pub struct UtteranceView {
     pub pointing: String,
     pub legal: Vec<String>,
     pub routed: Vec<String>,
-    pub spoken: Vec<String>,
+    pub spoken: Vec<SpokenLine>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SpokenLine {
+    pub text: String,
+    pub eye_target: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -152,7 +162,7 @@ pub fn from_session(session: &StudioSession) -> Result<StudioLayout, lattice_eng
             text: compilation.source.clone(),
             highlight: current.as_ref().and_then(|locus| locus.source_span),
         },
-        inspector: inspector_from_locus(current.as_ref(), session.path(), &session.utterance()),
+        inspector: inspector_from_session(session, current.as_ref(), &session.utterance()),
         timeline: timeline_view(session, &timeline, current.as_ref()),
         review: session.review_proposal().map(review_from_proposal),
         playhead: session.playhead(),
@@ -313,12 +323,13 @@ fn canvas_from_plan(
     }
 }
 
-fn inspector_from_locus(
+fn inspector_from_session(
+    session: &StudioSession,
     locus: Option<&Locus>,
-    path: &std::path::Path,
     utterance: &Utterance,
 ) -> InspectorView {
     let utterance = utterance_view(utterance);
+    let invoked = session.invoked_this_session();
     let Some(locus) = locus else {
         let heading = if utterance.pointing == "unresolved-pointing" {
             "unresolved pointing".into()
@@ -332,10 +343,13 @@ fn inspector_from_locus(
             locus_id: None,
             go_to_definition: None,
             title_fields: false,
+            gain_db: None,
+            fade_in: None,
+            invoked,
             utterance,
         };
     };
-    let file = file_label(path);
+    let file = file_label(session.path());
     let defined_in = locus.source_span.map_or_else(
         || "provenance always present".into(),
         |span| format!("{file}:{}", span.line),
@@ -346,6 +360,7 @@ fn inspector_from_locus(
         Origin::Builtin { name } => format!("builtin `{name}`"),
         Origin::Source => "source".into(),
     };
+    let (gain_db, fade_in) = source_property_values(session, locus);
     InspectorView {
         heading: format!("{} \"{}\"", kind_label(locus.kind), locus.label),
         origin,
@@ -353,8 +368,48 @@ fn inspector_from_locus(
         locus_id: Some(locus.id.as_str().to_string()),
         go_to_definition: locus.source_span,
         title_fields: locus.kind == LocusKind::Title,
+        gain_db,
+        fade_in,
+        invoked,
         utterance,
     }
+}
+
+fn source_property_values(session: &StudioSession, locus: &Locus) -> (Option<i32>, Option<Time>) {
+    if locus.kind != LocusKind::Source {
+        return (None, None);
+    }
+    let Ok(timeline) = Engine::timeline(&session.compilation().project) else {
+        return (Some(0), Some(Time::ZERO));
+    };
+    let mut gain_db = None;
+    let mut fade_in = None;
+    for clip in &timeline.clips {
+        let source_id = session
+            .compilation()
+            .project
+            .scenes
+            .iter()
+            .find_map(|scene| {
+                scene
+                    .placements
+                    .iter()
+                    .find(|placement| placement.id == clip.id)
+                    .and_then(|placement| placement.source_id.clone())
+            });
+        let matches = source_id.as_deref() == Some(locus.node_id.as_str())
+            || source_id.as_deref() == Some(locus.id.as_str());
+        if !matches {
+            continue;
+        }
+        if clip.gain_db.is_some() {
+            gain_db = clip.gain_db;
+        }
+        if clip.fade_in.is_some() {
+            fade_in = clip.fade_in;
+        }
+    }
+    (gain_db.or(Some(0)), fade_in.or(Some(Time::ZERO)))
 }
 
 fn utterance_view(utterance: &Utterance) -> UtteranceView {
@@ -378,7 +433,10 @@ fn utterance_view(utterance: &Utterance) -> UtteranceView {
         spoken: utterance
             .spoken
             .iter()
-            .map(|clause| clause.text.clone())
+            .map(|clause| SpokenLine {
+                text: clause.text.clone(),
+                eye_target: clause.eye_target.clone(),
+            })
             .collect(),
     }
 }

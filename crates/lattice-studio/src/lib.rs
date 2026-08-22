@@ -32,7 +32,7 @@ pub use gesture::{
     snap_time, y_ratio_from_db,
 };
 pub use layout::{
-    CanvasOverlay, CanvasView, InspectorView, ReviewView, SourceView, StudioLayout,
+    CanvasOverlay, CanvasView, InspectorView, ReviewView, SourceView, SpokenLine, StudioLayout,
     TimelineClipView, TimelineTrackView, TimelineView, TreeNode, UtteranceView,
 };
 pub use preview::{
@@ -43,8 +43,8 @@ pub use semantic_state::{snapshot as semantic_snapshot, write_geom_file, write_s
 pub use session::{StudioSession, fit_preview_size};
 pub use ui_fixture::UiFixture;
 pub use verb::{
-    PointCandidate, Projection, SpokenClause, UnresolvedPointing, Utterance, refuse_edit,
-    routed_verbs, utterance,
+    InvokedRecord, PointCandidate, Projection, SpokenClause, UnresolvedPointing, Utterance,
+    refuse_edit, routed_verbs, utterance,
 };
 pub use viewport::TimelineViewport;
 

@@ -337,6 +337,8 @@ fn window_main(path: PathBuf, fixture: Option<String>) -> Result<(), Box<dyn std
                         cx.focus_handle(),
                         cx.focus_handle(),
                         cx.focus_handle(),
+                        cx.focus_handle(),
+                        cx.focus_handle(),
                     );
                     view.ui_fixture = fixture;
                     view.adopt_locus_label();
@@ -442,6 +444,9 @@ struct StudioView {
     title_draft: String,
     title_selection_utf16: Range<usize>,
     title_marked_utf16: Option<Range<usize>>,
+    gain_draft: String,
+    fade_draft: String,
+    property_locus: Option<String>,
     source_draft: String,
     source_selection_utf16: Range<usize>,
     source_marked_utf16: Option<Range<usize>>,
@@ -450,6 +455,8 @@ struct StudioView {
     focus: FocusHandle,
     title_focus: FocusHandle,
     source_focus: FocusHandle,
+    gain_focus: FocusHandle,
+    fade_focus: FocusHandle,
     source_scroll: ScrollHandle,
     first_paint_logged: bool,
     preview_shown: bool,
@@ -893,6 +900,8 @@ impl StudioView {
         focus: FocusHandle,
         title_focus: FocusHandle,
         source_focus: FocusHandle,
+        gain_focus: FocusHandle,
+        fade_focus: FocusHandle,
     ) -> Self {
         let source_draft = session.source().to_string();
         Self {
@@ -901,6 +910,9 @@ impl StudioView {
             title_draft: String::new(),
             title_selection_utf16: 0..0,
             title_marked_utf16: None,
+            gain_draft: String::new(),
+            fade_draft: String::new(),
+            property_locus: None,
             source_draft,
             source_selection_utf16: 0..0,
             source_marked_utf16: None,
@@ -909,6 +921,8 @@ impl StudioView {
             focus,
             title_focus,
             source_focus,
+            gain_focus,
+            fade_focus,
             source_scroll: ScrollHandle::new(),
             first_paint_logged: false,
             preview_shown: false,
@@ -955,6 +969,10 @@ impl StudioView {
     fn focused_name(&self, window: &Window) -> Option<&'static str> {
         if self.title_focus.is_focused(window) {
             Some("inspector.title")
+        } else if self.gain_focus.is_focused(window) {
+            Some("inspector.gain")
+        } else if self.fade_focus.is_focused(window) {
+            Some("inspector.fade")
         } else if self.source_focus.is_focused(window) {
             Some("vel.editor")
         } else if self.focus.is_focused(window) {
@@ -1105,6 +1123,35 @@ impl StudioView {
                 self.title_marked_utf16 = None;
             }
         }
+        self.adopt_property_drafts();
+    }
+
+    fn adopt_property_drafts(&mut self) {
+        let Ok(layout) = self.session.layout() else {
+            return;
+        };
+        let id = layout.inspector.locus_id.clone();
+        if id == self.property_locus {
+            return;
+        }
+        self.refresh_property_drafts();
+    }
+
+    fn refresh_property_drafts(&mut self) {
+        let Ok(layout) = self.session.layout() else {
+            return;
+        };
+        self.property_locus.clone_from(&layout.inspector.locus_id);
+        self.gain_draft = layout
+            .inspector
+            .gain_db
+            .map(|db| format!("{db}"))
+            .unwrap_or_default();
+        self.fade_draft = layout
+            .inspector
+            .fade_in
+            .map(|time| time.to_string())
+            .unwrap_or_default();
     }
 
     fn sync_source_draft(&mut self) {
@@ -2475,210 +2522,245 @@ fn canvas_resize_handle(
 #[cfg(feature = "window")]
 impl StudioView {
     fn actions_bar(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let play = {
+            let geom = Arc::clone(&self.play_geom);
+            div()
+                .id("Play")
+                .debug_selector(|| "toolbar.play".into())
+                .relative()
+                .px_3()
+                .py_1()
+                .bg(rgb(TEAL))
+                .text_color(rgb(TEXT))
+                .cursor_pointer()
+                .on_click(cx.listener(|this, _, _, cx| {
+                    this.start_play();
+                    cx.notify();
+                }))
+                .capture_any_mouse_down(cx.listener(|this, event: &MouseDownEvent, _, cx| {
+                    if event.button != MouseButton::Left {
+                        return;
+                    }
+                    this.start_play();
+                    cx.stop_propagation();
+                    cx.notify();
+                }))
+                .child("Play")
+                .child(
+                    canvas(
+                        move |bounds, _, _| {
+                            if let Ok(mut slot) = geom.lock() {
+                                *slot = Some((
+                                    f32::from(bounds.origin.x),
+                                    f32::from(bounds.origin.y),
+                                    f32::from(bounds.size.width),
+                                    f32::from(bounds.size.height),
+                                ));
+                            }
+                        },
+                        |_, _, _, _| {},
+                    )
+                    .absolute()
+                    .size_full(),
+                )
+        };
         div()
             .flex()
             .flex_wrap()
-            .items_center()
-            .gap_1()
+            .items_start()
+            .gap_3()
             .px_2()
             .py_1()
             .border_b_1()
             .border_color(rgb(LINE))
             .bg(rgb(PANEL))
-            .child(action_button("Open Video…", LINE, cx, move |this, cx| {
-                this.open_video_clicked();
-                cx.notify();
-            }))
-            .child(
+            .child(session_cluster(
+                "File",
+                "toolbar.cluster.file",
                 div()
-                    .debug_selector(|| "toolbar.renderer-status".into())
-                    .px_2()
-                    .text_color(if self.renderer_error.is_some() {
-                        rgb(0xff8f8f)
-                    } else {
-                        rgb(MUTED)
-                    })
-                    .child(format!("Renderer · {}", self.renderer_status())),
-            )
-            .child(
-                div()
-                    .debug_selector(|| "toolbar.audio-status".into())
-                    .px_2()
-                    .text_color(if self.audio_error.is_some() {
-                        rgb(0xff8f8f)
-                    } else {
-                        rgb(MUTED)
-                    })
-                    .child(self.audio_status()),
-            )
-            .child(action_button(
-                "CPU",
-                if self.renderer == RendererRequest::RequireCpu {
-                    TEAL
-                } else {
-                    LINE
-                },
-                cx,
-                move |this, cx| {
-                    this.set_renderer(RendererRequest::RequireCpu);
-                    cx.notify();
-                },
-            ))
-            .child(action_button(
-                "GPU DX12",
-                if self.renderer == RendererRequest::RequireGpuDx12 {
-                    TEAL
-                } else {
-                    LINE
-                },
-                cx,
-                move |this, cx| {
-                    this.set_renderer(RendererRequest::RequireGpuDx12);
-                    cx.notify();
-                },
-            ))
-            .child({
-                let geom = Arc::clone(&self.play_geom);
-                div()
-                    .id("Play")
-                    .debug_selector(|| "toolbar.play".into())
-                    .relative()
-                    .px_3()
-                    .py_1()
-                    .bg(rgb(TEAL))
-                    .text_color(rgb(TEXT))
-                    .cursor_pointer()
-                    .on_click(cx.listener(|this, _, _, cx| {
-                        this.start_play();
+                    .flex()
+                    .items_center()
+                    .gap_1()
+                    .child(action_button("Open Video…", LINE, cx, move |this, cx| {
+                        this.open_video_clicked();
                         cx.notify();
                     }))
-                    .capture_any_mouse_down(cx.listener(|this, event: &MouseDownEvent, _, cx| {
-                        if event.button != MouseButton::Left {
-                            return;
-                        }
-                        this.start_play();
-                        cx.stop_propagation();
+                    .child(action_button("Save", TEAL, cx, move |this, cx| {
+                        let _ = this.session.save();
                         cx.notify();
-                    }))
-                    .child("Play")
-                    .child(
-                        canvas(
-                            move |bounds, _, _| {
-                                if let Ok(mut slot) = geom.lock() {
-                                    *slot = Some((
-                                        f32::from(bounds.origin.x),
-                                        f32::from(bounds.origin.y),
-                                        f32::from(bounds.size.width),
-                                        f32::from(bounds.size.height),
-                                    ));
-                                }
-                            },
-                            |_, _, _, _| {},
-                        )
-                        .absolute()
-                        .size_full(),
-                    )
-            })
-            .child(action_button("Pause", LINE, cx, move |this, cx| {
-                this.catch_up_play_clock();
-                this.audio_play_pending = false;
-                this.session.pause();
-                this.play_origin = None;
-                this.sync_audio_monitor("pause");
-                this.preview_inbox.clear_pending();
-                this.refresh_preview("pause");
-                this.queue_preview();
-                trace::log("pause");
-                cx.notify();
-            }))
-            .child(action_button("Seek", LINE, cx, move |this, cx| {
-                this.audio_play_pending = false;
-                this.session.seek(lattice_engine::Time::ZERO);
-                this.play_origin = None;
-                this.sync_audio_monitor("seek");
-                this.preview_inbox.clear_pending();
-                this.refresh_preview("seek");
-                this.queue_preview();
-                cx.notify();
-            }))
-            .child(action_button("Scrub", LINE, cx, move |this, cx| {
-                this.audio_play_pending = false;
-                this.session.scrub(this.session.playhead());
-                this.play_origin = None;
-                this.sync_audio_monitor("scrub");
-                this.preview_inbox.clear_pending();
-                this.refresh_preview("scrub");
-                this.queue_preview();
-                cx.notify();
-            }))
-            .child(action_button("Save", TEAL, cx, move |this, cx| {
-                let _ = this.session.save();
-                cx.notify();
-            }))
-            .child(action_button("Undo", LINE, cx, move |this, cx| {
-                if let Err(err) = this.session.undo() {
-                    trace::log(format!("undo: {err}"));
-                }
-                this.after_edit();
-                cx.notify();
-            }))
-            .child(action_button("Redo", LINE, cx, move |this, cx| {
-                if let Err(err) = this.session.redo() {
-                    trace::log(format!("redo: {err}"));
-                }
-                this.after_edit();
-                cx.notify();
-            }))
-            .child(action_button("Resolve", TEAL, cx, move |this, cx| {
-                match this.session.resolve_media() {
-                    Ok(resolution) => {
-                        this.last_render = Some(format!(
-                            "resolved {} assets ({} provider calls)",
-                            resolution.assets.len(),
-                            resolution.provider_calls
-                        ));
-                        this.invalidate_audio("resolve");
-                        this.refresh_preview("resolve");
+                    })),
+            ))
+            .child(session_cluster(
+                "Clock",
+                "toolbar.cluster.clock",
+                div()
+                    .flex()
+                    .flex_wrap()
+                    .items_center()
+                    .gap_1()
+                    .child(play)
+                    .child(action_button("Pause", LINE, cx, move |this, cx| {
+                        this.catch_up_play_clock();
+                        this.audio_play_pending = false;
+                        this.session.pause();
+                        this.play_origin = None;
+                        this.sync_audio_monitor("pause");
+                        this.preview_inbox.clear_pending();
+                        this.refresh_preview("pause");
                         this.queue_preview();
-                    }
-                    Err(err) => {
-                        trace::log(format!("resolve: {err}"));
-                        this.last_render = Some(format!("resolve failed: {err}"));
-                    }
-                }
-                cx.notify();
-            }))
-            .child(action_button(
-                "Copy locus JSON",
-                LINE,
-                cx,
-                move |this, cx| {
-                    match this.session.current_projection_json() {
-                        Ok(Some(json)) => {
-                            cx.write_to_clipboard(ClipboardItem::new_string(json));
-                            this.last_render = Some("copied locus JSON".into());
-                        }
-                        Ok(None) => {
-                            this.speak_toolbar(
-                                "Copy locus JSON needs a committed locus. Here is unset.",
-                            );
-                        }
-                        Err(err) => {
-                            trace::log(format!("copy locus: {err}"));
-                            this.last_render = Some(format!("copy locus failed: {err}"));
-                        }
-                    }
-                    cx.notify();
-                },
+                        trace::log("pause");
+                        cx.notify();
+                    }))
+                    .child(action_button("Seek", LINE, cx, move |this, cx| {
+                        this.audio_play_pending = false;
+                        this.session.seek(lattice_engine::Time::ZERO);
+                        this.play_origin = None;
+                        this.sync_audio_monitor("seek");
+                        this.preview_inbox.clear_pending();
+                        this.refresh_preview("seek");
+                        this.queue_preview();
+                        cx.notify();
+                    }))
+                    .child(action_button("Scrub", LINE, cx, move |this, cx| {
+                        this.audio_play_pending = false;
+                        this.session.scrub(this.session.playhead());
+                        this.play_origin = None;
+                        this.sync_audio_monitor("scrub");
+                        this.preview_inbox.clear_pending();
+                        this.refresh_preview("scrub");
+                        this.queue_preview();
+                        cx.notify();
+                    }))
+                    .child(action_button("Zoom In", LINE, cx, move |this, cx| {
+                        this.session.zoom_around(this.session.playhead(), 1.25);
+                        cx.notify();
+                    }))
+                    .child(action_button("Zoom Out", LINE, cx, move |this, cx| {
+                        this.session.zoom_around(this.session.playhead(), 0.8);
+                        cx.notify();
+                    })),
             ))
-            .child(action_button("Zoom In", LINE, cx, move |this, cx| {
-                this.session.zoom_around(this.session.playhead(), 1.25);
-                cx.notify();
-            }))
-            .child(action_button("Zoom Out", LINE, cx, move |this, cx| {
-                this.session.zoom_around(this.session.playhead(), 0.8);
-                cx.notify();
-            }))
+            .child(session_cluster(
+                "Engine",
+                "toolbar.cluster.engine",
+                div()
+                    .flex()
+                    .flex_wrap()
+                    .items_center()
+                    .gap_1()
+                    .child(action_button(
+                        "CPU",
+                        if self.renderer == RendererRequest::RequireCpu {
+                            TEAL
+                        } else {
+                            LINE
+                        },
+                        cx,
+                        move |this, cx| {
+                            this.set_renderer(RendererRequest::RequireCpu);
+                            cx.notify();
+                        },
+                    ))
+                    .child(action_button(
+                        "GPU DX12",
+                        if self.renderer == RendererRequest::RequireGpuDx12 {
+                            TEAL
+                        } else {
+                            LINE
+                        },
+                        cx,
+                        move |this, cx| {
+                            this.set_renderer(RendererRequest::RequireGpuDx12);
+                            cx.notify();
+                        },
+                    ))
+                    .child(action_button("Undo", LINE, cx, move |this, cx| {
+                        if let Err(err) = this.session.undo() {
+                            trace::log(format!("undo: {err}"));
+                        }
+                        this.after_edit();
+                        cx.notify();
+                    }))
+                    .child(action_button("Redo", LINE, cx, move |this, cx| {
+                        if let Err(err) = this.session.redo() {
+                            trace::log(format!("redo: {err}"));
+                        }
+                        this.after_edit();
+                        cx.notify();
+                    }))
+                    .child(action_button("Resolve", TEAL, cx, move |this, cx| {
+                        match this.session.resolve_media() {
+                            Ok(resolution) => {
+                                this.last_render = Some(format!(
+                                    "resolved {} assets ({} provider calls)",
+                                    resolution.assets.len(),
+                                    resolution.provider_calls
+                                ));
+                                this.invalidate_audio("resolve");
+                                this.refresh_preview("resolve");
+                                this.queue_preview();
+                            }
+                            Err(err) => {
+                                trace::log(format!("resolve: {err}"));
+                                this.last_render = Some(format!("resolve failed: {err}"));
+                            }
+                        }
+                        cx.notify();
+                    }))
+                    .child(action_button(
+                        "Copy locus JSON",
+                        LINE,
+                        cx,
+                        move |this, cx| {
+                            match this.session.current_projection_json() {
+                                Ok(Some(json)) => {
+                                    cx.write_to_clipboard(ClipboardItem::new_string(json));
+                                    this.last_render = Some("copied locus JSON".into());
+                                }
+                                Ok(None) => {
+                                    this.speak_toolbar(
+                                        "Copy locus JSON needs a committed locus. Here is unset.",
+                                    );
+                                }
+                                Err(err) => {
+                                    trace::log(format!("copy locus: {err}"));
+                                    this.last_render = Some(format!("copy locus failed: {err}"));
+                                }
+                            }
+                            cx.notify();
+                        },
+                    )),
+            ))
+            .child(session_cluster(
+                "Telemetry",
+                "toolbar.cluster.telemetry",
+                div()
+                    .flex()
+                    .items_center()
+                    .gap_1()
+                    .child(
+                        div()
+                            .debug_selector(|| "toolbar.renderer-status".into())
+                            .px_2()
+                            .text_color(if self.renderer_error.is_some() {
+                                rgb(0xff8f8f)
+                            } else {
+                                rgb(MUTED)
+                            })
+                            .child(format!("Renderer · {}", self.renderer_status())),
+                    )
+                    .child(
+                        div()
+                            .debug_selector(|| "toolbar.audio-status".into())
+                            .px_2()
+                            .text_color(if self.audio_error.is_some() {
+                                rgb(0xff8f8f)
+                            } else {
+                                rgb(MUTED)
+                            })
+                            .child(self.audio_status()),
+                    ),
+            ))
     }
 
     fn open_video_clicked(&mut self) {
@@ -2712,9 +2794,187 @@ impl StudioView {
 
     fn after_edit(&mut self) {
         self.sync_source_draft();
+        self.refresh_property_drafts();
         self.invalidate_audio("edit");
         self.preview_dirty = true;
         self.queue_preview();
+    }
+
+    fn commit_inspector_gain(&mut self) {
+        let Some(db) = parse_gain_db(&self.gain_draft) else {
+            self.last_render = Some("gain dB needs an integer".into());
+            return;
+        };
+        match self.session.apply_inspector_gain(db) {
+            Ok(()) => {
+                self.refresh_property_drafts();
+                self.after_edit();
+            }
+            Err(_) => {
+                if let Some(spoken) = self.session.last_spoken() {
+                    self.last_render = Some(spoken.to_string());
+                }
+            }
+        }
+    }
+
+    fn navigate_eye(&mut self, eye: &str) {
+        match self.session.seek_eye(eye) {
+            Ok(true) => {
+                self.last_render = Some(format!("navigate {eye}"));
+                self.refresh_preview("utterance-eye");
+                self.queue_preview();
+            }
+            Ok(false) => {
+                self.last_render = Some(format!("no span for {eye}"));
+            }
+            Err(err) => {
+                self.last_render = Some(format!("navigate failed: {err}"));
+            }
+        }
+    }
+
+    fn commit_inspector_fade(&mut self) {
+        let Some(fade_in) = parse_fade_duration(&self.fade_draft) else {
+            self.last_render = Some("fade_in needs a duration".into());
+            return;
+        };
+        match self.session.apply_inspector_fade(fade_in) {
+            Ok(()) => {
+                self.refresh_property_drafts();
+                self.after_edit();
+            }
+            Err(_) => {
+                if let Some(spoken) = self.session.last_spoken() {
+                    self.last_render = Some(spoken.to_string());
+                }
+            }
+        }
+    }
+
+    fn property_field(
+        &self,
+        selector: &'static str,
+        focus: FocusHandle,
+        draft: &str,
+        cx: &mut Context<Self>,
+        on_key: impl Fn(&mut Self, &KeyDownEvent) + 'static,
+        on_focus: impl Fn(&mut Self, &mut Window, &mut Context<Self>) + 'static,
+    ) -> impl IntoElement {
+        let shown = if draft.is_empty() {
+            "(type a value)".to_string()
+        } else {
+            draft.to_string()
+        };
+        div()
+            .id(selector)
+            .debug_selector(move || selector.into())
+            .track_focus(&focus)
+            .px_2()
+            .py_1()
+            .border_1()
+            .border_color(rgb(TEAL))
+            .bg(rgb(0x0c0e12))
+            .on_click(cx.listener(move |this, _, window, cx| {
+                on_focus(this, window, cx);
+                cx.notify();
+            }))
+            .on_key_down(cx.listener(move |this, event: &KeyDownEvent, _, cx| {
+                if event.keystroke.key == "enter" {
+                    if selector == "inspector.gain" {
+                        this.commit_inspector_gain();
+                    } else {
+                        this.commit_inspector_fade();
+                    }
+                    cx.notify();
+                    return;
+                }
+                on_key(this, event);
+                cx.notify();
+            }))
+            .child(shown)
+    }
+
+    fn utterance_block(
+        &self,
+        utterance: &lattice_studio::UtteranceView,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement {
+        let mut block = div()
+            .id("inspector-utterance")
+            .debug_selector(|| "inspector.utterance".into())
+            .mt_3()
+            .flex()
+            .flex_col()
+            .gap_1();
+        block = block.child(
+            div()
+                .text_color(rgb(TEAL))
+                .child(format!("Here · {}", utterance.here)),
+        );
+        block = block.child(
+            div()
+                .text_color(rgb(MUTED))
+                .child(format!("pointing {}", utterance.pointing)),
+        );
+        if !utterance.legal.is_empty() {
+            block = block.child(
+                div()
+                    .text_color(rgb(MUTED))
+                    .child(format!("legal {}", utterance.legal.join(" · "))),
+            );
+        }
+        if !utterance.routed.is_empty() {
+            block = block.child(div().text_color(rgb(MUTED)).child(format!(
+                "this gesture commits {}",
+                utterance.routed.join(", ")
+            )));
+        }
+        let mut first_eye = true;
+        for spoken in &utterance.spoken {
+            let text = spoken.text.clone();
+            if let Some(eye) = spoken.eye_target.clone() {
+                let selector = if first_eye {
+                    first_eye = false;
+                    "utterance.eye".to_string()
+                } else {
+                    format!("utterance.eye.{eye}")
+                };
+                let click_eye = eye.clone();
+                let down_eye = eye;
+                block = block.child(
+                    div()
+                        .id(SharedString::from(selector.clone()))
+                        .debug_selector({
+                            let selector = selector.clone();
+                            move || selector.clone()
+                        })
+                        .px_2()
+                        .py_1()
+                        .text_color(rgb(TEAL))
+                        .cursor_pointer()
+                        .on_click(cx.listener(move |this, _, _, cx| {
+                            this.navigate_eye(&click_eye);
+                            cx.stop_propagation();
+                            cx.notify();
+                        }))
+                        .capture_any_mouse_down(cx.listener(
+                            move |this, event: &MouseDownEvent, _, cx| {
+                                if event.button != MouseButton::Left {
+                                    return;
+                                }
+                                this.navigate_eye(&down_eye);
+                                cx.stop_propagation();
+                                cx.notify();
+                            },
+                        ))
+                        .child(text),
+                );
+            } else {
+                block = block.child(div().text_color(rgb(TEXT)).child(text));
+            }
+        }
+        block
     }
 
     fn speak_toolbar(&mut self, err: impl std::fmt::Display) {
@@ -3352,6 +3612,60 @@ impl StudioView {
                         })),
                 );
         }
+        if inspector.gain_db.is_some() {
+            body = body
+                .child(div().mt_2().text_color(rgb(MUTED)).child("gain dB"))
+                .child(self.property_field(
+                    "inspector.gain",
+                    self.gain_focus.clone(),
+                    &self.gain_draft,
+                    cx,
+                    |this, event| handle_property_key(&mut this.gain_draft, event),
+                    |this, window, _cx| this.gain_focus.focus(window),
+                ))
+                .child(action_button("Apply gain", TEAL, cx, move |this, cx| {
+                    this.commit_inspector_gain();
+                    cx.notify();
+                }));
+        }
+        if inspector.fade_in.is_some() {
+            body = body
+                .child(div().mt_2().text_color(rgb(MUTED)).child("fade_in"))
+                .child(self.property_field(
+                    "inspector.fade",
+                    self.fade_focus.clone(),
+                    &self.fade_draft,
+                    cx,
+                    |this, event| handle_property_key(&mut this.fade_draft, event),
+                    |this, window, _cx| this.fade_focus.focus(window),
+                ))
+                .child(action_button("Apply fade_in", TEAL, cx, move |this, cx| {
+                    this.commit_inspector_fade();
+                    cx.notify();
+                }));
+        }
+        if !inspector.invoked.is_empty() {
+            let mut invoked = div()
+                .id("inspector-invoked")
+                .debug_selector(|| "inspector.invoked".into())
+                .mt_3()
+                .flex()
+                .flex_col()
+                .gap_1()
+                .child(div().text_color(rgb(TEAL)).child("Invoked this session"));
+            for (index, row) in inspector.invoked.iter().enumerate() {
+                invoked = invoked.child(
+                    div()
+                        .debug_selector(move || format!("inspector.invoked.{index}"))
+                        .text_color(rgb(TEXT))
+                        .child(format!(
+                            "{} → {} ({}: {})",
+                            row.verb, row.target, row.scope, row.effect
+                        )),
+                );
+            }
+            body = body.child(invoked);
+        }
         if let Some(review) = review {
             body = body
                 .child(div().mt_3().text_color(rgb(TEAL)).child("Review"))
@@ -3365,41 +3679,43 @@ impl StudioView {
                         .child(review_button("Reject", 0xc45c5c, cx, false)),
                 );
         }
-        body = body.child(utterance_block(&inspector.utterance)).child(
-            div()
-                .id("render-preview")
-                .debug_selector(|| "inspector.render-preview".into())
-                .mt_2()
-                .px_3()
-                .py_1()
-                .border_1()
-                .border_color(rgb(TEAL))
-                .cursor_pointer()
-                .on_click(cx.listener(|this, _, _, cx| {
-                    match this.session.render_preview_with_renderer(this.renderer) {
-                        Ok(report) => {
-                            this.renderer_selection = Some(report.renderer.clone());
-                            if !this.preview_retry_required {
-                                this.renderer_error = None;
+        body = body
+            .child(self.utterance_block(&inspector.utterance, cx))
+            .child(
+                div()
+                    .id("render-preview")
+                    .debug_selector(|| "inspector.render-preview".into())
+                    .mt_2()
+                    .px_3()
+                    .py_1()
+                    .border_1()
+                    .border_color(rgb(TEAL))
+                    .cursor_pointer()
+                    .on_click(cx.listener(|this, _, _, cx| {
+                        match this.session.render_preview_with_renderer(this.renderer) {
+                            Ok(report) => {
+                                this.renderer_selection = Some(report.renderer.clone());
+                                if !this.preview_retry_required {
+                                    this.renderer_error = None;
+                                }
+                                this.last_render = Some(format!(
+                                    "wrote {} ({})",
+                                    report.output.display(),
+                                    report.renderer
+                                ));
                             }
-                            this.last_render = Some(format!(
-                                "wrote {} ({})",
-                                report.output.display(),
-                                report.renderer
-                            ));
-                        }
-                        Err(err) => {
-                            trace::log(format!("render preview: {err}"));
-                            if !this.preview_retry_required {
-                                this.renderer_error = Some(err.to_string());
+                            Err(err) => {
+                                trace::log(format!("render preview: {err}"));
+                                if !this.preview_retry_required {
+                                    this.renderer_error = Some(err.to_string());
+                                }
+                                this.last_render = Some(format!("render failed: {err}"));
                             }
-                            this.last_render = Some(format!("render failed: {err}"));
                         }
-                    }
-                    cx.notify();
-                }))
-                .child("Render preview.mp4"),
-        );
+                        cx.notify();
+                    }))
+                    .child("Render preview.mp4"),
+            );
         if let Some(path) = &self.last_render {
             body = body.child(div().text_color(rgb(MUTED)).child(format!("wrote {path}")));
         }
@@ -4022,41 +4338,19 @@ fn review_button(
 }
 
 #[cfg(feature = "window")]
-fn utterance_block(utterance: &lattice_studio::UtteranceView) -> impl IntoElement {
-    let mut block = div()
-        .id("inspector-utterance")
-        .debug_selector(|| "inspector.utterance".into())
-        .mt_3()
+fn session_cluster(
+    label: &'static str,
+    selector: &'static str,
+    row: impl IntoElement,
+) -> impl IntoElement {
+    div()
+        .debug_selector(|| selector.into())
         .flex()
         .flex_col()
-        .gap_1();
-    block = block.child(
-        div()
-            .text_color(rgb(TEAL))
-            .child(format!("Here · {}", utterance.here)),
-    );
-    block = block.child(
-        div()
-            .text_color(rgb(MUTED))
-            .child(format!("pointing {}", utterance.pointing)),
-    );
-    if !utterance.legal.is_empty() {
-        block = block.child(
-            div()
-                .text_color(rgb(MUTED))
-                .child(format!("legal {}", utterance.legal.join(" · "))),
-        );
-    }
-    if !utterance.routed.is_empty() {
-        block = block.child(div().text_color(rgb(MUTED)).child(format!(
-            "this gesture commits {}",
-            utterance.routed.join(", ")
-        )));
-    }
-    for spoken in &utterance.spoken {
-        block = block.child(div().text_color(rgb(TEXT)).child(spoken.clone()));
-    }
-    block
+        .gap_1()
+        .px_1()
+        .child(div().text_color(rgb(MUTED)).child(label))
+        .child(row)
 }
 
 fn handle_title_key(draft: &mut String, event: &KeyDownEvent) {
@@ -4101,9 +4395,71 @@ fn action_selector(label: &str) -> &'static str {
         "Zoom In" => "toolbar.zoom-in",
         "Zoom Out" => "toolbar.zoom-out",
         "Apply edit" => "inspector.apply",
+        "Apply gain" => "inspector.apply-gain",
+        "Apply fade_in" => "inspector.apply-fade",
         "Review" => "inspector.review",
         _ => "toolbar.unknown",
     }
+}
+
+fn handle_property_key(draft: &mut String, event: &KeyDownEvent) {
+    let key = event.keystroke.key.as_str();
+    match key {
+        "backspace" => {
+            draft.pop();
+        }
+        other
+            if other.len() == 1
+                && other
+                    .chars()
+                    .all(|ch| ch.is_ascii_digit() || matches!(ch, '-' | '.')) =>
+        {
+            draft.push_str(other);
+        }
+        _ => {}
+    }
+}
+
+fn parse_gain_db(raw: &str) -> Option<i32> {
+    let trimmed = raw
+        .trim()
+        .trim_end_matches("dB")
+        .trim_end_matches("db")
+        .trim();
+    if let Ok(value) = trimmed.parse::<i32>() {
+        return Some(value);
+    }
+    trimmed
+        .parse::<f64>()
+        .ok()
+        .map(|value| value.round() as i32)
+}
+
+fn parse_fade_duration(raw: &str) -> Option<lattice_engine::Time> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    if let Some(ms) = trimmed.strip_suffix("ms") {
+        return ms
+            .trim()
+            .parse::<i64>()
+            .ok()
+            .map(lattice_engine::Time::milliseconds);
+    }
+    let without_s = trimmed.strip_suffix('s').unwrap_or(trimmed).trim();
+    if let Ok(whole) = without_s.parse::<i64>() {
+        return Some(lattice_engine::Time::seconds(whole));
+    }
+    let (whole, frac) = without_s.split_once('.')?;
+    let whole = if whole.is_empty() {
+        0
+    } else {
+        whole.parse().ok()?
+    };
+    let frac_digits = u32::try_from(frac.len()).ok()?;
+    let frac = frac.parse().ok()?;
+    lattice_engine::Time::from_decimal_seconds(whole, frac, frac_digits).ok()
 }
 
 fn selector_component(value: &str) -> String {

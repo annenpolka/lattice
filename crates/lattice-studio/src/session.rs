@@ -17,7 +17,7 @@ use crate::canvas::{
 use crate::gesture::{GestureOutcome, TimelineGesture};
 use crate::layout::{self, StudioLayout};
 use crate::preview::{PreviewJob, PreviewMailbox, playback_frame_at_or_before};
-use crate::verb::{self, Projection, UnresolvedPointing, Utterance, refuse_edit};
+use crate::verb::{self, InvokedRecord, Projection, UnresolvedPointing, Utterance, refuse_edit};
 use crate::viewport::{TimelineViewport, clamp_interaction_time};
 
 /// Engine-backed Studio state. No GPUI types.
@@ -32,6 +32,8 @@ pub struct StudioSession {
     playing: bool,
     pub(crate) undo_stack: Vec<String>,
     redo_stack: Vec<String>,
+    invoked: Vec<Option<InvokedRecord>>,
+    invoked_redo: Vec<Option<InvokedRecord>>,
     preview_generation: u64,
     source_width: Option<u32>,
     source_height: Option<u32>,
@@ -65,6 +67,8 @@ impl StudioSession {
             playing: false,
             undo_stack: Vec::new(),
             redo_stack: Vec::new(),
+            invoked: Vec::new(),
+            invoked_redo: Vec::new(),
             preview_generation: 0,
             source_width: None,
             source_height: None,
@@ -595,12 +599,13 @@ impl StudioSession {
                 return Err(err);
             }
         };
+        let invoked = InvokedRecord::from_edit(&edit, &locus);
         let proposal = self.engine.propose(&self.compilation, &locus, edit)?;
         self.last_spoken = None;
         if proposal.new_source == self.compilation.source {
             return Ok(());
         }
-        self.push_undo();
+        self.push_undo(Some(invoked));
         let new_source = self
             .engine
             .apply_proposal(&self.compilation.source, &proposal)?;
@@ -648,6 +653,51 @@ impl StudioSession {
         })
     }
 
+    pub fn apply_inspector_gain(&mut self, db: i32) -> Result<(), EngineError> {
+        self.touched_projection = Projection::Inspector;
+        self.apply_edit(SemanticEdit::SetGain { db })
+    }
+
+    pub fn apply_inspector_fade(&mut self, fade_in: Time) -> Result<(), EngineError> {
+        self.touched_projection = Projection::Inspector;
+        self.apply_edit(SemanticEdit::SetFade {
+            fade_in: Some(fade_in),
+        })
+    }
+
+    /// Seek the playhead to a named locus. Does not point, apply, or push Undo.
+    pub fn seek_eye(&mut self, id: &str) -> Result<bool, EngineError> {
+        let loci = self.loci()?;
+        let Some(locus) = loci
+            .iter()
+            .find(|locus| locus.id.as_str() == id || locus.node_id == id)
+            .cloned()
+        else {
+            return Ok(false);
+        };
+        if let Some(span) = self.preview_span_for(&locus) {
+            self.seek(span.start);
+            return Ok(true);
+        }
+        let timeline = Engine::timeline(&self.compilation.project)?;
+        if let Some(span) = self
+            .clip_span_for_scene(&timeline, id)
+            .or_else(|| self.clip_span_for_scene(&timeline, locus.id.as_str()))
+            .or_else(|| self.clip_span_for_scene(&timeline, &locus.node_id))
+            .or_else(|| self.clip_span_for_source(&timeline, &locus.node_id))
+            .or_else(|| self.clip_span_for_source(&timeline, locus.id.as_str()))
+        {
+            self.seek(span.start);
+            return Ok(true);
+        }
+        Ok(false)
+    }
+
+    #[must_use]
+    pub fn invoked_this_session(&self) -> Vec<InvokedRecord> {
+        self.invoked.iter().filter_map(Clone::clone).collect()
+    }
+
     pub fn save(&mut self) -> Result<(), EngineError> {
         write_source_atomic(&self.path, &self.compilation.source)?;
         self.saved_source.clone_from(&self.compilation.source);
@@ -659,6 +709,9 @@ impl StudioSession {
             return Ok(());
         };
         self.redo_stack.push(self.compilation.source.clone());
+        if let Some(row) = self.invoked.pop() {
+            self.invoked_redo.push(row);
+        }
         self.replace_working(&previous)
     }
 
@@ -667,6 +720,9 @@ impl StudioSession {
             return Ok(());
         };
         self.undo_stack.push(self.compilation.source.clone());
+        if let Some(row) = self.invoked_redo.pop() {
+            self.invoked.push(row);
+        }
         self.replace_working(&next)
     }
 
@@ -1068,6 +1124,8 @@ impl StudioSession {
         self.replace_working(&source)?;
         self.undo_stack.push(previous);
         self.redo_stack.clear();
+        self.invoked.push(None);
+        self.invoked_redo.clear();
         Ok(())
     }
 
@@ -1121,9 +1179,11 @@ impl StudioSession {
         true
     }
 
-    pub(crate) fn push_undo(&mut self) {
+    pub(crate) fn push_undo(&mut self, invoked: Option<InvokedRecord>) {
         self.undo_stack.push(self.compilation.source.clone());
         self.redo_stack.clear();
+        self.invoked.push(invoked);
+        self.invoked_redo.clear();
     }
 
     pub(crate) fn replace_working(&mut self, source: &str) -> Result<(), EngineError> {

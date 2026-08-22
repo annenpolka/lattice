@@ -67,6 +67,35 @@ pub struct SpokenClause {
     pub scope: Option<String>,
     pub effect: Option<String>,
     pub text: String,
+    /// Navigate/seek target. Eye only — never `apply_edit` and never retarget here.
+    pub eye_target: Option<String>,
+}
+
+/// Volatile working-session readout of one committed edit. Not a second history store.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct InvokedRecord {
+    pub verb: String,
+    pub target: String,
+    pub scope: String,
+    pub effect: String,
+}
+
+impl InvokedRecord {
+    #[must_use]
+    pub fn from_edit(edit: &SemanticEdit, locus: &Locus) -> Self {
+        let verb = verb_for_edit(edit);
+        let named = legal_edits_for(locus)
+            .into_iter()
+            .find(|legal| legal.verb == verb);
+        Self {
+            verb: verb.to_string(),
+            target: locus.id.as_str().to_string(),
+            scope: named
+                .as_ref()
+                .map_or_else(|| "here".into(), |legal| legal.scope.clone()),
+            effect: named.map_or_else(|| verb.to_string(), |legal| legal.effect),
+        }
+    }
 }
 
 /// One utterance for here: legal set, routed set, and the spoken gap.
@@ -109,6 +138,7 @@ impl Utterance {
 pub fn routed_verbs(projection: Projection, kind: LocusKind) -> Vec<&'static str> {
     match (projection, kind) {
         (Projection::Timeline, LocusKind::Source) => vec!["trim", "set-gain", "set-fade"],
+        (Projection::Inspector, LocusKind::Source) => vec!["set-gain", "set-fade"],
         (Projection::Timeline | Projection::Inspector, LocusKind::Title) => vec!["title"],
         (Projection::Timeline, LocusKind::Callout) => vec!["callout"],
         (Projection::Timeline, LocusKind::Scene) => vec!["reorder-scene", "split", "delete"],
@@ -191,6 +221,7 @@ pub fn utterance(
                 point.projection.as_str(),
                 point.candidates.len()
             ),
+            eye_target: None,
         }];
         return Utterance {
             here: None,
@@ -217,6 +248,7 @@ pub fn utterance(
                 scope: None,
                 effect: None,
                 text: "No here. Point a locus.".into(),
+                eye_target: None,
             }],
             projection,
         };
@@ -239,6 +271,7 @@ pub fn utterance(
                 "This {} has an empty legal set (structurally-absent). Nothing is drawn.",
                 kind_label(locus.kind)
             ),
+            eye_target: None,
         });
     }
     spoken.extend(speak_relations(locus, loci));
@@ -281,6 +314,7 @@ fn speak_legal_vs_routed(
                     kind_label(locus.kind),
                     projection.as_str()
                 ),
+                eye_target: None,
             });
             continue;
         }
@@ -297,19 +331,9 @@ fn speak_legal_vs_routed(
                     kind_label(locus.kind),
                     route.as_str()
                 ),
+                eye_target: None,
             }),
-            None => spoken.push(SpokenClause {
-                verb: edit.verb.clone(),
-                status: "unrouted".into(),
-                reason: Some(AbsenceReason::StructurallyAbsent.as_str().into()),
-                target: Some(edit.target.as_str().into()),
-                scope: Some(edit.scope.clone()),
-                effect: Some(edit.effect.clone()),
-                text: format!(
-                    "{disclosure} is legal for this {} and unrouted — no projection draws the target (structurally-absent).",
-                    kind_label(locus.kind)
-                ),
-            }),
+            None => spoken.push(layout_unrouted_clause(locus, edit, &disclosure)),
         }
     }
     spoken
@@ -342,6 +366,7 @@ fn speak_relations(locus: &Locus, loci: &[Locus]) -> Vec<SpokenClause> {
                         scope: Some("relation".into()),
                         effect: Some("Navigate; do not retarget here".into()),
                         text: format!("{id} is a relation, not here. Navigate, do not retarget."),
+                        eye_target: Some(id.into()),
                     }]
                 });
             };
@@ -375,6 +400,7 @@ fn speak_relations(locus: &Locus, loci: &[Locus]) -> Vec<SpokenClause> {
                     kind_label(scene.kind),
                     scene.label
                 ),
+                eye_target: Some(scene.id.as_str().into()),
             }]
         }
         LocusKind::Scene => vec![SpokenClause {
@@ -385,6 +411,7 @@ fn speak_relations(locus: &Locus, loci: &[Locus]) -> Vec<SpokenClause> {
             scope: Some("relation".into()),
             effect: Some("Point the video clip; do not retarget here".into()),
             text: "trim, set-gain, set-fade need a source binding. Point the video clip — do not retarget.".into(),
+            eye_target: None,
         }],
         _ => Vec::new(),
     }
@@ -482,11 +509,32 @@ pub fn candidate_cards(unresolved: &UnresolvedPointing) -> Vec<PointCandidate> {
         .collect()
 }
 
+/// Studio layout fact: a legal verb has no drawn instrument. Not an Engine `AbsenceReason`.
+#[must_use]
+pub fn layout_unrouted_clause(locus: &Locus, edit: &LegalEdit, disclosure: &str) -> SpokenClause {
+    SpokenClause {
+        verb: edit.verb.clone(),
+        status: "layout-unrouted".into(),
+        reason: Some("no-drawn-target".into()),
+        target: Some(edit.target.as_str().into()),
+        scope: Some(edit.scope.clone()),
+        effect: Some(edit.effect.clone()),
+        text: format!(
+            "{disclosure} is legal for this {} and unrouted — Studio layout has no drawn target. Not an Engine legality claim.",
+            kind_label(locus.kind)
+        ),
+        eye_target: None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use lattice_engine::{Locus, LocusId, LocusKind, Origin, Provenance, SemanticEdit};
+    use lattice_engine::{LegalEdit, Locus, LocusId, LocusKind, Origin, Provenance, SemanticEdit};
 
-    use super::{Projection, commit_projection, refuse_edit, routed_verbs, utterance};
+    use super::{
+        InvokedRecord, Projection, commit_projection, layout_unrouted_clause, refuse_edit,
+        routed_verbs, utterance,
+    };
 
     fn locus(kind: LocusKind, id: &str, label: &str) -> Locus {
         Locus {
@@ -656,6 +704,11 @@ mod tests {
             ["title"]
         );
         assert_eq!(
+            routed_verbs(Projection::Inspector, LocusKind::Source),
+            ["set-gain", "set-fade"]
+        );
+        assert!(!routed_verbs(Projection::Inspector, LocusKind::Source).contains(&"trim"));
+        assert_eq!(
             commit_projection("split", LocusKind::Scene),
             Some(Projection::Timeline)
         );
@@ -698,6 +751,46 @@ mod tests {
             "{}",
             spoken.spoken_text()
         );
+    }
+
+    #[test]
+    fn layout_unrouted_is_studio_clause_not_engine_absence() {
+        let source = locus(LocusKind::Source, "source:fight", "fight");
+        let edit = LegalEdit {
+            verb: "set-gain".into(),
+            target: LocusId::new("source:fight"),
+            scope: "source-binding".into(),
+            effect: "set gain on this source".into(),
+        };
+        let clause = layout_unrouted_clause(
+            &source,
+            &edit,
+            "set-gain → source:fight (source-binding: set gain on this source)",
+        );
+        assert_eq!(clause.status, "layout-unrouted");
+        assert_eq!(clause.reason.as_deref(), Some("no-drawn-target"));
+        assert_ne!(clause.reason.as_deref(), Some("structurally-absent"));
+        assert!(
+            !clause.text.contains("structurally-absent"),
+            "{}",
+            clause.text
+        );
+        assert!(clause.text.contains("Studio layout"), "{}", clause.text);
+        assert!(
+            clause.text.contains("Not an Engine legality claim"),
+            "{}",
+            clause.text
+        );
+    }
+
+    #[test]
+    fn invoked_record_is_verb_target_scope_effect() {
+        let source = locus(LocusKind::Source, "source:fight", "fight");
+        let record = InvokedRecord::from_edit(&SemanticEdit::SetGain { db: -6 }, &source);
+        assert_eq!(record.verb, "set-gain");
+        assert_eq!(record.target, "source:fight");
+        assert_eq!(record.scope, "source-binding");
+        assert_eq!(record.effect, "set gain on this source");
     }
 
     #[test]

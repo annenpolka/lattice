@@ -50,6 +50,15 @@ pub fn snapshot(session: &StudioSession) -> Value {
                 "scope": clause.scope,
                 "effect": clause.effect,
                 "text": clause.text,
+                "eye_target": clause.eye_target,
+            })
+        }).collect::<Vec<_>>(),
+        "invoked": session.invoked_this_session().iter().map(|row| {
+            json!({
+                "verb": row.verb,
+                "target": row.target,
+                "scope": row.scope,
+                "effect": row.effect,
             })
         }).collect::<Vec<_>>(),
         "unresolved": session.unresolved_pointing().map(|point| {
