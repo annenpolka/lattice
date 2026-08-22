@@ -128,22 +128,20 @@ Apply edit / Review always call title APIs (`apply_title_text` / `propose_title_
 
 Committed PNGs only. No Studio UI code was changed. Trim hit-test is the one live-impossible case: the crop shows the painted handles; the one-line cite is that `tl-{id}-in` / `tl-{id}-out` set `debug_selector`, size, `bg`, and `cursor(ResizeLeftRight)` and do **not** attach `on_mouse_down` (`crates/lattice-studio/src/main.rs`, the two handle `div`s under `if handles`).
 
-| Claim | Path |
-|---|---|
-| 1 open: title current, playhead 0s, Canvas empty | [`screenshots/observe-b-open-title-0s-empty-canvas.png`](screenshots/observe-b-open-title-0s-empty-canvas.png) |
-| 2 Video body click → `Clicked` / `scene:demo` | [`screenshots/observe-b-video-click-scene-demo.png`](screenshots/observe-b-video-click-scene-demo.png) |
-| 3 Audio rail scrub **and** `here` jumps | [`screenshots/observe-b-audio-rail-scrub-locus-jump.png`](screenshots/observe-b-audio-rail-scrub-locus-jump.png) |
-| 4 Title field on callout | [`screenshots/observe-b-callout-hold.png`](screenshots/observe-b-callout-hold.png) |
-| 4 Title field on scene | [`screenshots/observe-b-video-click-scene-demo.png`](screenshots/observe-b-video-click-scene-demo.png) |
-| 4 scene Apply → `insert_title` (`title "demo" { at 0s for 3s }`) | [`screenshots/observe-b-scene-apply-insert-title.png`](screenshots/observe-b-scene-apply-insert-title.png) |
-| 5 overlay absent, preview off | [`screenshots/observe-b-open-title-0s-empty-canvas.png`](screenshots/observe-b-open-title-0s-empty-canvas.png) |
-| 5 overlay absent, preview on, playhead outside title span | [`screenshots/observe-b-preview-open-no-overlay.png`](screenshots/observe-b-preview-open-no-overlay.png) |
-| 6 trim handles drawn (not their own mouse-down target) | [`screenshots/observe-b-trim-handles-drawn.png`](screenshots/observe-b-trim-handles-drawn.png) |
-| 7 Linux `Open Video…` without `LATTICE_OPEN_VIDEO` | [`screenshots/observe-b-open-video-linux.png`](screenshots/observe-b-open-video-linux.png) |
-| 7 GPU DX12 typed error, no silent CPU fallback | [`screenshots/observe-b-gpu-dx12-error.png`](screenshots/observe-b-gpu-dx12-error.png) |
-| 8 same-title Review → `@@ no line changes @@` | [`screenshots/observe-b-review-no-line-changes.png`](screenshots/observe-b-review-no-line-changes.png) |
+Canonical checklist (one PNG per claim):
 
-Earlier shots that still match the same facts are kept: `observe-b-timeline-basic-open.png`, `observe-b-scene-inspector.png`. `observe-b-after-play-scrub-clip-tree.png` is **not** a clean claim-2 proof (SEQUENCE scene was clicked after the Video body).
+| Claim | Path | Note |
+|---|---|---|
+| 1 open: title current + playhead 0s + Canvas empty | [`screenshots/observe-b-open-title-0s-empty-canvas.png`](screenshots/observe-b-open-title-0s-empty-canvas.png) | kept |
+| 2 Video click → `scene:demo` | [`screenshots/observe-b-video-click-scene-demo.png`](screenshots/observe-b-video-click-scene-demo.png) | kept |
+| 3 SEQUENCE `title Hello` → playhead 1s + overlay | [`screenshots/observe-b-title-overlay-after-tree.png`](screenshots/observe-b-title-overlay-after-tree.png) | kept |
+| 4 callout selected, Inspector still Title text | [`screenshots/observe-b-callout-hold.png`](screenshots/observe-b-callout-hold.png) | kept |
+| 5 Audio rail: scrub + locus snaps back to title | [`screenshots/observe-b-audio-rail-scrub-to-title.png`](screenshots/observe-b-audio-rail-scrub-to-title.png) | new; 3.2s is inside Hello, outside Hold |
+| 6 GPU DX12 typed error, preview dead until CPU | [`screenshots/observe-b-gpu-dx12-error.png`](screenshots/observe-b-gpu-dx12-error.png) | kept |
+| 7 Review `@@ no line changes @@` | [`screenshots/observe-b-review-no-line-changes.png`](screenshots/observe-b-review-no-line-changes.png) | kept |
+| 8 trim handles drawn, not their own mouse-down | [`screenshots/observe-b-trim-handles-drawn.png`](screenshots/observe-b-trim-handles-drawn.png) | kept; cite below |
+
+`observe-b-audio-rail-scrub-locus-jump.png` is a different time (2.50s → callout). It is not claim 5.
 
 ## User-visible sequences (this VM)
 
@@ -241,7 +239,14 @@ SEQUENCE `scene demo` after that: Inspector `scene "demo"`, `Defined in provenan
 
 ![Scene locus: no Navigate, Title field still there](screenshots/observe-b-scene-inspector.png)
 
-Audio-track click at ~80%: `Scrub` to `3.20s`, then `point_from_timeline_time` sets locus back to `demo:title:1`.
+Audio-track click at ~80% from locus `scene:demo`: `Scrub` commit `3.20s` (title span, outside Hold 2s–3s) then `point_from_timeline_time` → `demo:title:1` / Hello.
+
+```text
+gesture begin track=Audio kind=Scrub  locus=scene:demo  playhead=3.20s
+gesture commit outcome=Scrubbed      locus=demo:title:1 playhead=3.20s
+```
+
+![Audio rail scrub snaps locus back to title](screenshots/observe-b-audio-rail-scrub-to-title.png)
 
 ## Obvious friction
 
