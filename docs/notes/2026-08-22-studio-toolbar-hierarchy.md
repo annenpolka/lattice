@@ -240,3 +240,30 @@ If cosmetic toolbar polish is rejected, the principled architecture under the lo
 
 ### Conclusion of the Rethink
 A global top-of-window verb button row is an artifact of early milestone bootstrapping, not a requirement of the Lattice architecture. Under the locked verb-license spine, verbs have natural physical homes on specific projection surfaces (Canvas, Timeline, Inspector). Removing the top verb row entirely—leaving only a clean document header—eliminates visual clutter, resolves the 2-row wrap artifact, and fully aligns the visual experience with the underlying semantic engine.
+
+---
+
+## 7. Phase III Vote (Chair Frame): DELETE Global Verb Bank
+
+### Lens: Visual / Hierarchy
+
+**Narrow Claim Evaluation**: The current fixed, always-visible bank of locus-taking `SemanticEdit` buttons (`[Set In]`, `[Set Out]`, `[Split at Playhead]`, `[Delete Selected Clip]`, `[Gain -3 dB]`, `[Fade]`) is **not** a coherent global verb surface. A compact session strip (`header_bar`) holding document/engine lifecycle operations may remain global.
+
+### Vote on the Global Locus-Taking Verb Button Bank: **DELETE**
+
+### Evaluation Against the Six Chair Tests
+
+| # | Chair Test | Evaluation under Visual / Hierarchy Lens | Vote Assessment |
+|---|---|---|---|
+| **1** | **Standing invitation for a locus-taking edit?** | **FAIL on current row / PASS on DELETE**: A fixed button bank permanently invites clicks regardless of `here`. Clicking `[Split at Playhead]` while `here` is a Title causes a spoken refusal. Removing global verb buttons eliminates standing invalid invitations; invitations exist only on the projection that can commit. | **DELETE** |
+| **2** | **Target / scope / effect / parameter / committing projection disclosed before commit?** | **FAIL on current row / PASS on DELETE**: Global buttons disclose none of `(verb, target, scope, effect)` before click; they only show opaque static labels like `Gain -3 dB`. Full disclosure belongs in the Inspector/Utterance panel where Spoken Clauses live. | **DELETE** |
+| **3** | **Engine only legality authority?** | **PASS**: Legality remains 100% owned by `Engine::legal_edits_for(here)`. Deleting global buttons prevents GPUI chrome from pretending to be an independent verb authority. | **DELETE** |
+| **4** | **Uses the one here, fail-closed, no target search/promotion?** | **PASS**: Respects the single committed `LocusId`. Eliminating the toolbar removes any pressure to invent fallback targets (e.g. promoting video click to scene or searching first clip). | **DELETE** |
+| **5** | **Every legal edit has a named route or is spoken unrouted?** | **PASS**: Verbs route directly to their natural projection (Canvas: drag/resize; Timeline: trim/reorder/cards; Inspector: properties/text). When a legal verb cannot be committed on the touched surface, it is spoken as routed elsewhere. | **DELETE** |
+| **6** | **Non-verb global controls grouped by actual authority?** | **PASS on Session Strip**: Retaining only a unified, single-tier session header for true document-level authorities (`[Save]`, `[Undo]`, `[Redo]`, `[Resolve]`, and quiet status badges) restores clean perceptual hierarchy and eliminates the 2-row wrap glitch. | **DELETE (Verb Bank) / KEEP (Session Strip)** |
+
+### Visual Summary of the Voted Model
+- **Top Window Chrome**: Single-tier 36px `header_bar` (Branding, File context, `[Resolve]`, `[Save]`, `[Undo]`, `[Redo]`, Status).
+- **Global Verb Button Bank**: **DELETED**. Zero floating semantic-edit buttons.
+- **Commit Surfaces**: Canvas (geometry), Timeline (ruler/transport/clips), Inspector (properties & utterance disclosure).
+

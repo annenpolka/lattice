@@ -8,7 +8,7 @@ These files are the design conversations that produced Lattice. They are source 
 | [2026-08-18-video-editor-cost-and-vel-design.md](2026-08-18-video-editor-cost-and-vel-design.md) | 2026-08-18–19 | Costing, VEL language design, Lattice constitution, crate layout, and the initialization plan this repo follows. |
 | [2026-08-22-studio-verb-license-intuition-integrate.md](2026-08-22-studio-verb-license-intuition-integrate.md) | 2026-08-22 | Reads three gen2 verb-license models (Semantic Compass, Projection-Local Verbs, the Reading): who each is intuitive for, what each is misread as, and the proposed integration, with pointing fixed by the overlap and video-click locks. |
 | [2026-08-22-studio-verb-license-spine.md](2026-08-22-studio-verb-license-spine.md) | 2026-08-22 | What shipped: the INTEGRATED verb-license spine in Studio (not Compass / Reading / Projection-Local as a product skin), plus leftovers closed against the integrate note. |
-| [2026-08-22-studio-toolbar-hierarchy.md](2026-08-22-studio-toolbar-hierarchy.md) | 2026-08-22 | Live visual and hierarchy observation of top-of-window chrome (header_bar + actions_bar), plus radical-rethink on whether a global verb button row belongs under the locked spine. |
+| [2026-08-22-studio-toolbar-hierarchy.md](2026-08-22-studio-toolbar-hierarchy.md) | 2026-08-22 | Live visual and hierarchy observation of top-of-window chrome (header_bar + actions_bar), radical rethink, and Phase III vote (DELETE global verb bank, KEEP session strip). |
 
 Do not "implement the whole chat log." Milestone 0 is the walking skeleton described at the end of the 08-18 log: parse a small `.vel`, lower through a registry, emit IR, explain magic.
 
