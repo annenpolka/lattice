@@ -417,6 +417,7 @@ fn apply_title_text_rewrites_vel_and_render_preview_writes_mp4() {
 }
 
 #[test]
+#[allow(clippy::too_many_lines)]
 fn window_source_composes_documented_panes() {
     let main = include_str!("../src/main.rs");
     for pane in ["SEQUENCE", "Canvas", "VEL", "Inspector", "Timeline"] {

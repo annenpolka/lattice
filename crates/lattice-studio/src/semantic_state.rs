@@ -88,6 +88,7 @@ fn interaction_mode(session: &StudioSession) -> &'static str {
     }
 }
 
+#[allow(clippy::too_many_lines)]
 fn gesture_value(gesture: &TimelineGesture) -> Value {
     match gesture {
         TimelineGesture::None => json!({ "kind": "none" }),

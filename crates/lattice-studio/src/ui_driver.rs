@@ -800,9 +800,10 @@ scene demo {
 
         let spoken = ui.read(&view, |view, _| view.session.utterance().spoken_text());
         assert!(
-            spoken.contains("split") || spoken.contains("needs-scene"),
-            "utterance discloses scene verbs without committing: {spoken}"
+            !spoken.is_empty() && spoken.contains("title →"),
+            "utterance discloses Title legality without a toolbar commit: {spoken}"
         );
+        assert!(!spoken.contains("committed on Toolbar"), "{spoken}");
         assert_eq!(
             ui.read(&view, |view, _| {
                 view.session.current_locus().unwrap().unwrap().id

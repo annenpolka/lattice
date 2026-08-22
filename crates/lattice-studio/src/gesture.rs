@@ -202,7 +202,17 @@ pub fn clip_kind_from_track(kind: &str, track: &str) -> ClipKind {
 pub fn db_from_y_ratio(ratio: f64) -> i32 {
     let span = f64::from(GAIN_DB_TOP - GAIN_DB_BOTTOM);
     let db = f64::from(GAIN_DB_TOP) - ratio.clamp(0.0, 1.0) * span;
-    db.round() as i32
+    let rounded = db.round();
+    if rounded >= f64::from(i32::MAX) {
+        i32::MAX
+    } else if rounded <= f64::from(i32::MIN) {
+        i32::MIN
+    } else {
+        #[allow(clippy::cast_possible_truncation)]
+        {
+            rounded as i32
+        }
+    }
 }
 
 #[must_use]
@@ -239,8 +249,9 @@ pub fn hit_test(clips: &[HitClip], x: f64, viewport: TimelineViewport) -> Timeli
     hit_test_xy(clips, x, TRACK_HEIGHT_PX / 2.0, viewport)
 }
 
+#[allow(clippy::too_many_lines)]
 pub fn hit_test_xy(clips: &[HitClip], x: f64, y: f64, viewport: TimelineViewport) -> TimelineHit {
-    let mut best_trim: Option<(f64, TimelineHit)> = None;
+    let mut best_trim: Option<(f64, u8, TimelineHit)> = None;
     let mut best_fade: Option<TimelineHit> = None;
     let mut best_gain: Option<TimelineHit> = None;
     let mut best_cut: Option<TimelineHit> = None;
@@ -282,10 +293,14 @@ pub fn hit_test_xy(clips: &[HitClip], x: f64, y: f64, viewport: TimelineViewport
             let dist_right = (x - hi).abs();
             if dist_left <= handle && dist_left <= dist_right {
                 let dist = dist_left;
-                let better = best_trim.as_ref().is_none_or(|(d, _)| dist <= *d);
+                let rank = trim_rank(clip);
+                let better = best_trim
+                    .as_ref()
+                    .is_none_or(|(d, old_rank, _)| dist < *d || (dist <= *d && rank >= *old_rank));
                 if better {
                     best_trim = Some((
                         dist,
+                        rank,
                         TimelineHit::Trim {
                             clip_id: clip.id.clone(),
                             edge: Edge::Left,
@@ -295,10 +310,14 @@ pub fn hit_test_xy(clips: &[HitClip], x: f64, y: f64, viewport: TimelineViewport
                 }
             } else if dist_right <= handle {
                 let dist = dist_right;
-                let better = best_trim.as_ref().is_none_or(|(d, _)| dist <= *d);
+                let rank = trim_rank(clip);
+                let better = best_trim
+                    .as_ref()
+                    .is_none_or(|(d, old_rank, _)| dist < *d || (dist <= *d && rank >= *old_rank));
                 if better {
                     best_trim = Some((
                         dist,
+                        rank,
                         TimelineHit::Trim {
                             clip_id: clip.id.clone(),
                             edge: Edge::Right,
@@ -342,7 +361,7 @@ pub fn hit_test_xy(clips: &[HitClip], x: f64, y: f64, viewport: TimelineViewport
     if let Some(hit) = best_cut {
         return hit;
     }
-    if let Some((_, hit)) = best_trim {
+    if let Some((_, _, hit)) = best_trim {
         return hit;
     }
     if let Some(hit) = best_fade {
@@ -359,6 +378,11 @@ impl HitClip {
     pub fn end(&self) -> Time {
         self.start.checked_add(self.duration).unwrap_or(self.start)
     }
+}
+
+fn trim_rank(clip: &HitClip) -> u8 {
+    let overlay = u8::from(matches!(clip.kind, ClipKind::Title | ClipKind::Callout));
+    (overlay << 1) | u8::from(clip.selected)
 }
 
 #[must_use]

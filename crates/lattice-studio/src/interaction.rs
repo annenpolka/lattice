@@ -6,9 +6,8 @@ use crate::gesture::{
     ClipKind, CursorKind, DRAG_THRESHOLD_PX, Edge, GestureOutcome, HitClip, SNAP_THRESHOLD_PX,
     TRACK_HEIGHT_PX, TimelineGesture, TimelineHit, clip_kind_from_track, clips_at_x,
     crossed_drag_threshold, cursor_for_hit, db_from_y_ratio, hit_test, hit_test_xy, min_duration,
-    nearest_frame,
-    overlay_duration_valid, preview_overlay_move, preview_overlay_resize, preview_trim,
-    reorder_index, snap_time,
+    nearest_frame, overlay_duration_valid, preview_overlay_move, preview_overlay_resize,
+    preview_trim, reorder_index, snap_time,
 };
 use crate::session::StudioSession;
 use crate::verb::{Projection, UnresolvedPointing, refuse_edit};
@@ -52,7 +51,7 @@ pub fn begin_xy(
             },
         },
         TimelineHit::Fade { clip_id } => begin_fade(session, &clips, &clip_id, x)?,
-        TimelineHit::Gain { clip_id } => begin_gain(session, &clip_id, y)?,
+        TimelineHit::Gain { clip_id } => begin_gain(session, &clip_id, y),
         TimelineHit::CutLane { clip_id } => begin_split(session, &clip_id, x)?,
         TimelineHit::DeleteHandle { clip_id } => TimelineGesture::Delete { scene_id: clip_id },
         TimelineHit::ClipBody { clip_id, kind } => match kind {
@@ -60,7 +59,7 @@ pub fn begin_xy(
             // Unselected audio is the empty-rail coordinate point (overlap).
             // Selected audio is a Gain hit, not a body.
             ClipKind::Audio => TimelineGesture::Point { start_x: x },
-            ClipKind::Scene => begin_scene_band(session, &clips, &clip_id, x)?,
+            ClipKind::Scene => begin_scene_band(session, &clips, &clip_id, x),
             ClipKind::Title | ClipKind::Callout => {
                 begin_move_overlay(session, &clips, &clip_id, kind, x)?
             }
@@ -86,7 +85,6 @@ fn update_inner(
 ) -> Result<(), EngineError> {
     session.snap_time = None;
     match session.gesture.clone() {
-        TimelineGesture::None => Ok(()),
         TimelineGesture::Point { start_x } => {
             if crossed_drag_threshold(start_x, x) {
                 session.gesture = TimelineGesture::Scrub {
@@ -223,7 +221,9 @@ fn update_inner(
             Ok(())
         }
         TimelineGesture::Gain {
-            start_y, original_db, ..
+            start_y,
+            original_db,
+            ..
         } => {
             let preview = if (y - start_y).abs() >= DRAG_THRESHOLD_PX {
                 db_from_y_ratio((y / TRACK_HEIGHT_PX).clamp(0.0, 1.0))
@@ -281,7 +281,8 @@ fn update_inner(
             let _ = scene_id;
             Ok(())
         }
-        TimelineGesture::Delete { .. }
+        TimelineGesture::None
+        | TimelineGesture::Delete { .. }
         | TimelineGesture::PointSource { .. }
         | TimelineGesture::PointScene { .. } => Ok(()),
     }
@@ -311,6 +312,7 @@ pub fn commit(
     commit_xy(session, x, TRACK_HEIGHT_PX / 2.0, snap_off)
 }
 
+#[allow(clippy::too_many_lines)]
 pub fn commit_xy(
     session: &mut StudioSession,
     x: f64,
@@ -590,44 +592,36 @@ fn begin_scene_band(
     clips: &[HitClip],
     scene_id: &str,
     x: f64,
-) -> Result<TimelineGesture, EngineError> {
+) -> TimelineGesture {
     let scenes: Vec<_> = clips
         .iter()
         .filter(|clip| clip.kind == ClipKind::Scene)
         .collect();
-    let original_index = scenes.iter().position(|clip| clip.id == scene_id);
-    let original_index = match original_index {
-        Some(index) => index,
-        None => {
-            return Ok(TimelineGesture::PointScene {
-                scene_id: scene_id.to_string(),
-            });
-        }
+    let Some(original_index) = scenes.iter().position(|clip| clip.id == scene_id) else {
+        return TimelineGesture::PointScene {
+            scene_id: scene_id.to_string(),
+        };
     };
     let _ = session;
-    Ok(TimelineGesture::Reorder {
+    TimelineGesture::Reorder {
         clip_id: scene_id.to_string(),
         scene_id: scene_id.to_string(),
         original_index,
         proposed_index: original_index,
         start_x: x,
         moved: false,
-    })
+    }
 }
 
-fn begin_gain(
-    session: &StudioSession,
-    clip_id: &str,
-    y: f64,
-) -> Result<TimelineGesture, EngineError> {
+fn begin_gain(session: &StudioSession, clip_id: &str, y: f64) -> TimelineGesture {
     let original_db = clip_gain_db(session, clip_id).unwrap_or(0);
-    Ok(TimelineGesture::Gain {
+    TimelineGesture::Gain {
         clip_id: clip_id.to_string(),
         original_db,
         preview_db: original_db,
         start_y: y,
         moved: false,
-    })
+    }
 }
 
 fn begin_fade(
@@ -901,11 +895,9 @@ fn hit_clips(session: &StudioSession) -> Result<Vec<HitClip>, EngineError> {
                     }
                     if matches!(track_kind, ClipKind::Video | ClipKind::Audio) {
                         return proj.locus.kind == lattice_engine::LocusKind::Source
-                            && (source_id_for_clip(session, &clip.id)
-                                .as_deref()
+                            && (source_id_for_clip(session, &clip.id).as_deref()
                                 == Some(proj.locus.id.as_str())
-                                || source_id_for_clip(session, &clip.id)
-                                    .as_deref()
+                                || source_id_for_clip(session, &clip.id).as_deref()
                                     == Some(proj.locus.node_id.as_str())
                                 || proj.locus.scene_id.as_deref() == Some(scene_id.as_str()));
                     }

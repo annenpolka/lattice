@@ -105,6 +105,7 @@ impl Utterance {
 /// text. Toolbar routes nothing — it draws no target. Do not list a verb the
 /// UI cannot commit on that surface.
 #[must_use]
+#[allow(clippy::match_same_arms)]
 pub fn routed_verbs(projection: Projection, kind: LocusKind) -> Vec<&'static str> {
     match (projection, kind) {
         (Projection::Timeline, LocusKind::Source) => vec!["trim", "set-gain", "set-fade"],
@@ -706,8 +707,7 @@ mod tests {
         assert!(spoken.legal.is_empty());
         assert!(
             spoken.spoken.iter().any(|clause| {
-                clause.status == "structurally-absent"
-                    && clause.text.contains("empty legal set")
+                clause.status == "structurally-absent" && clause.text.contains("empty legal set")
             }),
             "{}",
             spoken.spoken_text()

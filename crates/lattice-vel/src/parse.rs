@@ -571,10 +571,12 @@ fn negate_time(expr: &mut Expr) {
 fn expand_span_left(expr: &mut Expr, left: Span) {
     match expr {
         Expr::Quantity(q) => q.span = left.merge(q.span),
-        Expr::Time(TimeLiteral::Seconds { span, .. })
-        | Expr::Time(TimeLiteral::Milliseconds { span, .. })
-        | Expr::Time(TimeLiteral::MinutesSeconds { span, .. })
-        | Expr::Time(TimeLiteral::Frames { span, .. })
+        Expr::Time(
+            TimeLiteral::Seconds { span, .. }
+            | TimeLiteral::Milliseconds { span, .. }
+            | TimeLiteral::MinutesSeconds { span, .. }
+            | TimeLiteral::Frames { span, .. },
+        )
         | Expr::String { span, .. }
         | Expr::Ident { span, .. }
         | Expr::Path { span, .. }

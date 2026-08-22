@@ -1639,10 +1639,7 @@ impl StudioView {
         }
         let x = self.pointer_x(window_x);
         let y = self.pointer_y(window_y, self.hover_track.as_deref());
-        match self
-            .session
-            .commit_timeline_pointer_xy_snap(x, y, snap_off)
-        {
+        match self.session.commit_timeline_pointer_xy_snap(x, y, snap_off) {
             Ok(outcome) => {
                 trace::log(format!(
                     "gesture commit x={x:.1} outcome={outcome:?} playhead={} undo={}",
@@ -3760,12 +3757,7 @@ impl StudioView {
                         .h(px(10.0))
                         .bg(rgb(0x333d52))
                         .cursor(CursorStyle::ResizeLeftRight)
-                        .child(
-                            div()
-                                .px_1()
-                                .text_color(rgb(MUTED))
-                                .child("cut lane"),
-                        ),
+                        .child(div().px_1().text_color(rgb(MUTED)).child("cut lane")),
                 );
             }
             if delete_handle {
@@ -3785,11 +3777,7 @@ impl StudioView {
                         .border_color(rgb(TEAL))
                         .bg(rgb(0x0d1b1a))
                         .cursor_pointer()
-                        .child(
-                            div()
-                                .text_color(rgb(TEAL))
-                                .child("×"),
-                        ),
+                        .child(div().text_color(rgb(TEAL)).child("×")),
                 );
             }
             rail = rail.child(block);

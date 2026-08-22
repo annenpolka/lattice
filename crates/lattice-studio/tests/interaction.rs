@@ -346,7 +346,9 @@ scene c {
     let original_at = title_clip.start;
     let original_dur = title_clip.duration;
     let body_x = session.x_at_time(title_clip.start + Time::milliseconds(200));
-    session.begin_timeline_pointer(body_x, true).unwrap();
+    session
+        .begin_timeline_pointer_on(body_x, true, "Text")
+        .unwrap();
     assert!(
         matches!(session.gesture(), TimelineGesture::MoveOverlay { .. }),
         "title body drag: {:?}",
@@ -389,7 +391,9 @@ scene c {
         .find(|c| c.kind == "title")
         .unwrap();
     let right = session.x_at_time(title_clip.start + title_clip.duration) - 1.0;
-    session.begin_timeline_pointer(right, true).unwrap();
+    session
+        .begin_timeline_pointer_on(right, true, "Text")
+        .unwrap();
     session.update_timeline_pointer(right - 30.0, true).unwrap();
     session.commit_timeline_pointer(right - 30.0).unwrap();
     let shorter = session
@@ -436,7 +440,7 @@ scene c {
         .expect("callout clip");
     let cx = session.x_at_time(callout_clip.start + Time::milliseconds(200));
     let orig_dur = callout_clip.duration;
-    session.begin_timeline_pointer(cx, true).unwrap();
+    session.begin_timeline_pointer_on(cx, true, "Text").unwrap();
     session.update_timeline_pointer(cx + 35.0, true).unwrap();
     session.commit_timeline_pointer(cx + 35.0).unwrap();
     let after_layout = session.layout().unwrap();
