@@ -79,6 +79,12 @@ fn interaction_mode(session: &StudioSession) -> &'static str {
         TimelineGesture::Reorder { .. } => "reorder",
         TimelineGesture::MoveOverlay { .. } => "move-overlay",
         TimelineGesture::ResizeOverlay { .. } => "resize-overlay",
+        TimelineGesture::Gain { .. } => "set-gain",
+        TimelineGesture::Fade { .. } => "set-fade",
+        TimelineGesture::Split { .. } => "split",
+        TimelineGesture::Delete { .. } => "delete",
+        TimelineGesture::PointSource { .. } => "point-source",
+        TimelineGesture::PointScene { .. } => "point-scene",
     }
 }
 
@@ -143,6 +149,45 @@ fn gesture_value(gesture: &TimelineGesture) -> Value {
             "preview_start": preview.start.to_string(),
             "preview_end": preview.end().to_string(),
             "valid": preview.duration >= crate::gesture::min_duration(),
+        }),
+        TimelineGesture::Gain {
+            clip_id,
+            preview_db,
+            moved,
+            ..
+        } => json!({
+            "kind": "set-gain",
+            "clip_id": clip_id,
+            "preview_db": preview_db,
+            "moved": moved,
+        }),
+        TimelineGesture::Fade {
+            clip_id,
+            preview,
+            moved,
+            ..
+        } => json!({
+            "kind": "set-fade",
+            "clip_id": clip_id,
+            "preview": preview.to_string(),
+            "moved": moved,
+        }),
+        TimelineGesture::Split { scene_id, at } => json!({
+            "kind": "split",
+            "scene_id": scene_id,
+            "at": at.to_string(),
+        }),
+        TimelineGesture::Delete { scene_id } => json!({
+            "kind": "delete",
+            "scene_id": scene_id,
+        }),
+        TimelineGesture::PointSource { clip_id } => json!({
+            "kind": "point-source",
+            "clip_id": clip_id,
+        }),
+        TimelineGesture::PointScene { scene_id } => json!({
+            "kind": "point-scene",
+            "scene_id": scene_id,
         }),
     }
 }
@@ -217,6 +262,36 @@ fn drag_value(session: &StudioSession) -> Value {
             "valid": preview.duration >= crate::gesture::min_duration()
                 && session.last_gesture_error().is_none(),
         }),
+        TimelineGesture::Gain {
+            clip_id,
+            preview_db,
+            ..
+        } => json!({
+            "kind": "set-gain",
+            "source": clip_id,
+            "target": { "db": preview_db },
+            "valid": session.last_gesture_error().is_none(),
+        }),
+        TimelineGesture::Fade {
+            clip_id, preview, ..
+        } => json!({
+            "kind": "set-fade",
+            "source": clip_id,
+            "target": { "fade_in": preview.to_string() },
+            "valid": session.last_gesture_error().is_none(),
+        }),
+        TimelineGesture::Split { scene_id, at } => json!({
+            "kind": "split",
+            "source": scene_id,
+            "target": { "at": at.to_string() },
+            "valid": session.last_gesture_error().is_none(),
+        }),
+        TimelineGesture::Delete { scene_id } => json!({
+            "kind": "delete",
+            "source": scene_id,
+            "valid": session.last_gesture_error().is_none(),
+        }),
+        TimelineGesture::PointSource { .. } | TimelineGesture::PointScene { .. } => Value::Null,
     }
 }
 

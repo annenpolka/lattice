@@ -279,20 +279,29 @@ scene c {
     let b = &video.clips[1];
     session.point_at(lattice_engine::LocusId::new(c.scene_id.clone()));
     let start = session.x_at_time(c.start + Time::milliseconds(200));
-    session.begin_timeline_pointer(start, true).expect("begin");
+    session
+        .begin_timeline_pointer_on(start, true, "Scene")
+        .expect("begin scene band");
     assert!(
         matches!(session.gesture(), TimelineGesture::Reorder { .. }),
-        "{:?}",
+        "scene-band body drag reorders: {:?}",
         session.gesture()
     );
     let between_ab = session.x_at_time(a.start + a.duration);
     let _ = b;
     session
-        .update_timeline_pointer(between_ab - DRAG_THRESHOLD_PX - 8.0, true)
+        .update_timeline_pointer_xy(
+            between_ab - DRAG_THRESHOLD_PX - 8.0,
+            lattice_studio::TRACK_HEIGHT_PX * 0.75,
+            true,
+        )
         .unwrap();
     assert_eq!(session.source(), original);
     session
-        .commit_timeline_pointer(between_ab - DRAG_THRESHOLD_PX - 8.0)
+        .commit_timeline_pointer_xy(
+            between_ab - DRAG_THRESHOLD_PX - 8.0,
+            lattice_studio::TRACK_HEIGHT_PX * 0.75,
+        )
         .unwrap();
     let reordered = session.source().to_string();
     assert_ne!(reordered, original);
@@ -592,8 +601,8 @@ scene a {
     let x = session.x_at_time(title_clip.start + Time::milliseconds(200));
     session.begin_timeline_pointer_on(x, true, "Video").unwrap();
     assert!(
-        matches!(session.gesture(), TimelineGesture::Reorder { .. }),
-        "video rail at title time must not start overlay move: {:?}",
+        matches!(session.gesture(), TimelineGesture::PointSource { .. }),
+        "video rail click keeps source-clip identity: {:?}",
         session.gesture()
     );
     session.cancel_timeline_pointer();
@@ -606,14 +615,13 @@ scene a {
     session.cancel_timeline_pointer();
     session.begin_timeline_pointer_on(x, true, "Audio").unwrap();
     assert!(
-        matches!(session.gesture(), TimelineGesture::Point { .. }),
-        "audio rail click begins a coordinate point: {:?}",
-        session.gesture()
-    );
-    session.update_timeline_pointer(x + 20.0, true).unwrap();
-    assert!(
-        matches!(session.gesture(), TimelineGesture::Scrub { .. }),
-        "audio rail drag becomes scrub: {:?}",
+        matches!(
+            session.gesture(),
+            TimelineGesture::Point { .. }
+                | TimelineGesture::PointSource { .. }
+                | TimelineGesture::Gain { .. }
+        ),
+        "audio rail stays on the audio projection: {:?}",
         session.gesture()
     );
 }

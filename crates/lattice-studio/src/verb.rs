@@ -100,21 +100,21 @@ impl Utterance {
 /// Verbs a gesture on `projection` can actually commit for this locus kind.
 ///
 /// This is routing, not legality. A missing route is not an absent edit.
-/// Only real commit paths belong here: Timeline trim / overlay time / scene
-/// reorder, Canvas geometry, Toolbar trim/gain/fade/split/delete, Inspector
-/// title text. Do not list a verb the UI cannot commit on that surface.
+/// Only real commit paths belong here: Timeline trim / gain / fade / overlay
+/// time / scene reorder / split / delete, Canvas geometry, Inspector title
+/// text. Toolbar routes nothing — it draws no target. Do not list a verb the
+/// UI cannot commit on that surface.
 #[must_use]
 pub fn routed_verbs(projection: Projection, kind: LocusKind) -> Vec<&'static str> {
     match (projection, kind) {
-        (Projection::Timeline, LocusKind::Source) => vec!["trim"],
+        (Projection::Timeline, LocusKind::Source) => vec!["trim", "set-gain", "set-fade"],
         (Projection::Timeline | Projection::Inspector, LocusKind::Title) => vec!["title"],
         (Projection::Timeline, LocusKind::Callout) => vec!["callout"],
-        (Projection::Timeline, LocusKind::Scene) => vec!["reorder-scene"],
+        (Projection::Timeline, LocusKind::Scene) => vec!["reorder-scene", "split", "delete"],
         (Projection::Canvas, LocusKind::Title | LocusKind::Callout) => {
             vec!["set-position", "resize-overlay"]
         }
-        (Projection::Toolbar, LocusKind::Source) => vec!["trim", "set-gain", "set-fade"],
-        (Projection::Toolbar, LocusKind::Scene) => vec!["split", "delete"],
+        (Projection::Toolbar, _) => vec![],
         _ => vec![],
     }
 }
@@ -122,13 +122,12 @@ pub fn routed_verbs(projection: Projection, kind: LocusKind) -> Vec<&'static str
 /// Projection that actually routes `verb` for this kind.
 ///
 /// Derived from [`routed_verbs`] so a spoken "committed on" clause cannot name
-/// a surface that does not commit the verb. Timeline is searched first, then
-/// Toolbar, then the remaining projections.
+/// a surface that does not commit the verb. Timeline is searched first. Toolbar
+/// is omitted: it draws no target and must never be named as a commit surface.
 #[must_use]
 pub fn commit_projection(verb: &str, kind: LocusKind) -> Option<Projection> {
-    const SURFACES: [Projection; 7] = [
+    const SURFACES: [Projection; 6] = [
         Projection::Timeline,
-        Projection::Toolbar,
         Projection::Canvas,
         Projection::Inspector,
         Projection::Source,
@@ -227,6 +226,20 @@ pub fn utterance(
         .map(str::to_string)
         .collect();
     let mut spoken = speak_legal_vs_routed(locus, &legal, &routed, projection);
+    if legal.is_empty() {
+        spoken.push(SpokenClause {
+            verb: String::new(),
+            status: AbsenceReason::StructurallyAbsent.as_str().into(),
+            reason: Some(AbsenceReason::StructurallyAbsent.as_str().into()),
+            target: Some(locus.id.as_str().into()),
+            scope: Some("here".into()),
+            effect: Some("Engine names no SemanticEdit".into()),
+            text: format!(
+                "This {} has an empty legal set (structurally-absent). Nothing is drawn.",
+                kind_label(locus.kind)
+            ),
+        });
+    }
     spoken.extend(speak_relations(locus, loci));
     Utterance {
         here: Some(format!("{} \"{}\"", kind_label(locus.kind), locus.label)),
@@ -270,20 +283,33 @@ fn speak_legal_vs_routed(
             });
             continue;
         }
-        let route = commit_projection(&edit.verb, locus.kind).unwrap_or(Projection::Timeline);
-        spoken.push(SpokenClause {
-            verb: edit.verb.clone(),
-            status: "routed".into(),
-            reason: Some(AbsenceReason::RoutedElsewhere.as_str().into()),
-            target: Some(edit.target.as_str().into()),
-            scope: Some(edit.scope.clone()),
-            effect: Some(edit.effect.clone()),
-            text: format!(
-                "{disclosure} is legal for this {}, committed on {} — not implied absent here.",
-                kind_label(locus.kind),
-                route.as_str()
-            ),
-        });
+        match commit_projection(&edit.verb, locus.kind) {
+            Some(route) => spoken.push(SpokenClause {
+                verb: edit.verb.clone(),
+                status: "routed".into(),
+                reason: Some(AbsenceReason::RoutedElsewhere.as_str().into()),
+                target: Some(edit.target.as_str().into()),
+                scope: Some(edit.scope.clone()),
+                effect: Some(edit.effect.clone()),
+                text: format!(
+                    "{disclosure} is legal for this {}, committed on {} — not implied absent here.",
+                    kind_label(locus.kind),
+                    route.as_str()
+                ),
+            }),
+            None => spoken.push(SpokenClause {
+                verb: edit.verb.clone(),
+                status: "unrouted".into(),
+                reason: Some(AbsenceReason::StructurallyAbsent.as_str().into()),
+                target: Some(edit.target.as_str().into()),
+                scope: Some(edit.scope.clone()),
+                effect: Some(edit.effect.clone()),
+                text: format!(
+                    "{disclosure} is legal for this {} and unrouted — no projection draws the target (structurally-absent).",
+                    kind_label(locus.kind)
+                ),
+            }),
+        }
     }
     spoken
 }
@@ -540,40 +566,35 @@ mod tests {
     }
 
     #[test]
-    fn source_gain_and_fade_commit_on_toolbar_not_timeline() {
+    fn source_gain_and_fade_commit_on_timeline_not_toolbar() {
         assert_eq!(
             commit_projection("set-gain", LocusKind::Source),
-            Some(Projection::Toolbar)
+            Some(Projection::Timeline)
         );
         assert_eq!(
             commit_projection("set-fade", LocusKind::Source),
-            Some(Projection::Toolbar)
+            Some(Projection::Timeline)
         );
         assert_eq!(
             commit_projection("trim", LocusKind::Source),
             Some(Projection::Timeline)
         );
+        assert!(routed_verbs(Projection::Toolbar, LocusKind::Source).is_empty());
         let source = locus(LocusKind::Source, "source:fight", "fight");
         let spoken = utterance(Some(&source), None, Projection::Timeline, &[]);
-        assert!(spoken.speaks_gap());
-        for verb in ["set-gain", "set-fade"] {
+        for verb in ["trim", "set-gain", "set-fade"] {
             assert!(
                 spoken
                     .spoken
                     .iter()
-                    .any(|clause| clause.verb == verb && clause.status == "routed"),
+                    .any(|clause| clause.verb == verb && clause.status == "present"),
                 "{verb} {}",
                 spoken.spoken_text()
             );
         }
         assert!(
-            spoken.spoken_text().contains("committed on Toolbar"),
+            !spoken.spoken_text().contains("committed on Toolbar"),
             "{}",
-            spoken.spoken_text()
-        );
-        assert!(
-            !spoken.spoken_text().contains("committed on Timeline"),
-            "gain/fade must not claim Timeline: {}",
             spoken.spoken_text()
         );
     }
@@ -624,12 +645,10 @@ mod tests {
     fn gesture_routes_match_real_commit_paths() {
         assert_eq!(
             routed_verbs(Projection::Timeline, LocusKind::Scene),
-            ["reorder-scene"]
+            ["reorder-scene", "split", "delete"]
         );
-        assert_eq!(
-            routed_verbs(Projection::Toolbar, LocusKind::Scene),
-            ["split", "delete"]
-        );
+        assert!(routed_verbs(Projection::Toolbar, LocusKind::Scene).is_empty());
+        assert!(routed_verbs(Projection::Toolbar, LocusKind::Source).is_empty());
         assert!(routed_verbs(Projection::Toolbar, LocusKind::Title).is_empty());
         assert_eq!(
             routed_verbs(Projection::Inspector, LocusKind::Title),
@@ -637,7 +656,11 @@ mod tests {
         );
         assert_eq!(
             commit_projection("split", LocusKind::Scene),
-            Some(Projection::Toolbar)
+            Some(Projection::Timeline)
+        );
+        assert_eq!(
+            commit_projection("delete", LocusKind::Scene),
+            Some(Projection::Timeline)
         );
         assert_eq!(
             commit_projection("reorder-scene", LocusKind::Scene),
@@ -647,47 +670,46 @@ mod tests {
             commit_projection("title", LocusKind::Title),
             Some(Projection::Timeline)
         );
+        assert_eq!(commit_projection("split", LocusKind::Source), None);
     }
 
     #[test]
-    fn timeline_scene_utterance_routes_split_to_toolbar() {
+    fn timeline_scene_utterance_commits_split_and_delete_here() {
         let spoken = utterance(Some(&scene()), None, Projection::Timeline, &[]);
-        assert!(spoken.routed.iter().eq(["reorder-scene"]));
         assert!(
             spoken
-                .spoken
+                .routed
                 .iter()
-                .any(|clause| clause.verb == "split" && clause.status == "routed"),
+                .eq(["reorder-scene", "split", "delete"])
+        );
+        for verb in ["split", "delete", "reorder-scene"] {
+            assert!(
+                spoken
+                    .spoken
+                    .iter()
+                    .any(|clause| clause.verb == verb && clause.status == "present"),
+                "{verb} {}",
+                spoken.spoken_text()
+            );
+        }
+        assert!(
+            !spoken.spoken_text().contains("committed on Toolbar"),
             "{}",
             spoken.spoken_text()
         );
+    }
+
+    #[test]
+    fn empty_legal_set_is_spoken_as_structurally_absent() {
+        let speech = locus(LocusKind::Speech, "speech:nice", "Nice freeze");
+        let spoken = utterance(Some(&speech), None, Projection::Timeline, &[]);
+        assert!(spoken.legal.is_empty());
         assert!(
-            spoken
-                .spoken
-                .iter()
-                .any(|clause| clause.verb == "delete" && clause.status == "routed"),
+            spoken.spoken.iter().any(|clause| {
+                clause.status == "structurally-absent"
+                    && clause.text.contains("empty legal set")
+            }),
             "{}",
-            spoken.spoken_text()
-        );
-        assert!(
-            spoken
-                .spoken
-                .iter()
-                .any(|clause| clause.verb == "reorder-scene" && clause.status == "present"),
-            "{}",
-            spoken.spoken_text()
-        );
-        assert!(
-            spoken.spoken_text().contains("committed on Toolbar"),
-            "{}",
-            spoken.spoken_text()
-        );
-        assert!(
-            !spoken
-                .spoken
-                .iter()
-                .any(|clause| clause.verb == "split" && clause.status == "present"),
-            "Timeline must not claim it commits split: {}",
             spoken.spoken_text()
         );
     }

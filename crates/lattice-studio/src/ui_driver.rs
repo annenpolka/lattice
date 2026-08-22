@@ -798,20 +798,30 @@ scene demo {
             view.session.layout().unwrap().inspector.title_fields
         }));
 
-        ui.click("toolbar.split");
-        let spoken = ui.read(&view, |view, _| {
-            view.last_render.clone().unwrap_or_default()
-        });
+        let spoken = ui.read(&view, |view, _| view.session.utterance().spoken_text());
         assert!(
-            spoken.contains("needs-scene") || spoken.contains("split"),
-            "{spoken}"
+            spoken.contains("split") || spoken.contains("needs-scene"),
+            "utterance discloses scene verbs without committing: {spoken}"
         );
         assert_eq!(
             ui.read(&view, |view, _| {
                 view.session.current_locus().unwrap().unwrap().id
             }),
             title,
-            "toolbar must not retarget here"
+            "disclosure must not retarget here"
+        );
+        assert!(
+            ui.read(&view, |view, _| {
+                view.session
+                    .layout()
+                    .unwrap()
+                    .timeline
+                    .tracks
+                    .iter()
+                    .flat_map(|track| track.clips.iter())
+                    .all(|clip| !clip.cut_lane)
+            }),
+            "cut lane is not drawn when here is Title"
         );
     }
 
@@ -837,14 +847,113 @@ scene demo {
         assert!(ui.read(&view, |view, _| {
             !view.session.layout().unwrap().inspector.title_fields
         }));
-        ui.click("toolbar.gain-minus-3");
-        let spoken = ui.read(&view, |view, _| {
-            view.last_render.clone().unwrap_or_default()
-        });
+        let spoken = ui.read(&view, |view, _| view.session.utterance().spoken_text());
         assert!(
-            spoken.contains("needs-source-binding") || spoken.contains("source"),
+            spoken.contains("needs-source-binding") || spoken.contains("Point the video clip"),
             "{spoken}"
         );
+        assert!(
+            ui.read(&view, |view, _| {
+                view.session
+                    .layout()
+                    .unwrap()
+                    .timeline
+                    .tracks
+                    .iter()
+                    .flat_map(|track| track.clips.iter())
+                    .all(|clip| !clip.gain_handle)
+            }),
+            "gain line is not drawn when here is Scene"
+        );
         let _ = ui.bounds("inspector.utterance");
+    }
+
+    #[gpui::test]
+    fn session_strip_has_no_locus_taking_buttons(cx: &mut TestAppContext) {
+        let (view, cx) = add_studio(cx, overlap_session());
+        let mut ui = UiDriver::new(cx);
+        let _ = ui.bounds("toolbar.play");
+        let _ = ui.bounds("toolbar.undo");
+        let _ = ui.bounds("toolbar.resolve");
+        for gone in [
+            "toolbar.set-in",
+            "toolbar.set-out",
+            "toolbar.split",
+            "toolbar.delete-clip",
+            "toolbar.gain-minus-3",
+            "toolbar.fade",
+        ] {
+            assert!(
+                ui.context().debug_bounds(gone).is_none(),
+                "{gone} must not be drawn"
+            );
+        }
+        let _ = view;
+    }
+
+    #[gpui::test]
+    fn on_target_handles_commit_gain_fade_split(cx: &mut TestAppContext) {
+        let session = overlap_session();
+        let video_id = session
+            .layout()
+            .unwrap()
+            .timeline
+            .tracks
+            .iter()
+            .find(|track| track.name == "Video")
+            .unwrap()
+            .clips[0]
+            .id
+            .clone();
+        let audio_id = session
+            .layout()
+            .unwrap()
+            .timeline
+            .tracks
+            .iter()
+            .find(|track| track.name == "Audio")
+            .unwrap()
+            .clips[0]
+            .id
+            .clone();
+        let scene_id = session
+            .loci()
+            .unwrap()
+            .into_iter()
+            .find(|locus| locus.kind == lattice_engine::LocusKind::Scene)
+            .unwrap()
+            .id
+            .as_str()
+            .to_string();
+        let (view, cx) = add_studio(cx, session);
+        let mut ui = UiDriver::new(cx);
+        ui.click(format!("timeline.clip.{video_id}"));
+        assert_eq!(
+            ui.read(&view, |view, _| {
+                view.session.current_locus().unwrap().unwrap().kind
+            }),
+            lattice_engine::LocusKind::Source
+        );
+        let original = ui.read(&view, |view, _| view.session.source().to_string());
+        ui.drag_within(format!("timeline.clip.{audio_id}"), (0.5, 0.85), (0.5, 0.1));
+        let after_gain = ui.read(&view, |view, _| view.session.source().to_string());
+        assert_ne!(after_gain, original, "gain line must commit SetGain");
+        assert!(!after_gain.contains("by --"));
+        ui.drag_within(format!("timeline.fade.{video_id}"), (0.2, 0.5), (0.8, 0.5));
+        let after_fade = ui.read(&view, |view, _| view.session.source().to_string());
+        assert_ne!(after_fade, after_gain, "fade wedge must commit SetFade");
+
+        ui.click(format!("timeline.scene.{scene_id}"));
+        assert_eq!(
+            ui.read(&view, |view, _| {
+                view.session.current_locus().unwrap().unwrap().kind
+            }),
+            lattice_engine::LocusKind::Scene
+        );
+        ui.click_at(format!("timeline.cut.{scene_id}"), 0.4, 0.5);
+        let after_split = ui.read(&view, |view, _| view.session.source().to_string());
+        assert_ne!(after_split, after_fade, "cut lane must commit split");
+        let spoken = ui.read(&view, |view, _| view.session.utterance().spoken_text());
+        assert!(!spoken.is_empty());
     }
 }

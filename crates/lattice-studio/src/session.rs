@@ -597,6 +597,9 @@ impl StudioSession {
         };
         let proposal = self.engine.propose(&self.compilation, &locus, edit)?;
         self.last_spoken = None;
+        if proposal.new_source == self.compilation.source {
+            return Ok(());
+        }
         self.push_undo();
         let new_source = self
             .engine
@@ -1277,12 +1280,49 @@ impl StudioSession {
         crate::interaction::begin(self, x, snap_off, Some(track))
     }
 
+    pub fn begin_timeline_pointer_on_xy(
+        &mut self,
+        x: f64,
+        y: f64,
+        snap_off: bool,
+        track: &str,
+    ) -> Result<(), EngineError> {
+        self.stop_transport_for_position_change();
+        crate::interaction::begin_xy(self, x, y, snap_off, Some(track))
+    }
+
     pub fn update_timeline_pointer(&mut self, x: f64, snap_off: bool) -> Result<(), EngineError> {
         crate::interaction::update(self, x, snap_off)
     }
 
+    pub fn update_timeline_pointer_xy(
+        &mut self,
+        x: f64,
+        y: f64,
+        snap_off: bool,
+    ) -> Result<(), EngineError> {
+        crate::interaction::update_xy(self, x, y, snap_off)
+    }
+
     pub fn commit_timeline_pointer(&mut self, x: f64) -> Result<GestureOutcome, EngineError> {
         crate::interaction::commit(self, x, false)
+    }
+
+    pub fn commit_timeline_pointer_xy(
+        &mut self,
+        x: f64,
+        y: f64,
+    ) -> Result<GestureOutcome, EngineError> {
+        crate::interaction::commit_xy(self, x, y, false)
+    }
+
+    pub fn commit_timeline_pointer_xy_snap(
+        &mut self,
+        x: f64,
+        y: f64,
+        snap_off: bool,
+    ) -> Result<GestureOutcome, EngineError> {
+        crate::interaction::commit_xy(self, x, y, snap_off)
     }
 
     pub fn commit_timeline_pointer_snap(
