@@ -172,6 +172,29 @@ A global verb home is the wrong object. Verbs belong where a projection already 
 
 Locks stay closed: one `LocusId` after a projection-local pick; video click keeps the source clip; legality ≠ routing is spoken, never a silent retarget; scrub/playhead do not `point_from_timeline_time`; Title Inspector fields only on Title; no per-view selection; no GPUI in Core.
 
+## Phase III vote (structure / who owns state)
+
+Chair frame only: the current fixed always-visible bank of locus-taking `SemanticEdit` buttons is not a coherent global verb surface. A session strip may remain global. This is not a shipping winner.
+
+**Vote:** **DELETE** the global locus-taking bank. **Name** a **session strip** (non-verb, grouped by actual authority). Verbs stay on the panes that already commit (Timeline / Canvas / Inspector). `Projection::Toolbar` stays a stamp, not a surface.
+
+Locks unchanged. Seek leftover stays named: transport, not a verb home.
+
+| # | Test | Current bank (always-on Set In / Out / Split / Delete / Gain / Fade) | Named: session strip + pane commits |
+|---|---|---|---|
+| 1 | standing invitation for a locus-taking edit? | Always painted, unbound from here / legal. Not a coherent invitation. **DELETE.** | Strip must not invite locus-taking edits. Invitation belongs on the pane that commits. |
+| 2 | target / scope / effect / parameter / committing projection disclosed before commit? | Button label only. Disclosure is Inspector `utterance_block`. **FAIL.** | Non-verbs disclose nothing legal. Verbs disclose on the pane + the one utterance. |
+| 3 | Engine only legality authority? | `apply_edit` → `is_legal_verb` (Engine). Paint / enablement does not ask Engine. Surface **FAIL.** | Strip must not claim legality. Engine remains the only authority. |
+| 4 | one here, fail-closed, no target search / promotion? | Commit path **PASS**: `target_locus_for` uses `session.current` only. Keep this. | Same here. Strip does not point. |
+| 5 | every legal edit has a named route or is spoken unrouted? | Spine already names / speaks. Bank implies Toolbar routes that are empty for Title. Surface **FAIL.** | Strip is not a route table. Unrouted stays spoken. |
+| 6 | non-verb global controls grouped by actual authority? | **FAIL.** One wrap flex. Gain / Fade sit next to Save / Resolve / Zoom. | **This is the strip.** Group by owner: `StudioView` renderer / audio; `StudioSession` transport / undo / save / viewport; Engine resolve. |
+
+![Locus-taking bank: Set In / Set Out / Split / Delete. Always on. Not a pane.](2026-08-22-studio-toolbar-structure/phase3-locus-taking-bank.png)
+
+![Session-owned wrap-1 remainder: renderer chips, CPU / GPU, Play / Pause / Seek / Scrub.](2026-08-22-studio-toolbar-structure/phase3-session-strip-transport.png)
+
+![Wrap 2 mixes session (Save / Undo / Redo / Resolve / Zoom) with locus-taking Gain / Fade.](2026-08-22-studio-toolbar-structure/phase3-authority-mix.png)
+
 ## Seek leftover
 
 `Seek` is a child of `actions_bar` wrap 1 (`toolbar.seek-start`) and calls `session.seek(Time::ZERO)`. Seek-verb placement remains an open leftover; this note only records that the control currently lives in this row.
