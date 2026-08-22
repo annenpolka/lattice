@@ -749,7 +749,7 @@ scene demo {
             let width = view.session.viewport().width_pixels();
             (view.session.x_at_time(at) / width) as f32
         });
-        ui.click_at("timeline.track.Audio", ratio, 0.5);
+        ui.click_at("timeline.track.audio", ratio, 0.5);
         let (kinds, title) = ui.read(&view, |view, _| {
             let unresolved = view
                 .session
