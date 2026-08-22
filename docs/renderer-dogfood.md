@@ -84,7 +84,7 @@ Growth is the maximum value after warm-up minus the first sample after warm-up. 
 | Process private memory | ≤ 512 MiB growth | `private_bytes` |
 | Dedicated per-process GPU memory | ≤ 512 MiB growth | `dedicated_gpu_bytes` |
 
-The DX12 soak fails if the Windows dedicated GPU process-memory counter is unavailable. Studio logs and telemetry are written under `%TEMP%\lattice-studio-smoke`; the benchmark prints the temporary `result.json` path. Preserve the log, CSV, benchmark JSON, commit SHA, Windows build, adapter name, and driver version with each result.
+The DX12 soak fails if the Windows dedicated GPU process-memory counter is unavailable. Studio logs and telemetry are written under `%TEMP%\lattice-studio-smoke`; the benchmark prints the temporary `result.json` path. Preserve the log, CSV, benchmark JSON, commit SHA, Windows build, adapter name, and driver version with each result. PR-visible soak copies live under `docs/artifacts/`.
 
 ## Local results — 2026-08-20
 
@@ -97,11 +97,19 @@ These runs used the current working tree based on commit `9371455fec340e3c32da52
 
 Both explicit adapter filters also pass the opt-in media DX12 conformance gate, including video/image rotation/clip/shapes and title/Japanese callout CPU parity within one RGBA value. The corrected continuous-play NVIDIA one-minute release rehearsal reached 59.7 s and passed with 25 telemetry samples: 0.1 MiB WS growth, 0.1 MiB private growth, and 0 MiB dedicated-VRAM growth after a 10 s warm-up.
 
+## Local results — 2026-08-22
+
+Thirty-minute NVIDIA release soak on Windows 11 Home 25H2 build `26200.9168`, working tree `679f91460460ec81f52744fa0bc7f75be5fa4d31`. Command: `studio-smoke.ps1 -Release -Renderer gpu-dx12 -Adapter "NVIDIA" -SoakMinutes 30` with the default 512 MiB growth gates and a 30 s warm-up.
+
+| Adapter | Driver | 30m soak | Post-warm-up growth | Evidence |
+|---|---|---|---|---|
+| NVIDIA GeForce RTX 5070 Ti | `32.0.16.1047` | PASS — `SMOKE OK`, preview to 1799.6 s, in-memory 640×360, no recreate / PNG / panic | 874 samples: 0.5 MiB WS, 0.1 MiB private, 0 MiB dedicated GPU | [docs/artifacts/chi58-2026-08-22-nvidia-30m-soak.md](artifacts/chi58-2026-08-22-nvidia-30m-soak.md) |
+
 ## Hardware matrix
 
 | Vendor | Adapter/filter | Current availability | Debug smoke | Release 1080p benchmark | 30m soak | Evidence |
 |---|---|---|---|---|---|---|
-| NVIDIA | `NVIDIA GeForce RTX 5070 Ti` / `NVIDIA` | Detected | PASS | PASS (4.531× vs CPU) | 1m rehearsal PASS; 30m未実行 | `%TEMP%\lattice-studio-smoke`, benchmark result JSON |
+| NVIDIA | `NVIDIA GeForce RTX 5070 Ti` / `NVIDIA` | Detected | PASS | PASS (4.531× vs CPU) | PASS (2026-08-22) | [docs/artifacts/chi58-2026-08-22-nvidia-30m-soak.md](artifacts/chi58-2026-08-22-nvidia-30m-soak.md) |
 | AMD | `AMD Radeon(TM) Graphics` / `AMD` | Detected | PASS | PASS (3.204× vs CPU) | 未実行 | `%TEMP%\lattice-studio-smoke`, benchmark result JSON |
 | Intel | `Intel` | Unavailable in the current environment | 外部 hardware pending | 外部 hardware pending | 外部 hardware pending | No adapter/evidence yet |
 
