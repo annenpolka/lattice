@@ -100,12 +100,12 @@ fn video_clip_click_points_source_not_scene() {
         "one shared LocusId"
     );
     assert!(
-        session
-            .utterance()
-            .spoken
-            .iter()
-            .any(|clause| clause.status == "relation" && clause.text.contains("legal there")),
-        "container verbs are disclosed as a scene relation: {}",
+        session.utterance().spoken.iter().any(|clause| {
+            clause.status == "relation"
+                && clause.text.contains("split →")
+                && clause.text.contains("scene:demo")
+        }),
+        "container verbs come from Engine legal_edits_for on the related Scene: {}",
         session.utterance().spoken_text()
     );
 }
@@ -402,11 +402,12 @@ fn timeline_source_utterance_speaks_toolbar_for_gain_and_fade() {
         utterance.spoken_text()
     );
     assert!(
-        utterance
-            .spoken
-            .iter()
-            .any(|clause| clause.status == "relation" && clause.text.contains("legal there")),
-        "scene verbs stay a relation: {}",
+        utterance.spoken.iter().any(|clause| {
+            clause.status == "relation"
+                && clause.text.contains("split →")
+                && clause.text.contains("scene:demo")
+        }),
+        "scene verbs stay Engine-named on the related Scene: {}",
         utterance.spoken_text()
     );
     let state = session.semantic_state();
@@ -481,4 +482,62 @@ scene demo {
         titles[1].id,
         "pick commits the chosen LocusId, not a same-label collapse"
     );
+}
+
+#[test]
+fn pick_without_unresolved_pointing_is_refused() {
+    let mut session = overlap_session();
+    assert!(session.unresolved_pointing().is_none());
+    let source = session
+        .loci()
+        .unwrap()
+        .into_iter()
+        .find(|locus| locus.kind == LocusKind::Source)
+        .expect("source");
+    let here_before = session.current_locus().unwrap().map(|locus| locus.id);
+    let err = session
+        .pick_point_candidate(source.id.clone())
+        .expect_err("pick requires an active unresolved point");
+    assert!(err.to_string().contains("no unresolved pointing"), "{err}");
+    assert_eq!(
+        session.current_locus().unwrap().map(|locus| locus.id),
+        here_before,
+        "a refused pick must not adopt here"
+    );
+}
+
+#[test]
+fn pick_rejects_locus_not_in_unresolved_candidates() {
+    let mut session = overlap_session();
+    let at = Time::from_decimal_seconds(2, 4, 1).unwrap();
+    let x = session.x_at_time(at);
+    session.begin_timeline_pointer_on(x, true, "Audio").unwrap();
+    session.commit_timeline_pointer(x).unwrap();
+    let unresolved = session
+        .unresolved_pointing()
+        .expect("overlap opens unresolved pointing");
+    let candidate_ids: Vec<_> = unresolved
+        .candidates
+        .iter()
+        .map(|locus| locus.id.clone())
+        .collect();
+    let outsider = session
+        .loci()
+        .unwrap()
+        .into_iter()
+        .find(|locus| !candidate_ids.contains(&locus.id))
+        .expect("a locus outside the touched projection's candidate list");
+    let err = session
+        .pick_point_candidate(outsider.id.clone())
+        .expect_err("non-candidate must be refused");
+    assert!(
+        err.to_string()
+            .contains("candidate is not on the touched projection"),
+        "{err}"
+    );
+    assert!(
+        session.unresolved_pointing().is_some(),
+        "a refused pick must leave pointing unresolved"
+    );
+    assert!(session.current_locus().unwrap().is_none());
 }

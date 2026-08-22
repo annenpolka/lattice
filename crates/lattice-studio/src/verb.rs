@@ -97,23 +97,25 @@ impl Utterance {
     }
 }
 
-/// Verbs a gesture on `projection` can commit for this locus kind.
+/// Verbs a gesture on `projection` can actually commit for this locus kind.
 ///
 /// This is routing, not legality. A missing route is not an absent edit.
+/// Only real commit paths belong here: Timeline trim / overlay time / scene
+/// reorder, Canvas geometry, Toolbar trim/gain/fade/split/delete, Inspector
+/// title text. Do not list a verb the UI cannot commit on that surface.
 #[must_use]
 pub fn routed_verbs(projection: Projection, kind: LocusKind) -> Vec<&'static str> {
     match (projection, kind) {
         (Projection::Timeline, LocusKind::Source) => vec!["trim"],
-        (Projection::Timeline | Projection::Inspector | Projection::Toolbar, LocusKind::Title) => {
-            vec!["title"]
-        }
+        (Projection::Timeline, LocusKind::Title) => vec!["title"],
         (Projection::Timeline, LocusKind::Callout) => vec!["callout"],
-        (Projection::Timeline, LocusKind::Scene) => vec!["reorder-scene", "split", "delete"],
+        (Projection::Timeline, LocusKind::Scene) => vec!["reorder-scene"],
         (Projection::Canvas, LocusKind::Title | LocusKind::Callout) => {
             vec!["set-position", "resize-overlay"]
         }
         (Projection::Toolbar, LocusKind::Source) => vec!["trim", "set-gain", "set-fade"],
-        (Projection::Toolbar, LocusKind::Scene) => vec!["split", "delete", "reorder-scene"],
+        (Projection::Toolbar, LocusKind::Scene) => vec!["split", "delete"],
+        (Projection::Inspector, LocusKind::Title) => vec!["title"],
         _ => vec![],
     }
 }
@@ -175,6 +177,7 @@ pub fn utterance(
     here: Option<&Locus>,
     unresolved: Option<&UnresolvedPointing>,
     projection: Projection,
+    loci: &[Locus],
 ) -> Utterance {
     if let Some(point) = unresolved {
         let spoken = vec![SpokenClause {
@@ -225,7 +228,7 @@ pub fn utterance(
         .map(str::to_string)
         .collect();
     let mut spoken = speak_legal_vs_routed(locus, &legal, &routed, projection);
-    spoken.extend(speak_relations(locus));
+    spoken.extend(speak_relations(locus, loci));
     Utterance {
         here: Some(format!("{} \"{}\"", kind_label(locus.kind), locus.label)),
         here_kind: Some(kind_label(locus.kind).into()),
@@ -286,23 +289,65 @@ fn speak_legal_vs_routed(
     spoken
 }
 
+/// Related Scene for a pointed source. Identity-versus-relation only —
+/// displaying this never adopts it as here.
+#[must_use]
+pub fn related_scene<'a>(locus: &Locus, loci: &'a [Locus]) -> Option<&'a Locus> {
+    let id = locus.scene_id.as_deref()?;
+    loci.iter().find(|candidate| {
+        candidate.kind == LocusKind::Scene
+            && (candidate.id.as_str() == id || candidate.node_id == id)
+    })
+}
+
 /// Identity-versus-relation: a displayed container or binding is never adopted as here.
-fn speak_relations(locus: &Locus) -> Vec<SpokenClause> {
+/// Legality, target, scope, and effect come from Engine `legal_edits_for` on the
+/// resolved related locus — Studio does not invent a second legal set.
+fn speak_relations(locus: &Locus, loci: &[Locus]) -> Vec<SpokenClause> {
     match locus.kind {
         LocusKind::Source => {
-            let scene = locus
-                .scene_id
-                .as_deref()
-                .unwrap_or("the containing scene");
+            let Some(scene) = related_scene(locus, loci) else {
+                return locus.scene_id.as_deref().map_or_else(Vec::new, |id| {
+                    vec![SpokenClause {
+                        verb: String::new(),
+                        status: "relation".into(),
+                        reason: None,
+                        target: Some(id.into()),
+                        scope: Some("relation".into()),
+                        effect: Some("Navigate; do not retarget here".into()),
+                        text: format!("{id} is a relation, not here. Navigate, do not retarget."),
+                    }]
+                });
+            };
+            let legal = legal_edits_for(scene);
+            let details = if legal.is_empty() {
+                "Engine names no legal edits there".into()
+            } else {
+                legal
+                    .iter()
+                    .map(|edit| {
+                        format!(
+                            "{} → {} ({}: {})",
+                            edit.verb,
+                            edit.target.as_str(),
+                            edit.scope,
+                            edit.effect
+                        )
+                    })
+                    .collect::<Vec<_>>()
+                    .join("; ")
+            };
             vec![SpokenClause {
                 verb: String::new(),
                 status: "relation".into(),
                 reason: None,
-                target: locus.scene_id.clone(),
+                target: Some(scene.id.as_str().into()),
                 scope: Some("relation".into()),
                 effect: Some("Navigate to the scene; do not retarget here".into()),
                 text: format!(
-                    "{scene} is a relation, not here. split, delete, reorder-scene are legal there — Navigate, do not retarget."
+                    "{} \"{}\" is a relation, not here. {details} — Navigate, do not retarget.",
+                    kind_label(scene.kind),
+                    scene.label
                 ),
             }]
         }
@@ -321,7 +366,7 @@ fn speak_relations(locus: &Locus) -> Vec<SpokenClause> {
 
 /// Refuse a toolbar/session edit whose target the Engine cannot name for here.
 #[must_use]
-pub fn refuse_edit(here: Option<&Locus>, edit: &SemanticEdit) -> String {
+pub fn refuse_edit(here: Option<&Locus>, edit: &SemanticEdit, loci: &[Locus]) -> String {
     let verb = verb_for_edit(edit);
     let Some(locus) = here else {
         return format!("{verb} needs a committed locus. Here is unset.");
@@ -345,11 +390,26 @@ pub fn refuse_edit(here: Option<&Locus>, edit: &SemanticEdit) -> String {
         _ => AbsenceReason::StructurallyAbsent,
     };
     let relation = match (verb, locus.kind) {
-        ("split" | "delete" | "reorder-scene", LocusKind::Source) => locus
-            .scene_id
-            .as_deref()
-            .map(|scene| format!(" {verb} is legal for {scene} — Navigate, do not retarget."))
-            .unwrap_or_default(),
+        ("split" | "delete" | "reorder-scene", LocusKind::Source) => {
+            if let Some(scene) = related_scene(locus, loci) {
+                legal_edits_for(scene)
+                    .iter()
+                    .find(|legal| legal.verb == verb)
+                    .map(|legal| {
+                        format!(
+                            " {verb} → {} ({}: {}) — Navigate, do not retarget.",
+                            legal.target.as_str(),
+                            legal.scope,
+                            legal.effect
+                        )
+                    })
+                    .unwrap_or_else(|| " Navigate, do not retarget.".into())
+            } else if locus.scene_id.is_some() {
+                " Navigate, do not retarget.".into()
+            } else {
+                String::new()
+            }
+        }
         ("trim" | "set-gain" | "set-fade", LocusKind::Scene) => {
             format!(" {verb} needs a source binding. Point the video clip.")
         }
@@ -420,10 +480,14 @@ mod tests {
         }
     }
 
+    fn scene() -> Locus {
+        locus(LocusKind::Scene, "scene:demo", "demo")
+    }
+
     #[test]
     fn timeline_title_speaks_canvas_route_for_position() {
         let title = locus(LocusKind::Title, "title:hello", "Hello");
-        let spoken = utterance(Some(&title), None, Projection::Timeline);
+        let spoken = utterance(Some(&title), None, Projection::Timeline, &[]);
         assert!(spoken.speaks_gap());
         assert!(
             spoken
@@ -443,10 +507,29 @@ mod tests {
             &SemanticEdit::Split {
                 at: lattice_engine::Time::ZERO,
             },
+            &[scene()],
         );
         assert!(text.contains("needs-scene"), "{text}");
-        assert!(text.contains("scene:demo"), "{text}");
+        assert!(text.contains("split → scene:demo"), "{text}");
+        assert!(text.contains("scene:"), "{text}");
         assert!(text.contains("do not retarget"), "{text}");
+        assert!(!text.contains("is legal for"), "{text}");
+    }
+
+    #[test]
+    fn refuse_edit_does_not_claim_scene_legality_without_related_scene() {
+        let source = locus(LocusKind::Source, "source:fight", "fight");
+        let text = refuse_edit(
+            Some(&source),
+            &SemanticEdit::Split {
+                at: lattice_engine::Time::ZERO,
+            },
+            &[],
+        );
+        assert!(text.contains("needs-scene"), "{text}");
+        assert!(text.contains("do not retarget"), "{text}");
+        assert!(!text.contains("is legal for"), "{text}");
+        assert!(!text.contains("split →"), "{text}");
     }
 
     #[test]
@@ -470,7 +553,7 @@ mod tests {
             Some(Projection::Timeline)
         );
         let source = locus(LocusKind::Source, "source:fight", "fight");
-        let spoken = utterance(Some(&source), None, Projection::Timeline);
+        let spoken = utterance(Some(&source), None, Projection::Timeline, &[]);
         assert!(spoken.speaks_gap());
         for verb in ["set-gain", "set-fade"] {
             assert!(
@@ -497,7 +580,7 @@ mod tests {
     #[test]
     fn source_utterance_discloses_scene_as_relation_not_absence() {
         let source = locus(LocusKind::Source, "source:fight", "fight");
-        let spoken = utterance(Some(&source), None, Projection::Timeline);
+        let spoken = utterance(Some(&source), None, Projection::Timeline, &[scene()]);
         assert!(
             spoken
                 .spoken
@@ -506,18 +589,111 @@ mod tests {
             "{}",
             spoken.spoken_text()
         );
-        assert!(spoken.spoken_text().contains("legal there"));
-        assert!(spoken.spoken_text().contains("do not retarget"));
-        assert!(!spoken.spoken_text().contains("split is not legal"));
+        let text = spoken.spoken_text();
+        assert!(text.contains("split → scene:demo"), "{text}");
+        assert!(text.contains("delete → scene:demo"), "{text}");
+        assert!(text.contains("reorder-scene → scene:demo"), "{text}");
+        assert!(text.contains("do not retarget"), "{text}");
+        assert!(!text.contains("legal there"), "{text}");
+        assert!(!text.contains("split is not legal"), "{text}");
         assert!(spoken.spoken.iter().any(
             |clause| clause.verb == "trim" && clause.target.as_deref() == Some("source:fight")
         ));
     }
 
     #[test]
+    fn unresolved_scene_id_does_not_invent_engine_legality() {
+        let source = locus(LocusKind::Source, "source:fight", "fight");
+        let spoken = utterance(Some(&source), None, Projection::Timeline, &[]);
+        let text = spoken.spoken_text();
+        assert!(
+            spoken
+                .spoken
+                .iter()
+                .any(|clause| clause.status == "relation" && clause.text.contains("scene:demo")),
+            "{text}"
+        );
+        assert!(text.contains("do not retarget"), "{text}");
+        assert!(!text.contains("split →"), "{text}");
+        assert!(!text.contains("legal there"), "{text}");
+        assert!(!text.contains("are legal"), "{text}");
+    }
+
+    #[test]
+    fn gesture_routes_match_real_commit_paths() {
+        assert_eq!(
+            routed_verbs(Projection::Timeline, LocusKind::Scene),
+            ["reorder-scene"]
+        );
+        assert_eq!(
+            routed_verbs(Projection::Toolbar, LocusKind::Scene),
+            ["split", "delete"]
+        );
+        assert!(routed_verbs(Projection::Toolbar, LocusKind::Title).is_empty());
+        assert_eq!(
+            routed_verbs(Projection::Inspector, LocusKind::Title),
+            ["title"]
+        );
+        assert_eq!(
+            commit_projection("split", LocusKind::Scene),
+            Some(Projection::Toolbar)
+        );
+        assert_eq!(
+            commit_projection("reorder-scene", LocusKind::Scene),
+            Some(Projection::Timeline)
+        );
+        assert_eq!(
+            commit_projection("title", LocusKind::Title),
+            Some(Projection::Timeline)
+        );
+    }
+
+    #[test]
+    fn timeline_scene_utterance_routes_split_to_toolbar() {
+        let spoken = utterance(Some(&scene()), None, Projection::Timeline, &[]);
+        assert!(spoken.routed.iter().eq(["reorder-scene"]));
+        assert!(
+            spoken
+                .spoken
+                .iter()
+                .any(|clause| clause.verb == "split" && clause.status == "routed"),
+            "{}",
+            spoken.spoken_text()
+        );
+        assert!(
+            spoken
+                .spoken
+                .iter()
+                .any(|clause| clause.verb == "delete" && clause.status == "routed"),
+            "{}",
+            spoken.spoken_text()
+        );
+        assert!(
+            spoken
+                .spoken
+                .iter()
+                .any(|clause| clause.verb == "reorder-scene" && clause.status == "present"),
+            "{}",
+            spoken.spoken_text()
+        );
+        assert!(
+            spoken.spoken_text().contains("committed on Toolbar"),
+            "{}",
+            spoken.spoken_text()
+        );
+        assert!(
+            !spoken
+                .spoken
+                .iter()
+                .any(|clause| clause.verb == "split" && clause.status == "present"),
+            "Timeline must not claim it commits split: {}",
+            spoken.spoken_text()
+        );
+    }
+
+    #[test]
     fn scene_utterance_discloses_source_binding_affordance() {
-        let scene = locus(LocusKind::Scene, "scene:demo", "demo");
-        let spoken = utterance(Some(&scene), None, Projection::Timeline);
+        let spoken = utterance(Some(&scene()), None, Projection::Timeline, &[]);
         assert!(
             spoken.spoken_text().contains("Point the video clip"),
             "{}",

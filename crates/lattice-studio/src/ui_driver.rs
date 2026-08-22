@@ -738,7 +738,7 @@ scene demo {
         assert!(heading.contains("source"), "{heading}");
         let spoken = ui.read(&view, |view, _| view.session.utterance().spoken_text());
         assert!(
-            spoken.contains("legal there") && spoken.contains("do not retarget"),
+            spoken.contains("split →") && spoken.contains("do not retarget"),
             "{spoken}"
         );
     }
