@@ -59,6 +59,7 @@ pub struct InspectorView {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[allow(clippy::struct_excessive_bools)]
 pub struct TimelineClipView {
     pub id: String,
     pub kind: String,
@@ -382,6 +383,7 @@ fn utterance_view(utterance: &Utterance) -> UtteranceView {
     }
 }
 
+#[allow(clippy::too_many_lines)]
 fn timeline_view(
     session: &StudioSession,
     timeline: &lattice_engine::Timeline,
@@ -443,10 +445,11 @@ fn timeline_view(
             });
             let (start, duration) = crate::interaction::ephemeral_clip_span(session, &clip.id)
                 .unwrap_or((clip.span.start, clip.span.duration));
-            let wide_enough = session.viewport().delta_x(duration).abs()
-                >= crate::gesture::MIN_DRAW_WIDTH_PX;
+            let wide_enough =
+                session.viewport().delta_x(duration).abs() >= crate::gesture::MIN_DRAW_WIDTH_PX;
             let source_here = current.is_some_and(|locus| locus.kind == LocusKind::Source);
-            let handles = selected && wide_enough && matches!(kind.as_str(), "video" | "title" | "callout");
+            let handles =
+                selected && wide_enough && matches!(kind.as_str(), "video" | "title" | "callout");
             let fade_handle = selected && source_here && wide_enough && kind == "video";
             let gain_handle = selected && source_here && wide_enough && kind == "audio";
             TimelineClipView {

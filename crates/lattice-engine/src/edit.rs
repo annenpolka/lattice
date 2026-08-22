@@ -841,7 +841,8 @@ fn include_leading_minus(source: &str, span: Span) -> Span {
             minus_at,
             span.end,
             span.line,
-            span.column.saturating_sub(span.start.saturating_sub(minus_at)),
+            span.column
+                .saturating_sub(span.start.saturating_sub(minus_at)),
         );
     }
     span
