@@ -451,12 +451,18 @@ scene intro {
             "relative ruler drag must move the model playhead, got {scrubbed}"
         );
 
-        // Re-select the video scene so trim handles are rendered after scrub changed the locus.
-        view.update(ui.context(), |view, cx| {
-            view.session.point_at(LocusId::new("scene:intro"));
-            cx.notify();
-        });
-        ui.context().run_until_parked();
+        // Trim hits only selected-clip drawn handles. Point the source after
+        // scrub so `timeline.trim.*.out` is both rendered and hittable.
+        ui.click(&clip_selector);
+        assert_eq!(
+            ui.read(&view, |view, _| {
+                view.session
+                    .current_locus()
+                    .unwrap()
+                    .map(|locus| locus.kind)
+            }),
+            Some(lattice_engine::LocusKind::Source)
+        );
         let original = ui.read(&view, |view, _| view.session.source().to_string());
         ui.drag(trim_selector, (0.5, 0.5), clip_selector, (0.72, 0.5));
         assert_ne!(
