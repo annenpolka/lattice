@@ -3716,8 +3716,8 @@ impl StudioView {
                 );
             }
             if gain_handle {
-                let ratio = lattice_studio::y_ratio_from_db(gain_db.unwrap_or(0)) as f32;
-                let line_y = (22.0 * ratio).clamp(2.0, 18.0);
+                let line_y = lattice_studio::gain_line_top(gain_db.unwrap_or(0)) as f32;
+                let line_h = lattice_studio::GAIN_LINE_HEIGHT_PX as f32;
                 block = block.child(
                     div()
                         .id(SharedString::from(format!("tl-{id}-gain")))
@@ -3729,7 +3729,7 @@ impl StudioView {
                         .left(px(0.0))
                         .top(px(line_y))
                         .w_full()
-                        .h(px(4.0))
+                        .h(px(line_h))
                         .bg(rgb(TEAL))
                         .cursor(CursorStyle::ResizeLeftRight)
                         .child(

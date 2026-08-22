@@ -14,6 +14,8 @@ pub const DRAG_THRESHOLD_PX: f64 = 4.0;
 pub const SNAP_THRESHOLD_PX: f64 = 8.0;
 pub const GAIN_DB_TOP: i32 = 12;
 pub const GAIN_DB_BOTTOM: i32 = -24;
+pub const GAIN_LINE_HEIGHT_PX: f64 = 4.0;
+pub const GAIN_LINE_SLOP_PX: f64 = 1.0;
 
 #[must_use]
 pub fn min_duration() -> Time {
@@ -184,6 +186,7 @@ pub struct HitClip {
     pub duration: Time,
     pub selected: bool,
     pub scene_id: String,
+    pub gain_db: i32,
 }
 
 #[must_use]
@@ -213,6 +216,17 @@ pub fn db_from_y_ratio(ratio: f64) -> i32 {
             rounded as i32
         }
     }
+}
+
+#[must_use]
+pub fn gain_line_top(db: i32) -> f64 {
+    (TRACK_HEIGHT_PX * y_ratio_from_db(db)).clamp(2.0, 18.0)
+}
+
+#[must_use]
+pub fn on_gain_line(y: f64, db: i32) -> bool {
+    let top = gain_line_top(db);
+    y >= top - GAIN_LINE_SLOP_PX && y <= top + GAIN_LINE_HEIGHT_PX + GAIN_LINE_SLOP_PX
 }
 
 #[must_use]
@@ -283,7 +297,8 @@ pub fn hit_test_xy(clips: &[HitClip], x: f64, y: f64, viewport: TimelineViewport
                 });
             }
         }
-        let handleable = drawable
+        let handleable = clip.selected
+            && drawable
             && matches!(
                 clip.kind,
                 ClipKind::Video | ClipKind::Title | ClipKind::Callout
@@ -336,7 +351,13 @@ pub fn hit_test_xy(clips: &[HitClip], x: f64, y: f64, viewport: TimelineViewport
                 });
             }
         }
-        if clip.selected && clip.kind == ClipKind::Audio && drawable && x >= lo && x <= hi {
+        if clip.selected
+            && clip.kind == ClipKind::Audio
+            && drawable
+            && x >= lo
+            && x <= hi
+            && on_gain_line(y, clip.gain_db)
+        {
             best_gain = Some(TimelineHit::Gain {
                 clip_id: clip.id.clone(),
             });
