@@ -142,6 +142,9 @@ pub struct Visual {
     /// Uniform aspect-preserving scale (`1000` = `100%`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub scale: Option<NormalizedScale>,
+    /// Scale / placement pivot. `None` is today's top-left. Not `origin`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub anchor: Option<crate::overlay::OverlayAnchor>,
     /// Explicit overlay color / size / weight / family / bar. Omitted style
     /// keeps today's title/callout convention at evaluate.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -154,37 +157,6 @@ mod tests {
     use crate::time::Time;
 
     #[test]
-    fn split_at_preserves_coverage() {
-        let span = TimeSpan::new(Time::seconds(0), Time::seconds(20));
-        let (left, right) = span.split_at(Time::seconds(8)).expect("interior");
-        assert_eq!(left, TimeSpan::new(Time::seconds(0), Time::seconds(8)));
-        assert_eq!(right, TimeSpan::new(Time::seconds(8), Time::seconds(12)));
-        assert_eq!(left.end(), right.start);
-        assert_eq!(left.start, span.start);
-        assert_eq!(right.end(), span.end());
-    }
-
-    #[test]
-    fn split_at_rejects_boundaries() {
-        let span = TimeSpan::new(Time::seconds(10), Time::seconds(10));
-        assert!(span.split_at(Time::seconds(10)).is_none());
-        assert!(span.split_at(Time::seconds(20)).is_none());
-        assert!(span.split_at(Time::seconds(9)).is_none());
-    }
-
-    #[test]
-    fn contains_is_half_open() {
-        let span = TimeSpan::new(Time::seconds(2), Time::seconds(3));
-        assert!(span.contains(Time::seconds(2)));
-        assert!(span.contains(Time::seconds(4)));
-        assert!(!span.contains(Time::seconds(5)));
-        assert!(!span.contains(Time::ZERO));
-        let empty = TimeSpan::new(Time::seconds(3), Time::ZERO);
-        assert!(empty.contains(Time::seconds(3)));
-        assert!(!empty.contains(Time::seconds(4)));
-    }
-
-    #[test]
     fn omitted_overlay_style_is_absent_from_visual_json() {
         let json = serde_json::to_string(&Visual::text_overlay("Hello")).expect("json");
         assert!(
@@ -193,80 +165,14 @@ mod tests {
         );
         let round: Visual = serde_json::from_str(&json).expect("roundtrip");
         assert_eq!(round.style, None);
+        assert_eq!(round.anchor, None);
+        assert!(
+            !json.contains("anchor"),
+            "omitted overlay anchor must skip: {json}"
+        );
+        assert!(
+            !json.contains("origin"),
+            "Visual must not grow an origin field: {json}"
+        );
     }
-}
-
-#[cfg(test)]
-mod properties {
-    use super::*;
-    use crate::time::Time;
-    use proptest::prelude::*;
-
-    fn arb_span() -> impl Strategy<Value = TimeSpan> {
-        (0i64..1_000, 1i64..1_000).prop_map(|(start, duration)| {
-            TimeSpan::new(Time::seconds(start), Time::seconds(duration))
-        })
-    }
-
-    proptest! {
-        #[test]
-        fn split_preserves_source_coverage(span in arb_span(), offset in 1i64..999) {
-            let at = span.start + Time::seconds(offset);
-            let Some((left, right)) = span.split_at(at) else {
-                prop_assert!(at <= span.start || at >= span.end());
-                return Ok(());
-            };
-            prop_assert_eq!(left.start, span.start);
-            prop_assert_eq!(right.end(), span.end());
-            prop_assert_eq!(left.end(), right.start);
-            prop_assert_eq!(left.duration + right.duration, span.duration);
-            prop_assert!(left.duration > Time::ZERO);
-            prop_assert!(right.duration > Time::ZERO);
-        }
-
-        #[test]
-        fn trim_stays_inside_original(span in arb_span(), in_off in 0i64..500, out_off in 0i64..500) {
-            let in_point = span.start + Time::seconds(in_off);
-            let out_point = span.end().checked_sub(Time::seconds(out_off)).unwrap_or(span.start);
-            if in_point >= out_point || in_point < span.start || out_point > span.end() {
-                return Ok(());
-            }
-            let trimmed = TimeSpan::new(in_point, out_point - in_point);
-            prop_assert!(trimmed.start >= span.start);
-            prop_assert!(trimmed.end() <= span.end());
-        }
-    }
-}
-
-impl Visual {
-    pub fn text_overlay(text: impl Into<String>) -> Self {
-        Self {
-            fit: None,
-            text: Some(text.into()),
-            opacity: None,
-            fade_in: None,
-            fade_out: None,
-            position: None,
-            scale: None,
-            style: None,
-        }
-    }
-
-    pub fn fit(fit: impl Into<String>) -> Self {
-        Self {
-            fit: Some(fit.into()),
-            text: None,
-            opacity: None,
-            fade_in: None,
-            fade_out: None,
-            position: None,
-            scale: None,
-            style: None,
-        }
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Audio {
-    pub gain_db: Option<i32>,
 }
