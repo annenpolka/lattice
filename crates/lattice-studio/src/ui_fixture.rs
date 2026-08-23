@@ -90,7 +90,7 @@ impl UiFixture {
                     "demo:title:1",
                     "demo:callout:2",
                 ],
-                track_count: 3,
+                track_count: 4,
             },
             Self::DragValid => ExpectedInitial {
                 project: "drag-valid",
@@ -106,7 +106,7 @@ impl UiFixture {
                     "right:audio:3",
                     "right:title:1",
                 ],
-                track_count: 3,
+                track_count: 4,
             },
             Self::DragInvalid => ExpectedInitial {
                 project: "drag-invalid",
@@ -115,7 +115,7 @@ impl UiFixture {
                 locus_id: "pinned:title:1",
                 locus_kind: "title",
                 clip_ids: &["pinned:video:2", "pinned:audio:3", "pinned:title:1"],
-                track_count: 3,
+                track_count: 4,
             },
             Self::DenseProject => ExpectedInitial {
                 project: "dense-project",
@@ -130,7 +130,7 @@ impl UiFixture {
                     "three:title:1",
                     "four:title:1",
                 ],
-                track_count: 3,
+                track_count: 4,
             },
         }
     }

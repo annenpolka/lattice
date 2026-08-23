@@ -426,3 +426,48 @@ scene c {
         ]
     );
 }
+
+#[test]
+fn set_gain_on_existing_negative_does_not_double_the_sign() {
+    let engine = Engine::default();
+    let compilation = engine.compile(VEL).unwrap();
+    let source = engine
+        .loci(&compilation)
+        .unwrap()
+        .into_iter()
+        .find(|locus| locus.kind == lattice_core::LocusKind::Source)
+        .expect("source:fight");
+    let same = engine
+        .propose(&compilation, &source, SemanticEdit::SetGain { db: -3 })
+        .unwrap();
+    assert!(
+        !same.new_source.contains("by --3"),
+        "SetGain {{ -3 }} on `gain fight by -3` must not write `--3`:\n{}",
+        same.new_source
+    );
+    assert!(
+        same.new_source.contains("gain fight by -3"),
+        "{}",
+        same.new_source
+    );
+    let timeline = Engine::timeline(&compilation.project).unwrap();
+    assert!(
+        timeline.audio_clips().any(|clip| clip.gain_db == Some(-3)),
+        "fixture baseline is −3 dB"
+    );
+    let down = engine
+        .propose(&compilation, &source, SemanticEdit::SetGain { db: -6 })
+        .unwrap();
+    assert!(
+        down.new_source.contains("gain fight by -6"),
+        "{}",
+        down.new_source
+    );
+    assert!(!down.new_source.contains("by --"));
+    let compiled = engine.compile(&down.new_source).unwrap();
+    let timeline = Engine::timeline(&compiled.project).unwrap();
+    assert!(
+        timeline.audio_clips().any(|clip| clip.gain_db == Some(-6)),
+        "must evaluate to −6, not +6"
+    );
+}

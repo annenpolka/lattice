@@ -7,7 +7,7 @@ use lattice_engine::{
 };
 
 use crate::session::StudioSession;
-use crate::verb::{self, PointCandidate, Utterance};
+use crate::verb::{self, InvokedRecord, PointCandidate, Utterance};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TreeNode {
@@ -55,10 +55,15 @@ pub struct InspectorView {
     pub go_to_definition: Option<Span>,
     /// Title-shaped fields exist only when here is Title.
     pub title_fields: bool,
+    /// Property fields bound to this exact source `LocusId`, not `LocusKind`.
+    pub gain_db: Option<i32>,
+    pub fade_in: Option<Time>,
+    pub invoked: Vec<InvokedRecord>,
     pub utterance: UtteranceView,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[allow(clippy::struct_excessive_bools)]
 pub struct TimelineClipView {
     pub id: String,
     pub kind: String,
@@ -69,6 +74,12 @@ pub struct TimelineClipView {
     pub selected: bool,
     pub scene_id: String,
     pub handles: bool,
+    pub fade_handle: bool,
+    pub gain_handle: bool,
+    pub cut_lane: bool,
+    pub delete_handle: bool,
+    pub fade_in: Option<Time>,
+    pub gain_db: Option<i32>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -95,7 +106,13 @@ pub struct UtteranceView {
     pub pointing: String,
     pub legal: Vec<String>,
     pub routed: Vec<String>,
-    pub spoken: Vec<String>,
+    pub spoken: Vec<SpokenLine>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SpokenLine {
+    pub text: String,
+    pub eye_target: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -145,7 +162,7 @@ pub fn from_session(session: &StudioSession) -> Result<StudioLayout, lattice_eng
             text: compilation.source.clone(),
             highlight: current.as_ref().and_then(|locus| locus.source_span),
         },
-        inspector: inspector_from_locus(current.as_ref(), session.path(), &session.utterance()),
+        inspector: inspector_from_session(session, current.as_ref(), &session.utterance()),
         timeline: timeline_view(session, &timeline, current.as_ref()),
         review: session.review_proposal().map(review_from_proposal),
         playhead: session.playhead(),
@@ -306,12 +323,13 @@ fn canvas_from_plan(
     }
 }
 
-fn inspector_from_locus(
+fn inspector_from_session(
+    session: &StudioSession,
     locus: Option<&Locus>,
-    path: &std::path::Path,
     utterance: &Utterance,
 ) -> InspectorView {
     let utterance = utterance_view(utterance);
+    let invoked = session.invoked_this_session();
     let Some(locus) = locus else {
         let heading = if utterance.pointing == "unresolved-pointing" {
             "unresolved pointing".into()
@@ -325,10 +343,13 @@ fn inspector_from_locus(
             locus_id: None,
             go_to_definition: None,
             title_fields: false,
+            gain_db: None,
+            fade_in: None,
+            invoked,
             utterance,
         };
     };
-    let file = file_label(path);
+    let file = file_label(session.path());
     let defined_in = locus.source_span.map_or_else(
         || "provenance always present".into(),
         |span| format!("{file}:{}", span.line),
@@ -339,6 +360,7 @@ fn inspector_from_locus(
         Origin::Builtin { name } => format!("builtin `{name}`"),
         Origin::Source => "source".into(),
     };
+    let (gain_db, fade_in) = source_property_values(session, locus);
     InspectorView {
         heading: format!("{} \"{}\"", kind_label(locus.kind), locus.label),
         origin,
@@ -346,8 +368,63 @@ fn inspector_from_locus(
         locus_id: Some(locus.id.as_str().to_string()),
         go_to_definition: locus.source_span,
         title_fields: locus.kind == LocusKind::Title,
+        gain_db,
+        fade_in,
+        invoked,
         utterance,
     }
+}
+
+fn placement_source_id(session: &StudioSession, clip_id: &str) -> Option<String> {
+    session
+        .compilation()
+        .project
+        .scenes
+        .iter()
+        .find_map(|scene| {
+            scene
+                .placements
+                .iter()
+                .find(|placement| placement.id == clip_id)
+                .and_then(|placement| placement.source_id.clone())
+        })
+}
+
+/// Same identity the Timeline handle uses: this exact source locus, not `LocusKind`.
+fn source_clip_matches_locus(locus: &Locus, clip_id: &str, source_id: Option<&str>) -> bool {
+    source_id == Some(locus.node_id.as_str())
+        || source_id == Some(locus.id.as_str())
+        || locus.id.as_str() == clip_id
+        || locus.node_id == clip_id
+}
+
+fn source_property_values(session: &StudioSession, locus: &Locus) -> (Option<i32>, Option<Time>) {
+    if locus.kind != LocusKind::Source {
+        return (None, None);
+    }
+    let Ok(timeline) = Engine::timeline(&session.compilation().project) else {
+        return (None, None);
+    };
+    let mut matched = false;
+    let mut gain_db = None;
+    let mut fade_in = None;
+    for clip in &timeline.clips {
+        let source_id = placement_source_id(session, &clip.id);
+        if !source_clip_matches_locus(locus, &clip.id, source_id.as_deref()) {
+            continue;
+        }
+        matched = true;
+        if clip.gain_db.is_some() {
+            gain_db = clip.gain_db;
+        }
+        if clip.fade_in.is_some() {
+            fade_in = clip.fade_in;
+        }
+    }
+    if !matched {
+        return (None, None);
+    }
+    (gain_db.or(Some(0)), fade_in.or(Some(Time::ZERO)))
 }
 
 fn utterance_view(utterance: &Utterance) -> UtteranceView {
@@ -371,11 +448,15 @@ fn utterance_view(utterance: &Utterance) -> UtteranceView {
         spoken: utterance
             .spoken
             .iter()
-            .map(|clause| clause.text.clone())
+            .map(|clause| SpokenLine {
+                text: clause.text.clone(),
+                eye_target: clause.eye_target.clone(),
+            })
             .collect(),
     }
 }
 
+#[allow(clippy::too_many_lines)]
 fn timeline_view(
     session: &StudioSession,
     timeline: &lattice_engine::Timeline,
@@ -406,26 +487,13 @@ fn timeline_view(
                 .map(|scene| scene.id.clone())
                 .unwrap_or_default();
             let overlay = matches!(kind.as_str(), "title" | "callout");
-            let source_id = session
-                .compilation()
-                .project
-                .scenes
-                .iter()
-                .find_map(|scene| {
-                    scene
-                        .placements
-                        .iter()
-                        .find(|placement| placement.id == clip.id)
-                        .and_then(|placement| placement.source_id.clone())
-                });
+            let source_id = placement_source_id(session, &clip.id);
             let selected = current.is_some_and(|locus| {
                 if overlay {
                     return locus.id.as_str() == clip.id || locus.node_id == clip.id;
                 }
                 if locus.kind == LocusKind::Source {
-                    return source_id.as_deref() == Some(locus.node_id.as_str())
-                        || locus.id.as_str() == clip.id
-                        || locus.node_id == clip.id;
+                    return source_clip_matches_locus(locus, &clip.id, source_id.as_deref());
                 }
                 if locus.kind == LocusKind::Scene {
                     return locus.scene_id.as_deref() == Some(scene_id.as_str())
@@ -437,7 +505,13 @@ fn timeline_view(
             });
             let (start, duration) = crate::interaction::ephemeral_clip_span(session, &clip.id)
                 .unwrap_or((clip.span.start, clip.span.duration));
-            let handles = selected && matches!(kind.as_str(), "video" | "title" | "callout");
+            let wide_enough =
+                session.viewport().delta_x(duration).abs() >= crate::gesture::MIN_DRAW_WIDTH_PX;
+            let source_here = current.is_some_and(|locus| locus.kind == LocusKind::Source);
+            let handles =
+                selected && wide_enough && matches!(kind.as_str(), "video" | "title" | "callout");
+            let fade_handle = selected && source_here && wide_enough && kind == "video";
+            let gain_handle = selected && source_here && wide_enough && kind == "audio";
             TimelineClipView {
                 selected,
                 id: clip.id.clone(),
@@ -448,15 +522,56 @@ fn timeline_view(
                 duration,
                 scene_id,
                 handles,
+                fade_handle,
+                gain_handle,
+                cut_lane: false,
+                delete_handle: false,
+                fade_in: clip.fade_in,
+                gain_db: clip.gain_db,
             }
         })
         .collect();
+    let scene_here = current.is_some_and(|locus| locus.kind == LocusKind::Scene);
+    let mut scene_clips = Vec::new();
+    for scene in &session.compilation().project.scenes {
+        let Some(span) = scene_layout_span(session, timeline, &scene.id) else {
+            continue;
+        };
+        let (start, duration) = (span.start, span.duration);
+        let wide_enough =
+            session.viewport().delta_x(duration).abs() >= crate::gesture::MIN_DRAW_WIDTH_PX;
+        let selected = current.is_some_and(|locus| {
+            locus.kind == LocusKind::Scene
+                && (locus.id.as_str() == scene.id || locus.node_id == scene.id)
+        });
+        scene_clips.push(TimelineClipView {
+            selected,
+            id: scene.id.clone(),
+            kind: "scene".into(),
+            track: "scene".into(),
+            label: scene.name.clone(),
+            start,
+            duration,
+            scene_id: scene.id.clone(),
+            handles: false,
+            fade_handle: false,
+            gain_handle: false,
+            cut_lane: selected && scene_here && wide_enough,
+            delete_handle: selected && scene_here && wide_enough,
+            fade_in: None,
+            gain_db: None,
+        });
+    }
     TimelineView {
         duration: timeline.duration,
         tracks: vec![
             track_named("Video", "video", &clips),
             track_named("Audio", "audio", &clips),
             track_named("Text", "text", &clips),
+            TimelineTrackView {
+                name: "Scene".into(),
+                clips: scene_clips,
+            },
         ],
         snap_indicator: session.snap_indicator(),
         insertion_marker: crate::interaction::insertion_marker(session),
@@ -467,6 +582,34 @@ fn timeline_view(
             .map(verb::candidate_cards)
             .unwrap_or_default(),
     }
+}
+
+fn scene_layout_span(
+    session: &StudioSession,
+    timeline: &lattice_engine::Timeline,
+    scene_id: &str,
+) -> Option<lattice_engine::TimeSpan> {
+    let scene = session
+        .compilation()
+        .project
+        .scenes
+        .iter()
+        .find(|scene| scene.id == scene_id)?;
+    let mut start = None;
+    let mut end = None;
+    for placement in &scene.placements {
+        let Some(clip) = timeline.clips.iter().find(|clip| clip.id == placement.id) else {
+            continue;
+        };
+        start = Some(start.map_or(clip.span.start, |time: Time| time.min(clip.span.start)));
+        end = Some(end.map_or(clip.span.end(), |time: Time| time.max(clip.span.end())));
+    }
+    let start = start?;
+    let end = end?;
+    Some(lattice_engine::TimeSpan::new(
+        start,
+        end.checked_sub(start).ok()?,
+    ))
 }
 
 fn track_named(name: &str, track: &str, clips: &[TimelineClipView]) -> TimelineTrackView {

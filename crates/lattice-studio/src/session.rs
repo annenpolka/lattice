@@ -17,7 +17,7 @@ use crate::canvas::{
 use crate::gesture::{GestureOutcome, TimelineGesture};
 use crate::layout::{self, StudioLayout};
 use crate::preview::{PreviewJob, PreviewMailbox, playback_frame_at_or_before};
-use crate::verb::{self, Projection, UnresolvedPointing, Utterance, refuse_edit};
+use crate::verb::{self, InvokedRecord, Projection, UnresolvedPointing, Utterance, refuse_edit};
 use crate::viewport::{TimelineViewport, clamp_interaction_time};
 
 /// Engine-backed Studio state. No GPUI types.
@@ -32,6 +32,8 @@ pub struct StudioSession {
     playing: bool,
     pub(crate) undo_stack: Vec<String>,
     redo_stack: Vec<String>,
+    invoked: Vec<Option<InvokedRecord>>,
+    invoked_redo: Vec<Option<InvokedRecord>>,
     preview_generation: u64,
     source_width: Option<u32>,
     source_height: Option<u32>,
@@ -46,6 +48,18 @@ pub struct StudioSession {
     pub(crate) unresolved: Option<UnresolvedPointing>,
     pub(crate) touched_projection: Projection,
     pub(crate) last_spoken: Option<String>,
+}
+
+/// Move one history slot, including a `None` VEL-text placeholder.
+///
+/// `Vec::pop` is `Option<slot>`. The slot itself is `Option<InvokedRecord>`.
+/// Matching the inner `Some` would drop the placeholder and desynchronize
+/// Invoked-this-session from Undo.
+fn transfer_invoked_slot(
+    from: &mut Vec<Option<InvokedRecord>>,
+    to: &mut Vec<Option<InvokedRecord>>,
+) {
+    to.extend(from.pop());
 }
 
 impl StudioSession {
@@ -65,6 +79,8 @@ impl StudioSession {
             playing: false,
             undo_stack: Vec::new(),
             redo_stack: Vec::new(),
+            invoked: Vec::new(),
+            invoked_redo: Vec::new(),
             preview_generation: 0,
             source_width: None,
             source_height: None,
@@ -595,9 +611,13 @@ impl StudioSession {
                 return Err(err);
             }
         };
+        let invoked = InvokedRecord::from_edit(&edit, &locus);
         let proposal = self.engine.propose(&self.compilation, &locus, edit)?;
         self.last_spoken = None;
-        self.push_undo();
+        if proposal.new_source == self.compilation.source {
+            return Ok(());
+        }
+        self.push_undo(Some(invoked));
         let new_source = self
             .engine
             .apply_proposal(&self.compilation.source, &proposal)?;
@@ -645,6 +665,51 @@ impl StudioSession {
         })
     }
 
+    pub fn apply_inspector_gain(&mut self, db: i32) -> Result<(), EngineError> {
+        self.touched_projection = Projection::Inspector;
+        self.apply_edit(SemanticEdit::SetGain { db })
+    }
+
+    pub fn apply_inspector_fade(&mut self, fade_in: Time) -> Result<(), EngineError> {
+        self.touched_projection = Projection::Inspector;
+        self.apply_edit(SemanticEdit::SetFade {
+            fade_in: Some(fade_in),
+        })
+    }
+
+    /// Seek the playhead to a named locus. Does not point, apply, or push Undo.
+    pub fn seek_eye(&mut self, id: &str) -> Result<bool, EngineError> {
+        let loci = self.loci()?;
+        let Some(locus) = loci
+            .iter()
+            .find(|locus| locus.id.as_str() == id || locus.node_id == id)
+            .cloned()
+        else {
+            return Ok(false);
+        };
+        if let Some(span) = self.preview_span_for(&locus) {
+            self.seek(span.start);
+            return Ok(true);
+        }
+        let timeline = Engine::timeline(&self.compilation.project)?;
+        if let Some(span) = self
+            .clip_span_for_scene(&timeline, id)
+            .or_else(|| self.clip_span_for_scene(&timeline, locus.id.as_str()))
+            .or_else(|| self.clip_span_for_scene(&timeline, &locus.node_id))
+            .or_else(|| self.clip_span_for_source(&timeline, &locus.node_id))
+            .or_else(|| self.clip_span_for_source(&timeline, locus.id.as_str()))
+        {
+            self.seek(span.start);
+            return Ok(true);
+        }
+        Ok(false)
+    }
+
+    #[must_use]
+    pub fn invoked_this_session(&self) -> Vec<InvokedRecord> {
+        self.invoked.iter().filter_map(Clone::clone).collect()
+    }
+
     pub fn save(&mut self) -> Result<(), EngineError> {
         write_source_atomic(&self.path, &self.compilation.source)?;
         self.saved_source.clone_from(&self.compilation.source);
@@ -656,6 +721,7 @@ impl StudioSession {
             return Ok(());
         };
         self.redo_stack.push(self.compilation.source.clone());
+        transfer_invoked_slot(&mut self.invoked, &mut self.invoked_redo);
         self.replace_working(&previous)
     }
 
@@ -664,6 +730,7 @@ impl StudioSession {
             return Ok(());
         };
         self.undo_stack.push(self.compilation.source.clone());
+        transfer_invoked_slot(&mut self.invoked_redo, &mut self.invoked);
         self.replace_working(&next)
     }
 
@@ -1065,6 +1132,8 @@ impl StudioSession {
         self.replace_working(&source)?;
         self.undo_stack.push(previous);
         self.redo_stack.clear();
+        self.invoked.push(None);
+        self.invoked_redo.clear();
         Ok(())
     }
 
@@ -1118,9 +1187,11 @@ impl StudioSession {
         true
     }
 
-    pub(crate) fn push_undo(&mut self) {
+    pub(crate) fn push_undo(&mut self, invoked: Option<InvokedRecord>) {
         self.undo_stack.push(self.compilation.source.clone());
         self.redo_stack.clear();
+        self.invoked.push(invoked);
+        self.invoked_redo.clear();
     }
 
     pub(crate) fn replace_working(&mut self, source: &str) -> Result<(), EngineError> {
@@ -1277,12 +1348,49 @@ impl StudioSession {
         crate::interaction::begin(self, x, snap_off, Some(track))
     }
 
+    pub fn begin_timeline_pointer_on_xy(
+        &mut self,
+        x: f64,
+        y: f64,
+        snap_off: bool,
+        track: &str,
+    ) -> Result<(), EngineError> {
+        self.stop_transport_for_position_change();
+        crate::interaction::begin_xy(self, x, y, snap_off, Some(track))
+    }
+
     pub fn update_timeline_pointer(&mut self, x: f64, snap_off: bool) -> Result<(), EngineError> {
         crate::interaction::update(self, x, snap_off)
     }
 
+    pub fn update_timeline_pointer_xy(
+        &mut self,
+        x: f64,
+        y: f64,
+        snap_off: bool,
+    ) -> Result<(), EngineError> {
+        crate::interaction::update_xy(self, x, y, snap_off)
+    }
+
     pub fn commit_timeline_pointer(&mut self, x: f64) -> Result<GestureOutcome, EngineError> {
         crate::interaction::commit(self, x, false)
+    }
+
+    pub fn commit_timeline_pointer_xy(
+        &mut self,
+        x: f64,
+        y: f64,
+    ) -> Result<GestureOutcome, EngineError> {
+        crate::interaction::commit_xy(self, x, y, false)
+    }
+
+    pub fn commit_timeline_pointer_xy_snap(
+        &mut self,
+        x: f64,
+        y: f64,
+        snap_off: bool,
+    ) -> Result<GestureOutcome, EngineError> {
+        crate::interaction::commit_xy(self, x, y, snap_off)
     }
 
     pub fn commit_timeline_pointer_snap(

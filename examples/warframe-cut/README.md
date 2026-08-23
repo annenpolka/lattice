@@ -8,8 +8,8 @@ Playable Alpha sample. `warframe-cut.mp4` sits next to `main.vel` and is gitigno
 |---|---|
 | `convention commentary` | default A/V placement |
 | four `scene`s in `sequence` | Studio body-drag reorders these |
-| `game[start..end]` | trim / Set In / Set Out / Split |
-| `fade` / `gain` | envelope + level (buttons or VEL) |
+| `game[start..end]` | trim / split |
+| `fade` / `gain` | envelope + level (on-target Timeline handles or VEL) |
 | `title` + `opacity` | overlay track / canvas; two titles in `hook` |
 | `callout` | overlay track drag |
 | `freeze` | TimeMap hold on `hold` |
@@ -46,6 +46,6 @@ Try:
 - drag a video body to reorder hook / fight / hold / outro
 - drag a title or callout on the text track (`hook` has two titles)
 - zoom / scroll / Alt to disable snap
-- Split at Playhead, Set In / Set Out, Gain, Fade, Delete
+- Timeline on-target handles: trim edges, fade wedge, gain line, scene cut lane, delete handle
 - point the same locus on canvas overlay, timeline, and inspector
 - Play / Pause (preview is generation-ordered, not a live decoder)

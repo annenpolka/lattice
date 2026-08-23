@@ -200,7 +200,7 @@ fn overlap_candidates_appear_on_timeline_not_modal() {
             .utterance
             .spoken
             .iter()
-            .any(|line| line.contains("Timeline") && line.contains("loci")),
+            .any(|line| line.text.contains("Timeline") && line.text.contains("loci")),
         "{:?}",
         layout.inspector.utterance.spoken
     );
@@ -255,15 +255,11 @@ fn scrub_and_playhead_do_not_change_locus() {
 #[test]
 fn inspector_hides_title_fields_when_here_is_scene() {
     let mut session = overlap_session();
-    let scene = session
-        .loci()
-        .unwrap()
-        .into_iter()
-        .find(|locus| locus.kind == LocusKind::Scene)
-        .unwrap();
-    session.point_at(scene.id);
+    point_scene_via_band(&mut session);
     let layout = session.layout().unwrap();
     assert!(!layout.inspector.title_fields);
+    assert!(layout.inspector.gain_db.is_none());
+    assert!(layout.inspector.fade_in.is_none());
     assert!(!layout.inspector.heading.contains("title"));
     assert!(layout.inspector.heading.contains("scene"));
     assert!(
@@ -280,14 +276,8 @@ fn inspector_hides_title_fields_when_here_is_scene() {
 #[test]
 fn toolbar_does_not_silently_retarget_when_routing_differs() {
     let mut session = overlap_session();
-    let source = session
-        .loci()
-        .unwrap()
-        .into_iter()
-        .find(|locus| locus.kind == LocusKind::Source)
-        .unwrap();
-    session.point_at(source.id.clone());
-    let here = source.id.clone();
+    point_source_via_video(&mut session);
+    let here = session.current_locus().unwrap().unwrap().id;
     let original = session.source().to_string();
     let err = session
         .split_at_playhead()
@@ -303,13 +293,7 @@ fn toolbar_does_not_silently_retarget_when_routing_differs() {
     assert_eq!(session.current_locus().unwrap().unwrap().id, here);
     assert_eq!(session.source(), original);
 
-    let scene = session
-        .loci()
-        .unwrap()
-        .into_iter()
-        .find(|locus| locus.kind == LocusKind::Scene)
-        .unwrap();
-    session.point_at(scene.id);
+    point_scene_via_band(&mut session);
     let err = session.set_gain(-3).expect_err("no silent source retarget");
     let spoken = session
         .last_spoken()
@@ -366,38 +350,29 @@ fn timeline_title_utterance_speaks_canvas_route() {
 }
 
 #[test]
-fn timeline_source_utterance_speaks_toolbar_for_gain_and_fade() {
+fn timeline_source_utterance_commits_gain_and_fade_here() {
     let mut session = overlap_session();
-    let source = session
-        .loci()
-        .unwrap()
-        .into_iter()
-        .find(|locus| locus.kind == LocusKind::Source)
-        .unwrap();
-    let source_id = source.id.clone();
-    session.point_at(source_id.clone());
+    point_source_via_video(&mut session);
     session.touch_projection(Projection::Timeline);
+    let source_id = session.current_locus().unwrap().unwrap().id;
     let utterance = session.utterance();
-    assert!(utterance.routed.iter().any(|verb| verb == "trim"));
-    assert!(!utterance.routed.iter().any(|verb| verb == "set-gain"));
-    assert!(!utterance.routed.iter().any(|verb| verb == "set-fade"));
-    for verb in ["set-gain", "set-fade"] {
+    for verb in ["trim", "set-gain", "set-fade"] {
+        assert!(
+            utterance.routed.iter().any(|item| item == verb),
+            "{verb} {:?}",
+            utterance.routed
+        );
         assert!(
             utterance
                 .spoken
                 .iter()
-                .any(|clause| clause.verb == verb && clause.status == "routed"),
+                .any(|clause| clause.verb == verb && clause.status == "present"),
             "{verb} {}",
             utterance.spoken_text()
         );
     }
     assert!(
-        utterance.spoken_text().contains("committed on Toolbar"),
-        "{}",
-        utterance.spoken_text()
-    );
-    assert!(
-        !utterance.spoken_text().contains("committed on Timeline"),
+        !utterance.spoken_text().contains("committed on Toolbar"),
         "{}",
         utterance.spoken_text()
     );
@@ -540,4 +515,490 @@ fn pick_rejects_locus_not_in_unresolved_candidates() {
         "a refused pick must leave pointing unresolved"
     );
     assert!(session.current_locus().unwrap().is_none());
+}
+
+fn clip_on(session: &StudioSession, track: &str) -> lattice_studio::TimelineClipView {
+    session
+        .layout()
+        .unwrap()
+        .timeline
+        .tracks
+        .iter()
+        .find(|row| row.name == track)
+        .expect(track)
+        .clips
+        .first()
+        .cloned()
+        .expect(track)
+}
+
+fn point_source_via_video(session: &mut StudioSession) {
+    let clip = clip_on(session, "Video");
+    let x = session.x_at_time(clip.start) + session.viewport().delta_x(clip.duration) / 2.0;
+    session.begin_timeline_pointer_on(x, true, "Video").unwrap();
+    session.commit_timeline_pointer(x).unwrap();
+    assert_eq!(
+        session.current_locus().unwrap().unwrap().kind,
+        LocusKind::Source
+    );
+}
+
+fn point_scene_via_band(session: &mut StudioSession) {
+    let clip = clip_on(session, "Scene");
+    let x = session.x_at_time(clip.start) + session.viewport().delta_x(clip.duration) / 2.0;
+    session.begin_timeline_pointer_on(x, true, "Scene").unwrap();
+    session.commit_timeline_pointer(x).unwrap();
+    assert_eq!(
+        session.current_locus().unwrap().unwrap().kind,
+        LocusKind::Scene
+    );
+}
+
+#[test]
+fn source_here_commits_gain_on_audio_line_and_fade_on_video_wedge() {
+    let mut session = overlap_session();
+    let original = session.source().to_string();
+    point_source_via_video(&mut session);
+    let layout = session.layout().unwrap();
+    let audio = layout
+        .timeline
+        .tracks
+        .iter()
+        .find(|track| track.name == "Audio")
+        .unwrap()
+        .clips
+        .first()
+        .cloned()
+        .expect("audio block");
+    assert!(audio.gain_handle, "gain line is drawn on the audio block");
+    let video = layout
+        .timeline
+        .tracks
+        .iter()
+        .find(|track| track.name == "Video")
+        .unwrap()
+        .clips
+        .first()
+        .cloned()
+        .expect("video block");
+    assert!(video.fade_handle, "fade wedge is drawn on the video block");
+    assert!(video.handles, "trim stays on clip edges");
+
+    let x = session.x_at_time(audio.start) + session.viewport().delta_x(audio.duration) / 2.0;
+    let line_y = lattice_studio::gain_line_top(audio.gain_db.unwrap_or(0)) + 2.0;
+    session
+        .begin_timeline_pointer_on_xy(x, line_y, true, "Audio")
+        .unwrap();
+    assert!(
+        matches!(
+            session.gesture(),
+            lattice_studio::TimelineGesture::Gain { .. }
+        ),
+        "{:?}",
+        session.gesture()
+    );
+    session.update_timeline_pointer_xy(x, 2.0, true).unwrap();
+    session.commit_timeline_pointer_xy(x, 2.0).unwrap();
+    assert_ne!(session.source(), original);
+    assert!(session.source().contains("gain"), "{}", session.source());
+    assert!(!session.source().contains("by --"));
+
+    let before_body = session.source().to_string();
+    session
+        .begin_timeline_pointer_on_xy(x, 20.0, true, "Audio")
+        .unwrap();
+    assert!(
+        !matches!(
+            session.gesture(),
+            lattice_studio::TimelineGesture::Gain { .. }
+        ),
+        "audio-block body is not a hidden gain surface: {:?}",
+        session.gesture()
+    );
+    session.update_timeline_pointer_xy(x, 2.0, true).unwrap();
+    session.commit_timeline_pointer_xy(x, 2.0).unwrap();
+    assert_eq!(
+        session.source(),
+        before_body,
+        "audio-block body must not commit SetGain"
+    );
+
+    let before_fade = session.source().to_string();
+    let fade_x = session.x_at_time(video.start) + 14.0;
+    session
+        .begin_timeline_pointer_on_xy(fade_x, 3.0, true, "Video")
+        .unwrap();
+    assert!(
+        matches!(
+            session.gesture(),
+            lattice_studio::TimelineGesture::Fade { .. }
+        ),
+        "{:?}",
+        session.gesture()
+    );
+    session
+        .update_timeline_pointer_xy(fade_x + 40.0, 3.0, true)
+        .unwrap();
+    session
+        .commit_timeline_pointer_xy(fade_x + 40.0, 3.0)
+        .unwrap();
+    assert_ne!(session.source(), before_fade);
+    assert!(session.source().contains("fade"), "{}", session.source());
+}
+
+#[test]
+fn scene_here_commits_split_on_cut_lane_and_delete_on_handle() {
+    let mut session = overlap_session();
+    point_scene_via_band(&mut session);
+    let scene = clip_on(&session, "Scene");
+    assert!(scene.cut_lane && scene.delete_handle);
+
+    let mid = session.x_at_time(scene.start) + session.viewport().delta_x(scene.duration) / 2.0;
+    let before = session.source().to_string();
+    session
+        .begin_timeline_pointer_on_xy(mid, 3.0, true, "Scene")
+        .unwrap();
+    assert!(
+        matches!(
+            session.gesture(),
+            lattice_studio::TimelineGesture::Split { .. }
+        ),
+        "{:?}",
+        session.gesture()
+    );
+    session.commit_timeline_pointer_xy(mid, 3.0).unwrap();
+    assert_ne!(session.source(), before);
+    assert!(
+        session.source().matches("scene ").count() >= 2,
+        "{}",
+        session.source()
+    );
+
+    point_scene_via_band(&mut session);
+    let scene = clip_on(&session, "Scene");
+    let right = session.x_at_time(scene.start.checked_add(scene.duration).unwrap()) - 8.0;
+    let before_delete = session.source().to_string();
+    session
+        .begin_timeline_pointer_on_xy(right, 11.0, true, "Scene")
+        .unwrap();
+    assert!(
+        matches!(
+            session.gesture(),
+            lattice_studio::TimelineGesture::Delete { .. }
+        ),
+        "{:?}",
+        session.gesture()
+    );
+    session.commit_timeline_pointer_xy(right, 11.0).unwrap();
+    assert_ne!(session.source(), before_delete);
+}
+
+#[test]
+fn identical_fade_does_not_push_undo() {
+    let dir = unique_dir("fade-undo");
+    lattice_media::generate_av_fixture(dir.join("capture.mp4"), 4).unwrap();
+    let vel = dir.join("main.vel");
+    std::fs::write(
+        &vel,
+        r#"project "demo"
+convention commentary
+media game "capture.mp4"
+sequence main {
+  demo
+}
+scene demo {
+  game[0s..2s] as fight
+  fade fight {
+    at 0s for 0.5s
+  }
+}
+"#,
+    )
+    .unwrap();
+    let mut session = StudioSession::open(&vel).expect("open");
+    point_source_via_video(&mut session);
+    let undo_before = session.undo_len();
+    session
+        .set_fade(Time::milliseconds(500))
+        .expect("same fade is a no-op, not an error");
+    assert_eq!(
+        session.undo_len(),
+        undo_before,
+        "empty fade must not push Undo"
+    );
+    assert!(session.source().contains("for 0.5s"));
+}
+
+#[test]
+fn selected_overlay_does_not_expose_hidden_video_trim() {
+    let mut session = overlap_session();
+    let title = session
+        .loci()
+        .unwrap()
+        .into_iter()
+        .find(|locus| locus.kind == LocusKind::Title)
+        .expect("title");
+    let title_clip = session
+        .layout()
+        .unwrap()
+        .timeline
+        .tracks
+        .iter()
+        .find(|track| track.name == "Text")
+        .unwrap()
+        .clips
+        .iter()
+        .find(|clip| clip.kind == "title")
+        .cloned()
+        .expect("title clip");
+    let video = clip_on(&session, "Video");
+    assert!(!video.handles, "unselected video draws no trim handles");
+    let title_x = session.x_at_time(title_clip.start + Time::milliseconds(200));
+    session
+        .begin_timeline_pointer_on(title_x, true, "Text")
+        .unwrap();
+    session.commit_timeline_pointer(title_x).unwrap();
+    assert_eq!(
+        session.current_locus().unwrap().unwrap().id,
+        title.id,
+        "point the overlay through the Text track"
+    );
+    let video_left = session.x_at_time(video.start) + 1.0;
+    session
+        .begin_timeline_pointer_on(video_left, true, "Video")
+        .unwrap();
+    assert!(
+        !matches!(
+            session.gesture(),
+            lattice_studio::TimelineGesture::Trim { .. }
+        ),
+        "unselected video edge is not a hidden trim: {:?}",
+        session.gesture()
+    );
+    session.cancel_timeline_pointer();
+    let title_right = session.x_at_time(title_clip.start + title_clip.duration) - 1.0;
+    session
+        .begin_timeline_pointer_on(title_right, true, "Text")
+        .unwrap();
+    assert!(
+        matches!(
+            session.gesture(),
+            lattice_studio::TimelineGesture::ResizeOverlay { .. }
+        ),
+        "selected overlay still trims from its drawn edge: {:?}",
+        session.gesture()
+    );
+}
+
+#[test]
+fn toolbar_routes_nothing() {
+    assert!(lattice_studio::routed_verbs(Projection::Toolbar, LocusKind::Source).is_empty());
+    assert!(lattice_studio::routed_verbs(Projection::Toolbar, LocusKind::Scene).is_empty());
+    assert!(lattice_studio::routed_verbs(Projection::Toolbar, LocusKind::Title).is_empty());
+}
+
+#[test]
+fn inspector_property_fields_bind_exact_source_locus_id() {
+    let mut session = overlap_session();
+    session.point_at_title().unwrap();
+    let title_layout = session.layout().unwrap();
+    assert!(title_layout.inspector.title_fields);
+    assert!(title_layout.inspector.gain_db.is_none());
+    assert!(title_layout.inspector.fade_in.is_none());
+
+    point_source_via_video(&mut session);
+    let source_id = session.current_locus().unwrap().unwrap().id;
+    let layout = session.layout().unwrap();
+    assert_eq!(
+        layout.inspector.locus_id.as_deref(),
+        Some(source_id.as_str())
+    );
+    assert!(!layout.inspector.title_fields);
+    assert_eq!(layout.inspector.gain_db, Some(0));
+    assert_eq!(layout.inspector.fade_in, Some(Time::ZERO));
+}
+
+fn two_source_session() -> StudioSession {
+    let dir = unique_dir("two-source");
+    lattice_media::generate_av_fixture(dir.join("capture.mp4"), 8).unwrap();
+    let vel = dir.join("main.vel");
+    std::fs::write(
+        &vel,
+        r#"project "demo"
+convention commentary
+media game "capture.mp4"
+sequence main {
+  demo
+}
+scene demo {
+  game[0s..3s] as fight
+  game[3s..6s] as later
+  fade later {
+    at 0s for 0.5s
+  }
+  gain fight by -3
+  gain later by -6
+}
+"#,
+    )
+    .unwrap();
+    StudioSession::open(&vel).expect("open")
+}
+
+fn source_named(session: &StudioSession, name: &str) -> lattice_engine::Locus {
+    session
+        .loci()
+        .unwrap()
+        .into_iter()
+        .find(|locus| {
+            locus.kind == LocusKind::Source
+                && (locus.label == name
+                    || locus.node_id == name
+                    || locus.id.as_str() == name
+                    || locus.id.as_str().ends_with(&format!(":{name}")))
+        })
+        .unwrap_or_else(|| panic!("source {name}"))
+}
+
+#[test]
+fn inspector_property_fields_follow_exact_source_locus_not_kind() {
+    let mut session = two_source_session();
+    let fight = source_named(&session, "fight");
+    let later = source_named(&session, "later");
+    assert_ne!(fight.id, later.id, "two source bindings must stay distinct");
+
+    session.point_at(fight.id.clone());
+    let fight_layout = session.layout().unwrap();
+    assert_eq!(
+        fight_layout.inspector.locus_id.as_deref(),
+        Some(fight.id.as_str())
+    );
+    assert_eq!(fight_layout.inspector.gain_db, Some(-3));
+    assert_eq!(fight_layout.inspector.fade_in, Some(Time::ZERO));
+
+    session.point_at(later.id.clone());
+    let later_layout = session.layout().unwrap();
+    assert_eq!(
+        later_layout.inspector.locus_id.as_deref(),
+        Some(later.id.as_str())
+    );
+    assert_eq!(later_layout.inspector.gain_db, Some(-6));
+    assert_eq!(
+        later_layout.inspector.fade_in,
+        Some(Time::from_decimal_seconds(0, 5, 1).unwrap())
+    );
+    assert_ne!(
+        fight_layout.inspector.gain_db, later_layout.inspector.gain_db,
+        "fields must follow the pointed LocusId, not LocusKind::Source"
+    );
+}
+
+#[test]
+fn inspector_apply_gain_records_invoked_this_session() {
+    let mut session = overlap_session();
+    point_source_via_video(&mut session);
+    let source_id = session.current_locus().unwrap().unwrap().id;
+    let original = session.source().to_string();
+    session.apply_inspector_gain(-6).unwrap();
+    let after = session.source().to_string();
+    assert_ne!(after, original);
+    assert!(!after.contains("by --"));
+    let invoked = session.invoked_this_session();
+    assert_eq!(invoked.len(), 1);
+    assert_eq!(invoked[0].verb, "set-gain");
+    assert_eq!(invoked[0].target, source_id.as_str());
+    assert_eq!(invoked[0].scope, "source-binding");
+    session
+        .apply_inspector_fade(Time::from_decimal_seconds(0, 5, 1).unwrap())
+        .unwrap();
+    let invoked = session.invoked_this_session();
+    assert_eq!(invoked.len(), 2);
+    assert_eq!(invoked[1].verb, "set-fade");
+    assert_eq!(invoked[1].target, source_id.as_str());
+    session.undo().unwrap();
+    assert_eq!(session.invoked_this_session().len(), 1);
+    session.redo().unwrap();
+    assert_eq!(session.invoked_this_session().len(), 2);
+}
+
+#[test]
+fn invoked_record_stays_lockstep_when_vel_edit_interleaves_undo() {
+    let mut session = overlap_session();
+    point_source_via_video(&mut session);
+    session.apply_inspector_gain(-6).unwrap();
+    let after_gain = session.source().to_string();
+    assert!(after_gain.contains("gain"), "{after_gain}");
+    assert_eq!(session.invoked_this_session().len(), 1);
+    assert_eq!(session.invoked_this_session()[0].verb, "set-gain");
+
+    let mut vel = after_gain.clone();
+    vel.push_str("\n// interleaved working-source edit\n");
+    session.set_working_source(vel).unwrap();
+    assert_eq!(session.undo_len(), 2);
+    assert_eq!(session.invoked_this_session().len(), 1);
+
+    session.undo().unwrap();
+    assert_eq!(session.source(), after_gain);
+    assert_eq!(session.invoked_this_session().len(), 1);
+    assert_eq!(session.invoked_this_session()[0].verb, "set-gain");
+
+    session.redo().unwrap();
+    assert_ne!(session.source(), after_gain);
+    assert_eq!(session.invoked_this_session().len(), 1);
+    assert_eq!(session.invoked_this_session()[0].verb, "set-gain");
+
+    session.undo().unwrap();
+    assert_eq!(
+        session.source(),
+        after_gain,
+        "second undo of the VEL edit must restore the gain source"
+    );
+    let invoked = session.invoked_this_session();
+    assert_eq!(
+        invoked.len(),
+        1,
+        "None VEL slot must stay on the redo stack so the gain record is not popped"
+    );
+    assert_eq!(invoked[0].verb, "set-gain");
+}
+
+#[test]
+fn utterance_eye_seeks_without_retarget_or_edit() {
+    let mut session = overlap_session();
+    point_source_via_video(&mut session);
+    let here = session.current_locus().unwrap().unwrap().id;
+    let original = session.source().to_string();
+    session.seek(Time::seconds(5));
+    let eye = session
+        .utterance()
+        .spoken
+        .iter()
+        .find_map(|clause| clause.eye_target.clone())
+        .expect("relation names a navigate target");
+    assert!(session.seek_eye(&eye).unwrap());
+    assert_eq!(session.current_locus().unwrap().unwrap().id, here);
+    assert_eq!(session.source(), original);
+    assert_ne!(session.playhead(), Time::seconds(5));
+}
+
+#[test]
+fn source_utterance_does_not_borrow_structurally_absent_for_layout() {
+    let mut session = overlap_session();
+    point_source_via_video(&mut session);
+    session.touch_projection(Projection::Canvas);
+    let utterance = session.utterance();
+    for clause in &utterance.spoken {
+        if clause.status == "layout-unrouted" {
+            assert_eq!(clause.reason.as_deref(), Some("no-drawn-target"));
+            assert!(
+                !clause.text.contains("structurally-absent"),
+                "{}",
+                clause.text
+            );
+        }
+        assert!(
+            utterance.legal.is_empty() || clause.status != "structurally-absent",
+            "legal source must not reuse Engine absence for routing: {clause:?}"
+        );
+    }
 }

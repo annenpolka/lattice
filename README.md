@@ -111,7 +111,7 @@ Studio currently provides:
 - One locus across VEL, Canvas, Timeline, Inspector, Review, and copied agent context. The VEL pane is a real editor: line clicks project source offsets into the shared locus, Go to definition focuses/selects/scrolls to the Core span, and valid edits recompile immediately without letting invalid drafts corrupt the compiled session or Undo history.
 - In-memory video frames at the probed source frame rate, with one active job plus one latest pending request and stale-result rejection.
 - Windows AudioPlan monitoring from the same PCM mix as export. Video waits until required PCM/device state is ready, and audio errors block A/V play instead of becoming silence.
-- Play, Pause, Seek, Scrub, timeline zoom/scroll/snap, clip trim/reorder, Set In/Out, Split, Delete, gain, and fade edits.
+- Play, Pause, Seek, Scrub, timeline zoom/scroll/snap, clip trim, scene reorder, and on-target gain / fade / split / delete handles. The session strip keeps non-verb controls only.
 - Direct title/callout movement and four-corner uniform resize. Pointer movement is ephemeral; mouse-up writes normalized `position`/`scale` through one semantic source patch and one Undo entry, while Escape cancels.
 - Review Apply/Reject, direct Inspector Apply, Save, Undo/Redo, Resolve, CPU/DX12 switching, and MP4 export. The Studio export is written beside the VEL as `studio-preview.mp4`.
 
