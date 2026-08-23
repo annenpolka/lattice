@@ -484,19 +484,10 @@ fn apply_position(
     if let Some(span) = position_arg_span(inv) {
         return Ok(apply_splices(source, vec![(span, replacement)]));
     }
-    let body = inv
-        .body
-        .as_ref()
-        .ok_or_else(|| EngineError::Edit(format!("{word} has no body to attach position")))?;
-    let insert_at = Span::new(
-        body.span.end.saturating_sub(1),
-        body.span.end.saturating_sub(1),
-        body.span.line,
-        body.span.column,
-    );
-    Ok(apply_splices(
+    Ok(attach_overlay_body_lines(
         source,
-        vec![(insert_at, format!("    position {replacement}\n  "))],
+        inv,
+        &format!("    position {replacement}\n"),
     ))
 }
 
@@ -507,7 +498,7 @@ fn apply_resize_overlay(
     position: NormalizedPosition,
     scale: NormalizedScale,
 ) -> Result<String, EngineError> {
-    let (word, inv) = visual_invocation(document, locus)?;
+    let (_word, inv) = visual_invocation(document, locus)?;
     let mut splices = Vec::new();
     let mut insert = String::new();
     let position = format_position(position);
@@ -527,20 +518,36 @@ fn apply_resize_overlay(
         insert.push('\n');
     }
     if !insert.is_empty() {
-        let body = inv
-            .body
-            .as_ref()
-            .ok_or_else(|| EngineError::Edit(format!("{word} has no body to attach resize")))?;
+        return Ok(attach_overlay_body_lines_with(
+            source, inv, splices, &insert,
+        ));
+    }
+    Ok(apply_splices(source, splices))
+}
+
+fn attach_overlay_body_lines(source: &str, inv: &Invocation, lines: &str) -> String {
+    attach_overlay_body_lines_with(source, inv, Vec::new(), lines)
+}
+
+fn attach_overlay_body_lines_with(
+    source: &str,
+    inv: &Invocation,
+    mut splices: Vec<(Span, String)>,
+    lines: &str,
+) -> String {
+    if let Some(body) = &inv.body {
         let insert_at = Span::new(
             body.span.end.saturating_sub(1),
             body.span.end.saturating_sub(1),
             body.span.line,
             body.span.column,
         );
-        insert.push_str("  ");
-        splices.push((insert_at, insert));
+        splices.push((insert_at, format!("{lines}  ")));
+    } else {
+        let insert_at = Span::new(inv.span.end, inv.span.end, inv.span.line, inv.span.column);
+        splices.push((insert_at, format!(" {{\n{lines}  }}")));
     }
-    Ok(apply_splices(source, splices))
+    apply_splices(source, splices)
 }
 
 fn visual_invocation<'a>(

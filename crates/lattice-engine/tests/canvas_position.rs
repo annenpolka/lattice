@@ -234,3 +234,130 @@ scene intro {{
     assert!(!yellow(scaled_frame.pixel(200, y).unwrap()));
     let _ = std::fs::remove_dir_all(root);
 }
+
+const BODYLESS: &str = r#"project "bodyless-position"
+media game "capture.mp4"
+sequence main { intro }
+scene intro {
+  game[0s..4s] as clip
+  title "Hi"
+  callout "Look"
+}
+"#;
+
+#[test]
+fn bodyless_title_and_callout_set_position_writes_body() {
+    let engine = Engine::default();
+    let compilation = engine
+        .compile_origin(BODYLESS, Some("main.vel".into()))
+        .unwrap();
+    for kind in [LocusKind::Title, LocusKind::Callout] {
+        let locus = engine
+            .loci(&compilation)
+            .unwrap()
+            .into_iter()
+            .find(|locus| locus.kind == kind)
+            .expect("overlay locus");
+        let wanted = NormalizedPosition::new(2_500, 1_000).unwrap();
+        let proposal = engine
+            .propose(
+                &compilation,
+                &locus,
+                SemanticEdit::SetPosition { position: wanted },
+            )
+            .unwrap();
+        assert!(
+            proposal.new_source.contains("{\n    position (25%, 10%)"),
+            "{kind:?}: {}",
+            proposal.new_source
+        );
+        let next = engine
+            .compile_origin(&proposal.new_source, Some("main.vel".into()))
+            .unwrap();
+        assert!(!next.has_errors(), "{kind:?}: {:?}", next.diagnostics);
+        let rebound = engine
+            .loci(&next)
+            .unwrap()
+            .into_iter()
+            .find(|next_locus| next_locus.kind == kind)
+            .unwrap();
+        assert_eq!(
+            rebound.visual.as_ref().and_then(|visual| visual.position),
+            Some(wanted)
+        );
+        let timeline = Engine::timeline(&next.project).unwrap();
+        let clip_pos = match kind {
+            LocusKind::Title => timeline.title_clips().next().unwrap().position,
+            LocusKind::Callout => timeline.callout_clips().next().unwrap().position,
+            _ => None,
+        };
+        assert_eq!(clip_pos, Some(wanted));
+    }
+}
+
+#[test]
+fn bodyless_title_resize_writes_position_and_scale_body() {
+    let engine = Engine::default();
+    let compilation = engine.compile(BODYLESS).unwrap();
+    let title = engine
+        .loci(&compilation)
+        .unwrap()
+        .into_iter()
+        .find(|locus| locus.kind == LocusKind::Title)
+        .unwrap();
+    let position = NormalizedPosition::new(1_250, 2_500).unwrap();
+    let scale = NormalizedScale::new(750).unwrap();
+    let proposal = engine
+        .propose(
+            &compilation,
+            &title,
+            SemanticEdit::ResizeOverlay { position, scale },
+        )
+        .unwrap();
+    assert!(proposal.new_source.contains("position (12.5%, 25%)"));
+    assert!(proposal.new_source.contains("scale 75%"));
+    assert!(proposal.new_source.contains("title \"Hi\" {"));
+    let next = engine.compile(&proposal.new_source).unwrap();
+    let visual = engine
+        .loci(&next)
+        .unwrap()
+        .into_iter()
+        .find(|locus| locus.kind == LocusKind::Title)
+        .unwrap()
+        .visual
+        .unwrap();
+    assert_eq!(visual.position, Some(position));
+    assert_eq!(visual.scale, Some(scale));
+}
+
+#[test]
+fn freeze_oneliner_is_unchanged_by_bodyless_position_rewrite() {
+    let source = r#"project "freeze-keep"
+media game "capture.mp4"
+sequence main { intro }
+scene intro {
+  game[0s..4s] as clip
+  freeze clip at 1s for 1s
+  title "Hi"
+}
+"#;
+    let engine = Engine::default();
+    let compilation = engine.compile(source).unwrap();
+    let title = engine
+        .loci(&compilation)
+        .unwrap()
+        .into_iter()
+        .find(|locus| locus.kind == LocusKind::Title)
+        .unwrap();
+    let proposal = engine
+        .propose(
+            &compilation,
+            &title,
+            SemanticEdit::SetPosition {
+                position: NormalizedPosition::new(0, 0).unwrap(),
+            },
+        )
+        .unwrap();
+    assert!(proposal.new_source.contains("freeze clip at 1s for 1s"));
+    assert!(!proposal.new_source.contains("freeze clip at 1s for 1s {"));
+}
