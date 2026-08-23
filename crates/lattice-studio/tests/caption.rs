@@ -57,6 +57,10 @@ scene demo {
         "Title inspector keys on LocusKind::Title"
     );
     assert!(
+        !layout.inspector.callout_fields,
+        "caption must not open callout body fields"
+    );
+    assert!(
         layout.inspector.heading.starts_with("placement "),
         "heading: {}",
         layout.inspector.heading

@@ -57,6 +57,8 @@ pub enum SemanticEdit {
     },
     Callout {
         #[serde(skip_serializing_if = "Option::is_none")]
+        text: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
         at: Option<Time>,
         #[serde(skip_serializing_if = "Option::is_none")]
         duration: Option<Time>,
@@ -102,7 +104,9 @@ impl SemanticEdit {
                 out_point,
             } => in_point.is_none() && out_point.is_none(),
             Self::SetFade { fade_in } => fade_in.is_none(),
-            Self::Callout { at, duration } => at.is_none() && duration.is_none(),
+            Self::Callout { text, at, duration } => {
+                text.is_none() && at.is_none() && duration.is_none()
+            }
             Self::Split { .. }
             | Self::Delete
             | Self::SetGain { .. }
@@ -167,8 +171,11 @@ impl SemanticEdit {
                 Some(name) => format!("reorder scene before {name}"),
                 None => "reorder scene to end".into(),
             },
-            Self::Callout { at, duration } => {
+            Self::Callout { text, at, duration } => {
                 let mut parts = Vec::new();
+                if let Some(text) = text {
+                    parts.push(format!("text {text:?}"));
+                }
                 if let Some(at) = at {
                     parts.push(format!("at {at}"));
                 }
@@ -201,5 +208,27 @@ mod tests {
     fn revision_changes_when_source_changes() {
         assert_ne!(source_revision("a"), source_revision("b"));
         assert_eq!(source_revision("same"), source_revision("same"));
+    }
+
+    #[test]
+    fn callout_text_is_a_body_field() {
+        let empty = SemanticEdit::Callout {
+            text: None,
+            at: None,
+            duration: None,
+        };
+        assert!(empty.is_empty());
+        assert_eq!(empty.describe(), "no callout change");
+        let edit = SemanticEdit::Callout {
+            text: Some("Hold".into()),
+            at: None,
+            duration: None,
+        };
+        assert!(!edit.is_empty());
+        assert_eq!(edit.describe(), "set callout text \"Hold\"");
+        let json = serde_json::to_value(&edit).unwrap();
+        assert_eq!(json["kind"], "callout");
+        assert_eq!(json["text"], "Hold");
+        assert!(json.get("at").is_none());
     }
 }

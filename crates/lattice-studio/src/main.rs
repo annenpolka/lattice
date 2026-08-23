@@ -1111,7 +1111,12 @@ impl StudioView {
 
     fn adopt_locus_label(&mut self) {
         match self.session.current_locus() {
-            Ok(Some(locus)) if locus.kind == lattice_engine::LocusKind::Title => {
+            Ok(Some(locus))
+                if matches!(
+                    locus.kind,
+                    lattice_engine::LocusKind::Title | lattice_engine::LocusKind::Callout
+                ) =>
+            {
                 self.title_draft = locus.label;
                 let end = self.title_draft.encode_utf16().count();
                 self.title_selection_utf16 = end..end;
@@ -3547,15 +3552,25 @@ impl StudioView {
                     .child("Go to definition"),
             );
         }
-        if inspector.title_fields {
+        if inspector.title_fields || inspector.callout_fields {
             let input_view = cx.entity();
             let input_focus = self.title_focus.clone();
+            let label = if inspector.title_fields {
+                "Title text"
+            } else {
+                "Callout text"
+            };
+            let selector = if inspector.title_fields {
+                "inspector.title"
+            } else {
+                "inspector.callout"
+            };
             body = body
-                .child(div().mt_2().text_color(rgb(MUTED)).child("Title text"))
+                .child(div().mt_2().text_color(rgb(MUTED)).child(label))
                 .child(
                     div()
                         .id("title-draft")
-                        .debug_selector(|| "inspector.title".into())
+                        .debug_selector(move || selector.into())
                         .relative()
                         .track_focus(&self.title_focus)
                         .px_2()
@@ -3592,7 +3607,11 @@ impl StudioView {
                             .size_full(),
                         )
                         .child(if self.title_draft.is_empty() {
-                            "(type to edit title)".to_string()
+                            if inspector.title_fields {
+                                "(type to edit title)".to_string()
+                            } else {
+                                "(type to edit callout)".to_string()
+                            }
                         } else {
                             self.title_draft.clone()
                         }),
@@ -3604,7 +3623,7 @@ impl StudioView {
                         .mt_2()
                         .child(action_button("Apply edit", TEAL, cx, move |this, cx| {
                             let text = this.title_draft.clone();
-                            if this.session.apply_title_text(&text).is_ok() {
+                            if this.session.apply_overlay_text(&text).is_ok() {
                                 this.adopt_locus_label();
                                 this.after_edit();
                             } else if let Some(spoken) = this.session.last_spoken() {
@@ -3614,7 +3633,7 @@ impl StudioView {
                         }))
                         .child(action_button("Review", LINE, cx, move |this, cx| {
                             let text = this.title_draft.clone();
-                            let _ = this.session.propose_title_text(text);
+                            let _ = this.session.propose_overlay_text(text);
                             cx.notify();
                         })),
                 );

@@ -130,3 +130,36 @@ fn json_apply_rejects_stale_proposal() {
     assert!(after.contains("Later"));
     assert!(!after.contains("World"));
 }
+
+#[test]
+fn json_propose_callout_text_rewrites_via_semantic_edit() {
+    let original = std::fs::read_to_string(sample_vel()).unwrap();
+    let dir = std::env::temp_dir().join("lattice-cli-callout-body");
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let vel = dir.join("main.vel");
+    std::fs::write(&vel, &original).unwrap();
+    let vel_s = vel.to_str().unwrap();
+
+    let propose = run_ok(&["--json", "propose", vel_s, "--callout-text", "Release"]);
+    assert!(propose.contains("Release"), "{propose}");
+    assert!(
+        propose.contains("\"kind\": \"callout\"") || propose.contains("\"kind\":\"callout\""),
+        "{propose}"
+    );
+    assert_eq!(std::fs::read_to_string(&vel).unwrap(), original);
+
+    let proposal_path = dir.join("proposal.json");
+    std::fs::write(&proposal_path, &propose).unwrap();
+    let apply = run_ok(&[
+        "--json",
+        "apply",
+        vel_s,
+        "--proposal",
+        proposal_path.to_str().unwrap(),
+    ]);
+    assert!(apply.contains("\"applied\": true") || apply.contains("\"applied\":true"));
+    let after = std::fs::read_to_string(&vel).unwrap();
+    assert!(after.contains("callout \"Release\""));
+    assert!(!after.contains("callout \"Hold\""));
+}

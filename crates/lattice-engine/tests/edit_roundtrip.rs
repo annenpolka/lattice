@@ -1,7 +1,28 @@
 //! Propose → inspect → Apply / Reject against the shipped VEL, via Engine.
 
-use lattice_core::{SemanticEdit, Time, source_revision};
+use lattice_core::{Canvas, RenderNode, SemanticEdit, Time, evaluate_at, source_revision};
 use lattice_engine::{Engine, write_source_atomic, write_source_atomic_no_commit};
+
+fn overlay_texts(scene: &lattice_core::RenderScene) -> Vec<String> {
+    fn walk(nodes: &[RenderNode], out: &mut Vec<String>) {
+        for node in nodes {
+            match node {
+                RenderNode::Text(text) => out.push(text.text.clone()),
+                RenderNode::Group(group) => walk(&group.children, out),
+                RenderNode::Mask(mask) => {
+                    walk(std::slice::from_ref(mask.content.as_ref()), out);
+                }
+                RenderNode::Effect(effect) => {
+                    walk(std::slice::from_ref(effect.child.as_ref()), out);
+                }
+                _ => {}
+            }
+        }
+    }
+    let mut out = Vec::new();
+    walk(&scene.nodes, &mut out);
+    out
+}
 
 const VEL: &str = include_str!("../../../examples/gameplay-commentary/main.vel");
 
@@ -469,5 +490,113 @@ fn set_gain_on_existing_negative_does_not_double_the_sign() {
     assert!(
         timeline.audio_clips().any(|clip| clip.gain_db == Some(-6)),
         "must evaluate to −6, not +6"
+    );
+}
+
+#[test]
+fn title_and_callout_body_rewrites_match_evaluate() {
+    let vel = r#"project "overlay-body"
+convention commentary
+media game "capture.mp4"
+sequence main {
+  demo
+}
+scene demo {
+  game[0s..6s] as clip
+  title "Hello" {
+    at 0s for 2s
+  }
+  callout "Hold" {
+    at 2s for 2s
+  }
+}
+"#;
+    let engine = Engine::default();
+    let compilation = engine.compile(vel).unwrap();
+    assert!(!compilation.has_errors(), "{:?}", compilation.diagnostics);
+    let title = engine
+        .loci(&compilation)
+        .unwrap()
+        .into_iter()
+        .find(|locus| locus.kind == lattice_core::LocusKind::Title)
+        .expect("title");
+    let titled = engine
+        .propose(
+            &compilation,
+            &title,
+            SemanticEdit::Title {
+                text: Some("World".into()),
+                at: None,
+                duration: None,
+                opacity: None,
+            },
+        )
+        .unwrap();
+    let compilation = engine
+        .compile(&engine.apply_proposal(vel, &titled).unwrap())
+        .unwrap();
+    let callout = engine
+        .loci(&compilation)
+        .unwrap()
+        .into_iter()
+        .find(|locus| locus.kind == lattice_core::LocusKind::Callout)
+        .expect("callout");
+    let called = engine
+        .propose(
+            &compilation,
+            &callout,
+            SemanticEdit::Callout {
+                text: Some("Release".into()),
+                at: None,
+                duration: None,
+            },
+        )
+        .unwrap();
+    assert!(
+        called.description.contains("Release"),
+        "{}",
+        called.description
+    );
+    let applied = engine.apply_proposal(&compilation.source, &called).unwrap();
+    assert!(applied.contains("title \"World\""));
+    assert!(applied.contains("callout \"Release\""));
+    assert!(!applied.contains("title \"Hello\""));
+    assert!(!applied.contains("callout \"Hold\""));
+
+    let compiled = engine.compile(&applied).unwrap();
+    assert!(!compiled.has_errors(), "{:?}", compiled.diagnostics);
+    let timeline = Engine::timeline(&compiled.project).unwrap();
+    assert_eq!(
+        timeline
+            .title_clips()
+            .next()
+            .and_then(|clip| clip.text.clone()),
+        Some("World".into())
+    );
+    assert_eq!(
+        timeline
+            .callout_clips()
+            .next()
+            .and_then(|clip| clip.text.clone()),
+        Some("Release".into())
+    );
+    let at_title = evaluate_at(&timeline, Time::seconds(1), Canvas::PREVIEW).unwrap();
+    let at_callout = evaluate_at(&timeline, Time::seconds(3), Canvas::PREVIEW).unwrap();
+    assert!(
+        overlay_texts(&at_title).iter().any(|text| text == "World"),
+        "preview/export evaluate title: {:?}",
+        overlay_texts(&at_title)
+    );
+    assert!(
+        overlay_texts(&at_callout)
+            .iter()
+            .any(|text| text == "Release"),
+        "preview/export evaluate callout: {:?}",
+        overlay_texts(&at_callout)
+    );
+    assert!(
+        !overlay_texts(&at_callout).iter().any(|text| text == "Hold"),
+        "stale callout body must not remain: {:?}",
+        overlay_texts(&at_callout)
     );
 }

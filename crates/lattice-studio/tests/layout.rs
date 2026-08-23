@@ -2,8 +2,30 @@
 
 use std::path::PathBuf;
 
+use lattice_core::{Canvas, RenderNode, Time, evaluate_at};
 use lattice_engine::{Engine, LocusKind, Origin, SemanticEdit, plan_from_timeline};
 use lattice_studio::StudioSession;
+
+fn overlay_texts(scene: &lattice_core::RenderScene) -> Vec<String> {
+    fn walk(nodes: &[RenderNode], out: &mut Vec<String>) {
+        for node in nodes {
+            match node {
+                RenderNode::Text(text) => out.push(text.text.clone()),
+                RenderNode::Group(group) => walk(&group.children, out),
+                RenderNode::Mask(mask) => {
+                    walk(std::slice::from_ref(mask.content.as_ref()), out);
+                }
+                RenderNode::Effect(effect) => {
+                    walk(std::slice::from_ref(effect.child.as_ref()), out);
+                }
+                _ => {}
+            }
+        }
+    }
+    let mut out = Vec::new();
+    walk(&scene.nodes, &mut out);
+    out
+}
 
 fn demo_vel() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -413,6 +435,69 @@ fn apply_title_text_rewrites_vel_and_render_preview_writes_mp4() {
         preview.is_file(),
         "Engine render must write {}",
         preview.display()
+    );
+}
+
+#[test]
+fn apply_title_and_callout_text_rewrites_vel_and_evaluate() {
+    let vel = temp_copy();
+    let mut session = StudioSession::open(&vel).unwrap();
+    let original = session.source().to_string();
+
+    session.point_at_title().unwrap();
+    let layout = session.layout().unwrap();
+    assert!(layout.inspector.title_fields);
+    assert!(!layout.inspector.callout_fields);
+    session.apply_title_text("World").expect("apply title");
+    assert!(session.source().contains("title \"World\""));
+
+    let callout = session
+        .loci()
+        .unwrap()
+        .into_iter()
+        .find(|locus| locus.kind == LocusKind::Callout)
+        .expect("callout");
+    session.point_at(callout.id);
+    let layout = session.layout().unwrap();
+    assert!(!layout.inspector.title_fields, "callout is not Title");
+    assert!(layout.inspector.callout_fields);
+    session
+        .apply_callout_text("Release")
+        .expect("apply callout");
+    assert_ne!(session.source(), original);
+    assert!(session.source().contains("callout \"Release\""));
+    assert!(!session.source().contains("callout \"Hold\""));
+
+    let engine = Engine::default();
+    let compilation = engine.compile(session.source()).unwrap();
+    let timeline = Engine::timeline(&compilation.project).unwrap();
+    assert_eq!(
+        timeline
+            .title_clips()
+            .next()
+            .and_then(|clip| clip.text.clone()),
+        Some("World".into())
+    );
+    assert_eq!(
+        timeline
+            .callout_clips()
+            .next()
+            .and_then(|clip| clip.text.clone()),
+        Some("Release".into())
+    );
+    let at_title = evaluate_at(&timeline, Time::seconds(3), Canvas::PREVIEW).unwrap();
+    let at_callout = evaluate_at(&timeline, Time::seconds(6), Canvas::PREVIEW).unwrap();
+    assert!(
+        overlay_texts(&at_title).iter().any(|text| text == "World"),
+        "{:?}",
+        overlay_texts(&at_title)
+    );
+    assert!(
+        overlay_texts(&at_callout)
+            .iter()
+            .any(|text| text == "Release"),
+        "{:?}",
+        overlay_texts(&at_callout)
     );
 }
 

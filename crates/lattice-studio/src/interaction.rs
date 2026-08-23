@@ -1124,7 +1124,11 @@ fn commit_overlay(
         return Ok(GestureOutcome::Failed);
     }
     let edit = match kind {
-        ClipKind::Callout => SemanticEdit::Callout { at, duration },
+        ClipKind::Callout => SemanticEdit::Callout {
+            text: None,
+            at,
+            duration,
+        },
         _ => SemanticEdit::Title {
             text: None,
             at,
