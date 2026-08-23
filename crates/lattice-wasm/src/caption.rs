@@ -2,7 +2,7 @@
 //! overlay-body modifiers. After merge each appears exactly once.
 //!
 //! Body-less cues keep `at`/`for` inline (`caption "…" at 1s for 2s`). This
-//! crate does not pretty-print VEL; CHI-86 owns SemanticEdit parity.
+//! crate does not pretty-print VEL; CHI-86 owns `SemanticEdit` parity.
 
 use lattice_core::{Diagnostic, Time};
 

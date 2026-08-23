@@ -3,5 +3,5 @@
 # then copy target wasm32-wasip2/release/lattice_stdlib_guest.wasm to stdlib/lattice-stdlib.wasm
 # and update these FNV-1a hashes.
 wasm=186bfbd7d609534b
-guest=cd945a6ae9e791f5
+guest=ef024ac50bfdc6af
 wit=5867aa150e0f806a
