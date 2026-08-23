@@ -10,7 +10,7 @@ fn compile_overlay(word: &str, body: &str) -> lattice_engine::Compilation {
     let source = format!(
         r#"project "overlay-style"
 media game "capture.mp4"
-sequence main { intro }
+sequence main {{ intro }}
 scene intro {{
   game[0s..4s] as clip
   {word} "Hello" {{
