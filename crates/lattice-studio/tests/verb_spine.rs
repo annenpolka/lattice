@@ -922,6 +922,47 @@ fn inspector_apply_gain_records_invoked_this_session() {
 }
 
 #[test]
+fn invoked_record_stays_lockstep_when_vel_edit_interleaves_undo() {
+    let mut session = overlap_session();
+    point_source_via_video(&mut session);
+    session.apply_inspector_gain(-6).unwrap();
+    let after_gain = session.source().to_string();
+    assert!(after_gain.contains("gain"), "{after_gain}");
+    assert_eq!(session.invoked_this_session().len(), 1);
+    assert_eq!(session.invoked_this_session()[0].verb, "set-gain");
+
+    let mut vel = after_gain.clone();
+    vel.push_str("\n// interleaved working-source edit\n");
+    session.set_working_source(vel).unwrap();
+    assert_eq!(session.undo_len(), 2);
+    assert_eq!(session.invoked_this_session().len(), 1);
+
+    session.undo().unwrap();
+    assert_eq!(session.source(), after_gain);
+    assert_eq!(session.invoked_this_session().len(), 1);
+    assert_eq!(session.invoked_this_session()[0].verb, "set-gain");
+
+    session.redo().unwrap();
+    assert_ne!(session.source(), after_gain);
+    assert_eq!(session.invoked_this_session().len(), 1);
+    assert_eq!(session.invoked_this_session()[0].verb, "set-gain");
+
+    session.undo().unwrap();
+    assert_eq!(
+        session.source(),
+        after_gain,
+        "second undo of the VEL edit must restore the gain source"
+    );
+    let invoked = session.invoked_this_session();
+    assert_eq!(
+        invoked.len(),
+        1,
+        "None VEL slot must stay on the redo stack so the gain record is not popped"
+    );
+    assert_eq!(invoked[0].verb, "set-gain");
+}
+
+#[test]
 fn utterance_eye_seeks_without_retarget_or_edit() {
     let mut session = overlap_session();
     point_source_via_video(&mut session);

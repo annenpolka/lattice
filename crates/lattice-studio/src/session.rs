@@ -50,6 +50,18 @@ pub struct StudioSession {
     pub(crate) last_spoken: Option<String>,
 }
 
+/// Move one history slot, including a `None` VEL-text placeholder.
+///
+/// `Vec::pop` is `Option<slot>`. The slot itself is `Option<InvokedRecord>`.
+/// Matching the inner `Some` would drop the placeholder and desynchronize
+/// Invoked-this-session from Undo.
+fn transfer_invoked_slot(
+    from: &mut Vec<Option<InvokedRecord>>,
+    to: &mut Vec<Option<InvokedRecord>>,
+) {
+    to.extend(from.pop());
+}
+
 impl StudioSession {
     pub fn open(path: impl AsRef<Path>) -> Result<Self, EngineError> {
         let path = path.as_ref().to_path_buf();
@@ -709,9 +721,7 @@ impl StudioSession {
             return Ok(());
         };
         self.redo_stack.push(self.compilation.source.clone());
-        if let Some(row) = self.invoked.pop() {
-            self.invoked_redo.push(row);
-        }
+        transfer_invoked_slot(&mut self.invoked, &mut self.invoked_redo);
         self.replace_working(&previous)
     }
 
@@ -720,9 +730,7 @@ impl StudioSession {
             return Ok(());
         };
         self.undo_stack.push(self.compilation.source.clone());
-        if let Some(row) = self.invoked_redo.pop() {
-            self.invoked.push(row);
-        }
+        transfer_invoked_slot(&mut self.invoked_redo, &mut self.invoked);
         self.replace_working(&next)
     }
 
