@@ -6,15 +6,17 @@
 use std::fmt::Write as _;
 
 use lattice_core::{
-    Diagnostic, NormalizedPosition, NormalizedScale, OverlayBar, OverlaySize, OverlayStyle, Rgba,
+    Diagnostic, NormalizedPosition, NormalizedScale, OverlayAlign, OverlayBar, OverlaySize,
+    OverlayStyle, Rgba,
 };
 
 use crate::view::{BodyItem, InvocationView, SceneDraft, ValueView};
 
 /// Overlay body invocations that already have a lowering, plus `at`/`for`.
-/// `align` / `anchor` are not implemented yet (CHI-90 / CHI-91).
+/// CHI-90 added `align`. `anchor` remains CHI-91 (unknown).
 const OVERLAY_BODY_ALLOWLIST: &[&str] = &[
     "opacity", "position", "scale", "at", "for", "color", "size", "weight", "family", "bar",
+    "align",
 ];
 /// Generic parser modifiers that are already consumed as timing. Others
 /// (`over` / `using` / `by` / `from` / `to`) must not silent-drop.
@@ -28,6 +30,7 @@ pub const INVALID_SIZE: &str = "LAT-OVL-005";
 pub const INVALID_WEIGHT: &str = "LAT-OVL-006";
 pub const INVALID_FAMILY: &str = "LAT-OVL-007";
 pub const INVALID_BAR: &str = "LAT-OVL-008";
+pub const INVALID_ALIGN: &str = "LAT-OVL-009";
 
 /// Title vs callout convention used only for size explain (height/16 vs /20).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -98,6 +101,14 @@ pub fn overlay_explain_notes(
             let _ = write!(notes, " bar {}", color.to_hex_rrggbb());
         }
         None => {}
+    }
+    if let Some(align) = style.align {
+        let word = match align {
+            OverlayAlign::Left => "left",
+            OverlayAlign::Center => "center",
+            OverlayAlign::Right => "right",
+        };
+        let _ = write!(notes, " align {word}");
     }
     notes
 }
@@ -185,6 +196,7 @@ fn body_style(inv: &InvocationView, draft: &mut SceneDraft) -> OverlayStyle {
         weight: body_weight(inv, draft),
         family: body_family(inv, draft),
         bar: body_bar(inv, draft),
+        align: body_align(inv, draft),
     }
 }
 
@@ -261,6 +273,22 @@ fn body_bar(inv: &InvocationView, draft: &mut SceneDraft) -> Option<OverlayBar> 
             None => draft.diagnostics.push(Diagnostic::error(
                 INVALID_BAR,
                 "invalid overlay `bar`; expected `off` or a quoted `#RRGGBB`",
+                Some(inner.span),
+            )),
+        }
+    }
+    found
+}
+
+fn body_align(inv: &InvocationView, draft: &mut SceneDraft) -> Option<OverlayAlign> {
+    let mut found = None;
+    for inner in body_invocations(inv, "align") {
+        match inner.args.first().and_then(parse_overlay_align) {
+            Some(align) if found.is_none() => found = Some(align),
+            Some(_) => {}
+            None => draft.diagnostics.push(Diagnostic::error(
+                INVALID_ALIGN,
+                "invalid overlay `align`; expected `left`, `center`, or `right`",
                 Some(inner.span),
             )),
         }
@@ -348,6 +376,15 @@ fn parse_overlay_bar(value: &ValueView) -> Option<OverlayBar> {
         ValueView::String(text) => {
             Rgba::from_hex_rrggbb(text).map(|color| OverlayBar::Fill { color })
         }
+        _ => None,
+    }
+}
+
+fn parse_overlay_align(value: &ValueView) -> Option<OverlayAlign> {
+    match value.as_name()? {
+        "left" => Some(OverlayAlign::Left),
+        "center" => Some(OverlayAlign::Center),
+        "right" => Some(OverlayAlign::Right),
         _ => None,
     }
 }
@@ -508,7 +545,7 @@ mod tests {
     #[test]
     fn unknown_body_word_does_not_vanish() {
         let inv = overlay_with_body(vec![
-            body_command("align", vec![ValueView::Name("center".into())]),
+            body_command("foo", vec![ValueView::Name("center".into())]),
             body_command("anchor", vec![ValueView::Name("top".into())]),
         ]);
         let mut draft = draft();
@@ -520,7 +557,7 @@ mod tests {
             .map(|diag| diag.message.as_str())
             .collect();
         assert!(
-            words.iter().any(|message| message.contains("`align`")),
+            words.iter().any(|message| message.contains("`foo`")),
             "{words:?}"
         );
         assert!(
@@ -594,6 +631,7 @@ mod tests {
             body_command("weight", vec![name("bold")]),
             body_command("family", vec![quoted("LatticeSans")]),
             body_command("bar", vec![name("off")]),
+            body_command("align", vec![name("center")]),
         ]);
         let mut draft = draft();
         let parsed = parse_overlay_body(&inv, &mut draft);
@@ -603,6 +641,7 @@ mod tests {
         assert_eq!(parsed.style.weight, Some(700));
         assert_eq!(parsed.style.family.as_deref(), Some("LatticeSans"));
         assert_eq!(parsed.style.bar, Some(OverlayBar::Off));
+        assert_eq!(parsed.style.align, Some(OverlayAlign::Center));
         let notes = overlay_explain_notes(
             parsed.position,
             parsed.scale,
@@ -618,6 +657,7 @@ mod tests {
         assert!(notes.contains("weight 700"), "{notes}");
         assert!(notes.contains("family \"LatticeSans\""), "{notes}");
         assert!(notes.contains("bar off"), "{notes}");
+        assert!(notes.contains("align center"), "{notes}");
     }
 
     #[test]
@@ -663,6 +703,9 @@ mod tests {
             ("family", INVALID_FAMILY, quoted("")),
             ("bar", INVALID_BAR, name("on")),
             ("bar", INVALID_BAR, quoted("yellow")),
+            ("align", INVALID_ALIGN, name("middle")),
+            ("align", INVALID_ALIGN, quoted("center")),
+            ("align", INVALID_ALIGN, unitless(1)),
         ];
         for (command, code, arg) in cases {
             let inv = overlay_with_body(vec![body_command(command, vec![arg.clone()])]);
@@ -685,15 +728,41 @@ mod tests {
     }
 
     #[test]
-    fn align_stays_unknown() {
+    fn align_is_a_known_body_word() {
         let inv = overlay_with_body(vec![body_command("align", vec![name("center")])]);
+        let mut draft = draft();
+        let parsed = parse_overlay_body(&inv, &mut draft);
+        assert!(draft.diagnostics.is_empty(), "{:?}", draft.diagnostics);
+        assert_eq!(parsed.style.align, Some(OverlayAlign::Center));
+    }
+
+    #[test]
+    fn invalid_align_diags_and_stays_none() {
+        let inv = overlay_with_body(vec![body_command("align", vec![name("justify")])]);
+        let mut draft = draft();
+        let parsed = parse_overlay_body(&inv, &mut draft);
+        assert!(
+            draft
+                .diagnostics
+                .iter()
+                .any(|diag| { diag.code == INVALID_ALIGN && diag.message.contains("align") }),
+            "{:?}",
+            draft.diagnostics
+        );
+        assert_eq!(parsed.style.align, None);
+        assert!(parsed.style.is_empty());
+    }
+
+    #[test]
+    fn unknown_anchor_still_003() {
+        let inv = overlay_with_body(vec![body_command("anchor", vec![name("top")])]);
         let mut draft = draft();
         parse_overlay_body(&inv, &mut draft);
         assert!(
             draft
                 .diagnostics
                 .iter()
-                .any(|diag| diag.code == UNKNOWN_BODY_WORD && diag.message.contains("`align`")),
+                .any(|diag| diag.code == UNKNOWN_BODY_WORD && diag.message.contains("`anchor`")),
             "{:?}",
             draft.diagnostics
         );
