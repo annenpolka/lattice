@@ -2,8 +2,25 @@ use serde::{Deserialize, Serialize};
 
 use crate::scene::Rgba;
 
-/// Explicit overlay typeface / color / bar. Absent fields fall through
+/// In-box text alignment for overlay `TextNode`s (CHI-90).
+///
+/// This is **not** a Visual.position move: evaluate leaves the overlay
+/// group transform alone and raster aligns inside `TextNode.bounds`.
+/// Omitted body word => `None` here; evaluate defaults to [`OverlayAlign::Left`].
+#[derive(Clone, Copy, Debug, Default, Hash, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum OverlayAlign {
+    #[default]
+    Left,
+    Center,
+    Right,
+}
+
+/// Explicit overlay typeface / color / bar / align. Absent fields fall through
 /// explicit > preset > convention > default at evaluate.
+///
+/// `align` is a CHI-90 body word — not part of the CHI-87 color/size/weight/
+/// family/bar list.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct OverlayStyle {
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -16,6 +33,8 @@ pub struct OverlayStyle {
     pub family: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub bar: Option<OverlayBar>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub align: Option<OverlayAlign>,
 }
 
 impl OverlayStyle {
@@ -26,6 +45,7 @@ impl OverlayStyle {
             && self.weight.is_none()
             && self.family.is_none()
             && self.bar.is_none()
+            && self.align.is_none()
     }
 
     #[must_use]

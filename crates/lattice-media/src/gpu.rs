@@ -1254,8 +1254,8 @@ mod tests {
     #[cfg(windows)]
     use lattice_core::ImageNode;
     use lattice_core::{
-        AssetRef, EffectNode, FontSpec, MaskNode, MediaLocator, NodeProps, ShapeKind, ShapeNode,
-        TimeMap, VideoNode,
+        AssetRef, EffectNode, FontSpec, MaskNode, MediaLocator, NodeProps, OverlayAlign, ShapeKind,
+        ShapeNode, TimeMap, VideoNode,
     };
 
     struct GradientDecoder {
@@ -1382,6 +1382,7 @@ mod tests {
             font: FontSpec::preview_sans(18),
             resolved_font: Some(font.identity.clone()),
             color: Rgba::WHITE,
+            align: OverlayAlign::Left,
         })
     }
 

@@ -4,7 +4,7 @@
 use crate::NormalizedScale;
 use crate::ir::{PlacementKind, TimeSpan};
 use crate::locator::MediaLocator;
-use crate::overlay::{OverlayBar, OverlaySize, OverlayStyle};
+use crate::overlay::{OverlayAlign, OverlayBar, OverlaySize, OverlayStyle};
 use crate::property::{Curve, Easing, Keyframe, Property};
 use crate::scene::{
     AnimatedStyle, AssetRef, AudioClip, AudioPlan, BlendMode, Canvas, FontIdentity, FontSpec,
@@ -87,9 +87,14 @@ pub fn evaluate(
     Ok(RenderScene { canvas, nodes })
 }
 
-/// Shared title/callout extent. It intentionally leaves horizontal travel so
-/// a normalized x position is visible; Studio selection chrome uses this same
-/// Engine-exported geometry.
+/// Shared title/callout extent used by evaluate and Studio selection chrome.
+///
+/// The current `3/4` canvas width is **implementation shaping**, not a frozen
+/// product API. CHI-90 `align` must work inside whatever `Rect` evaluate
+/// assigns to `TextNode.bounds` — do not encode 75% as a product spec.
+///
+/// It intentionally leaves horizontal travel so a normalized x position is
+/// visible; Studio selection chrome uses this same Engine-exported geometry.
 #[must_use]
 pub fn text_overlay_size(canvas: Canvas) -> (u32, u32) {
     let width = canvas
@@ -363,6 +368,7 @@ fn overlay_group(
             font: overlay_font_spec(style, canvas, callout),
             resolved_font: font.cloned(),
             color: overlay_text_color(style),
+            align: style.and_then(|s| s.align).unwrap_or(OverlayAlign::Left),
         }));
     }
     RenderNode::Group(GroupNode {
@@ -856,6 +862,7 @@ mod tests {
             weight: Some(700),
             family: Some("LatticeSans".into()),
             bar: Some(OverlayBar::Off),
+            align: None,
         });
         let scene = evaluate_at(&tl, Time::seconds(3), Canvas::PREVIEW).unwrap();
         let text = overlay_text(&scene).expect("styled title");

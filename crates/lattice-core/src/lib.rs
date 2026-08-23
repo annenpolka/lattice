@@ -34,7 +34,7 @@ pub use locus::{
     CoreProjection, Locus, LocusId, LocusKind, LocusProjection, SourceProjection,
     TimelineProjection, VisualProjection,
 };
-pub use overlay::{OverlayBar, OverlaySize, OverlayStyle};
+pub use overlay::{OverlayAlign, OverlayBar, OverlaySize, OverlayStyle};
 pub use property::{Curve, Easing, Interpolate, Keyframe, Property};
 pub use provenance::{Origin, Provenance};
 pub use resolve::{AssetIdentity, LockedAsset, ResolveLock, ResolvedAsset};

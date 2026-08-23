@@ -493,8 +493,8 @@ mod tests {
     use std::path::Path;
 
     use lattice_core::{
-        AssetRef, BlendMode, Canvas, MediaLocator, NodeProps, RenderScene, ShapeKind, TextNode,
-        Time, TimeMap,
+        AssetRef, BlendMode, Canvas, MediaLocator, NodeProps, OverlayAlign, RenderScene, ShapeKind,
+        TextNode, Time, TimeMap,
     };
 
     struct SolidDecoder {
@@ -631,6 +631,7 @@ mod tests {
                 font: lattice_core::FontSpec::preview_sans(18),
                 resolved_font: Some(identity),
                 color: Rgba::WHITE,
+                align: OverlayAlign::Left,
             })],
         };
         let frame = cpu.render(&scene, &mut decoder).unwrap();
@@ -678,6 +679,7 @@ mod tests {
                 font: lattice_core::FontSpec::preview_sans(18),
                 resolved_font: Some(identity),
                 color: Rgba::WHITE,
+                align: OverlayAlign::Left,
             })],
         };
         let frame = cpu
@@ -804,6 +806,7 @@ mod tests {
                 font: lattice_core::FontSpec::preview_sans(18),
                 resolved_font: font,
                 color: Rgba::WHITE,
+                align: OverlayAlign::Left,
             })],
         }
     }

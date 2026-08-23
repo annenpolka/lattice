@@ -9,10 +9,11 @@
 use std::collections::HashMap;
 
 use cosmic_text::{
-    Attrs, Buffer, Color, Family, FontSystem, Metrics, Shaping, Style, SwashCache, Weight, Wrap,
+    Align, Attrs, Buffer, Color, Family, FontSystem, Metrics, Shaping, Style, SwashCache, Weight,
+    Wrap,
 };
 
-use lattice_core::{FontSpec, Rgba, TextNode};
+use lattice_core::{FontSpec, OverlayAlign, Rgba, TextNode};
 
 use crate::backend::RawFrame;
 use crate::export::ExportError;
@@ -73,6 +74,7 @@ struct TextRasterKey {
     line_height_milli: u32,
     shaping: &'static str,
     wrap: &'static str,
+    align: OverlayAlign,
 }
 
 impl TextRasterKey {
@@ -93,6 +95,7 @@ impl TextRasterKey {
             line_height_milli: LINE_HEIGHT_MILLI,
             shaping: SHAPING_KEY,
             wrap: WRAP_KEY,
+            align: node.align,
         }
     }
 
@@ -115,7 +118,24 @@ impl TextRasterKey {
         stable_field(&mut hash, &self.line_height_milli.to_le_bytes());
         stable_field(&mut hash, self.shaping.as_bytes());
         stable_field(&mut hash, self.wrap.as_bytes());
+        stable_field(&mut hash, &[align_key(self.align)]);
         hash
+    }
+}
+
+fn align_key(align: OverlayAlign) -> u8 {
+    match align {
+        OverlayAlign::Left => 0,
+        OverlayAlign::Center => 1,
+        OverlayAlign::Right => 2,
+    }
+}
+
+fn cosmic_align(align: OverlayAlign) -> Align {
+    match align {
+        OverlayAlign::Left => Align::Left,
+        OverlayAlign::Center => Align::Center,
+        OverlayAlign::Right => Align::Right,
     }
 }
 
@@ -178,6 +198,11 @@ impl TextRasterizer {
         buffer.set_wrap(&mut self.font_system, Wrap::WordOrGlyph);
         let attrs = attrs_for(&node.font);
         buffer.set_text(&mut self.font_system, &node.text, &attrs, Shaping::Advanced);
+        // cosmic-text 0.14: Align lives on BufferLine, not Buffer.
+        let align = cosmic_align(node.align);
+        for line in &mut buffer.lines {
+            line.set_align(Some(align));
+        }
         buffer.shape_until_scroll(&mut self.font_system, false);
         if let Some(missing) = missing_glyph_excerpt(&buffer, &node.text) {
             return Err(ExportError::MissingGlyph(missing));
@@ -408,7 +433,9 @@ fn src_over(frame: &mut RawFrame, x: u32, y: u32, src: [u8; 4]) {
 mod tests {
     use std::path::Path;
 
-    use lattice_core::{BlendMode, FontSpec, NodeProps, Rect, Rgba, TextNode, Transform};
+    use lattice_core::{
+        BlendMode, FontSpec, NodeProps, OverlayAlign, Rect, Rgba, TextNode, Transform,
+    };
 
     use super::*;
     use crate::font::{fixture_font_path, resolve_font};
@@ -437,6 +464,7 @@ mod tests {
             font: FontSpec::preview_sans(18),
             resolved_font: None,
             color: Rgba::WHITE,
+            align: OverlayAlign::Left,
         }
     }
 
@@ -554,5 +582,33 @@ mod tests {
         assert_eq!(cache.stats().evictions, 1);
         cache.get_or_rasterize(&second).unwrap();
         assert_eq!(cache.stats().hits, 1);
+    }
+
+    #[test]
+    fn in_box_center_ink_is_right_of_left() {
+        let font = fixture_font();
+        let mut raster = TextRasterizer::new(&font);
+        let mut left = node("Hello", 240, 40);
+        left.align = OverlayAlign::Left;
+        let mut center = left.clone();
+        center.align = OverlayAlign::Center;
+        let left_frame = raster.rasterize_layer(&left).expect("left");
+        let center_frame = raster.rasterize_layer(&center).expect("center");
+        let first_ink = |frame: &RawFrame| {
+            for x in 0..frame.width {
+                for y in 0..frame.height {
+                    if let Some(px) = frame.pixel(x, y)
+                        && (px[0] > 20 || px[1] > 20 || px[2] > 20)
+                    {
+                        return x;
+                    }
+                }
+            }
+            panic!("no ink");
+        };
+        assert!(
+            first_ink(&center_frame) > first_ink(&left_frame),
+            "center first ink must sit to the right of left inside the same bounds"
+        );
     }
 }
