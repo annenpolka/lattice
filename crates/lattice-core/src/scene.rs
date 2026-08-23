@@ -3,6 +3,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::locator::MediaLocator;
+use crate::overlay::OverlayAlign;
 use crate::property::{Interpolate, Property};
 use crate::resolve::AssetIdentity;
 use crate::time::Time;
@@ -266,6 +267,14 @@ pub struct TextNode {
     pub font: FontSpec,
     pub resolved_font: Option<FontIdentity>,
     pub color: Rgba,
+    /// In-box alignment (CHI-90). Default left when omitted at evaluate.
+    /// Aligns inside `bounds` via cosmic-text; does not move Visual.position.
+    #[serde(default = "overlay_align_left")]
+    pub align: OverlayAlign,
+}
+
+fn overlay_align_left() -> OverlayAlign {
+    OverlayAlign::Left
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
