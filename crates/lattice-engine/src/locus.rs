@@ -92,6 +92,14 @@ pub fn loci_from_project(
         for placement in &scene.placements {
             let clip = timeline.clips.iter().find(|clip| clip.id == placement.id);
             let kind = match placement.kind {
+                PlacementKind::Title
+                    if matches!(
+                        placement.provenance.origin,
+                        lattice_core::Origin::Invocation { ref command } if command == "caption"
+                    ) =>
+                {
+                    LocusKind::Placement
+                }
                 PlacementKind::Title => LocusKind::Title,
                 PlacementKind::Callout => LocusKind::Callout,
                 PlacementKind::Audio

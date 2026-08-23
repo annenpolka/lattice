@@ -5,6 +5,7 @@
 //! later without changing Core IR.
 
 mod builtins;
+mod caption;
 mod host;
 mod overlay_body;
 mod registry;

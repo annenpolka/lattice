@@ -1,4 +1,4 @@
-//! Overlay-body lowering for `title` / `callout`.
+//! Overlay-body lowering for `title` / `callout` / `caption`.
 //!
 //! Shared by in-process builtins and the Wasm host so invalid `position` /
 //! `scale` / style and unknown body words produce the same diagnostics.
@@ -33,11 +33,13 @@ pub const INVALID_BAR: &str = "LAT-OVL-008";
 pub const INVALID_ALIGN: &str = "LAT-OVL-009";
 pub const INVALID_ANCHOR: &str = "LAT-OVL-010";
 
-/// Title vs callout convention used only for size explain (height/16 vs /20).
+/// Title vs callout vs caption convention used for size explain and caption bar.
+/// Caption evaluates on the existing title overlay (`height/16`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum OverlayConvention {
     Title,
     Callout,
+    Caption,
 }
 
 impl OverlayConvention {
@@ -45,6 +47,7 @@ impl OverlayConvention {
         match self {
             Self::Title => "title height/16",
             Self::Callout => "callout height/20",
+            Self::Caption => "caption height/16",
         }
     }
 }
@@ -60,11 +63,23 @@ pub struct OverlayBody {
 
 /// Shared by builtins and the Wasm host. Invalid style values diag; they do not silent-drop.
 pub fn parse_overlay_body(inv: &InvocationView, draft: &mut SceneDraft) -> OverlayBody {
+    parse_overlay_body_for(inv, draft, OverlayConvention::Title)
+}
+
+/// Caption defaults `bar` to [`OverlayBar::Off`] when the body omits it.
+pub fn parse_overlay_body_for(
+    inv: &InvocationView,
+    draft: &mut SceneDraft,
+    convention: OverlayConvention,
+) -> OverlayBody {
     let position = body_position(inv, draft);
     let scale = body_scale(inv, draft);
     let anchor = body_anchor(inv, draft);
-    let style = body_style(inv, draft);
+    let mut style = body_style(inv, draft);
     diagnose_unknown_overlay_body(inv, draft);
+    if convention == OverlayConvention::Caption && style.bar.is_none() {
+        style.bar = Some(OverlayBar::Off);
+    }
     OverlayBody {
         position,
         scale,
@@ -831,6 +846,32 @@ mod tests {
             );
             assert_eq!(parsed.anchor, None);
         }
+    }
+
+    #[test]
+    fn caption_omitted_bar_defaults_off() {
+        let inv = overlay_with_body(Vec::new());
+        let mut draft = draft();
+        let parsed = parse_overlay_body_for(&inv, &mut draft, OverlayConvention::Caption);
+        assert!(draft.diagnostics.is_empty(), "{:?}", draft.diagnostics);
+        assert_eq!(parsed.style.bar, Some(OverlayBar::Off));
+        let notes =
+            overlay_explain_notes(None, None, None, &parsed.style, OverlayConvention::Caption);
+        assert!(notes.contains("bar off"), "{notes}");
+    }
+
+    #[test]
+    fn caption_explicit_bar_overrides_default() {
+        let inv = overlay_with_body(vec![body_command("bar", vec![quoted("#00FF00")])]);
+        let mut draft = draft();
+        let parsed = parse_overlay_body_for(&inv, &mut draft, OverlayConvention::Caption);
+        assert!(draft.diagnostics.is_empty(), "{:?}", draft.diagnostics);
+        assert_eq!(
+            parsed.style.bar,
+            Some(OverlayBar::Fill {
+                color: Rgba::from_hex_rrggbb("#00FF00").unwrap()
+            })
+        );
     }
 
     #[test]
