@@ -3,6 +3,7 @@ use thiserror::Error;
 
 use crate::ir::{PlacementKind, Project, TimeSpan};
 use crate::locator::MediaLocator;
+use crate::overlay::OverlayStyle;
 use crate::time::{Time, TimeError};
 use crate::time_map::TimeMap;
 use crate::{NormalizedPosition, NormalizedScale};
@@ -31,6 +32,8 @@ pub struct TimelineClip {
     pub position: Option<NormalizedPosition>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub scale: Option<NormalizedScale>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub style: Option<OverlayStyle>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub gain_db: Option<i32>,
 }
@@ -92,6 +95,10 @@ pub fn flatten_project(project: &Project) -> Result<Timeline, TimelineError> {
                 fade_out: placement.visual.as_ref().and_then(|visual| visual.fade_out),
                 position: placement.visual.as_ref().and_then(|visual| visual.position),
                 scale: placement.visual.as_ref().and_then(|visual| visual.scale),
+                style: placement
+                    .visual
+                    .as_ref()
+                    .and_then(|visual| visual.style.clone()),
                 gain_db: placement.audio.as_ref().and_then(|audio| audio.gain_db),
             });
         }
