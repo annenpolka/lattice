@@ -4,7 +4,7 @@
 use crate::NormalizedScale;
 use crate::ir::{PlacementKind, TimeSpan};
 use crate::locator::MediaLocator;
-use crate::overlay::{OverlayAlign, OverlayBar, OverlaySize, OverlayStyle};
+use crate::overlay::{OverlayAlign, OverlayAnchor, OverlayBar, OverlaySize, OverlayStyle};
 use crate::property::{Curve, Easing, Keyframe, Property};
 use crate::scene::{
     AnimatedStyle, AssetRef, AudioClip, AudioPlan, BlendMode, Canvas, FontIdentity, FontSpec,
@@ -90,8 +90,8 @@ pub fn evaluate(
 /// Shared title/callout extent used by evaluate and Studio selection chrome.
 ///
 /// The current `3/4` canvas width is **implementation shaping**, not a frozen
-/// product API. CHI-90 `align` must work inside whatever `Rect` evaluate
-/// assigns to `TextNode.bounds` — do not encode 75% as a product spec.
+/// product API. CHI-90 `align` and CHI-91 `anchor` must work inside whatever
+/// box evaluate assigns — do not encode 75% into the anchor API.
 ///
 /// It intentionally leaves horizontal travel so a normalized x position is
 /// visible; Studio selection chrome uses this same Engine-exported geometry.
@@ -406,6 +406,18 @@ fn overlay_transforms(
     } else {
         i32::try_from(canvas.height.saturating_sub(overlay_height)).unwrap_or(0)
     };
+    // `anchor` owns the scale pivot. None / top-left keeps today's math:
+    // pin the scaled box's top-left via pixel_origin and scale about (0, base_y).
+    // Named non-top-left points pin that point: place the *unscaled* box with
+    // the same top-left mapping, then scale about the named pixel so the
+    // attachment does not drift when scale changes. Visual.position is still
+    // a top-left Canvas % — not a center, not px.
+    let attachment = clip.anchor.unwrap_or(OverlayAnchor::TopLeft);
+    let (place_w, place_h) = if attachment.places_scaled_top_left() {
+        (scaled_width, scaled_height)
+    } else {
+        (overlay_width, overlay_height)
+    };
     let target = clip.position.map_or_else(
         || {
             (
@@ -413,17 +425,17 @@ fn overlay_transforms(
                 if callout {
                     0
                 } else {
-                    i32::try_from(canvas.height.saturating_sub(scaled_height)).unwrap_or(0)
+                    i32::try_from(canvas.height.saturating_sub(place_h)).unwrap_or(0)
                 },
             )
         },
-        |position| position.pixel_origin(canvas.width, canvas.height, scaled_width, scaled_height),
+        |position| position.pixel_origin(canvas.width, canvas.height, place_w, place_h),
     );
     transform.translate_x = transform.translate_x.saturating_add(target.0);
     transform.translate_y = transform
         .translate_y
         .saturating_add(target.1.saturating_sub(base_y));
-    let anchor = (0, base_y);
+    let anchor = attachment.scale_pivot(overlay_width, overlay_height, base_y);
     let bar_pivot = (
         i64::from(bar_bounds.x) * 2 + i64::from(bar_bounds.width),
         i64::from(bar_bounds.y) * 2 + i64::from(bar_bounds.height),
@@ -539,6 +551,7 @@ mod tests {
             fade_out: None,
             position: None,
             scale: None,
+            anchor: None,
             style: None,
             gain_db: Some(-3),
         }
@@ -556,6 +569,7 @@ mod tests {
             fade_out: None,
             position: None,
             scale: None,
+            anchor: None,
             style: None,
             gain_db: None,
         }
@@ -699,6 +713,100 @@ mod tests {
         assert_eq!(group.children[0].props().transform.scale_x, 1_333);
     }
 
+    fn overlay_group(scene: &RenderScene) -> &GroupNode {
+        scene
+            .nodes
+            .iter()
+            .find_map(|node| match node {
+                RenderNode::Group(group) => Some(group),
+                _ => None,
+            })
+            .expect("overlay group")
+    }
+
+    fn unscaled_box_center(scene: &RenderScene, canvas: Canvas) -> (i32, i32) {
+        let group = overlay_group(scene);
+        let (ow, oh) = text_overlay_size(canvas);
+        let base_y = i32::try_from(canvas.height.saturating_sub(oh)).unwrap();
+        let tx = group.props.transform.translate_x;
+        let ty = group.props.transform.translate_y;
+        (
+            tx + i32::try_from(ow).unwrap() / 2,
+            base_y + ty + i32::try_from(oh).unwrap() / 2,
+        )
+    }
+
+    fn scaled_box_center(scene: &RenderScene, canvas: Canvas, milli: u16) -> (i32, i32) {
+        let group = overlay_group(scene);
+        let (ow, oh) = text_overlay_size(canvas);
+        let scale = crate::NormalizedScale { milli };
+        let sw = scale.scaled_extent(ow);
+        let sh = scale.scaled_extent(oh);
+        let base_y = i32::try_from(canvas.height.saturating_sub(oh)).unwrap();
+        let tx = group.props.transform.translate_x;
+        let ty = group.props.transform.translate_y;
+        (
+            tx + i32::try_from(sw).unwrap() / 2,
+            base_y + ty + i32::try_from(sh).unwrap() / 2,
+        )
+    }
+
+    #[test]
+    fn overlay_anchor_center_owns_scale_pivot() {
+        let canvas = Canvas::PREVIEW;
+        let mut tl = timeline();
+        tl.clips[1].position = crate::NormalizedPosition::new(2_500, 1_000);
+        tl.clips[1].anchor = Some(OverlayAnchor::Center);
+        tl.clips[1].scale = crate::NormalizedScale::new(1_000);
+        let at_100 = evaluate_at(&tl, Time::seconds(3), canvas).unwrap();
+        tl.clips[1].scale = crate::NormalizedScale::new(1_500);
+        let at_150 = evaluate_at(&tl, Time::seconds(3), canvas).unwrap();
+        let c100 = unscaled_box_center(&at_100, canvas);
+        let c150 = unscaled_box_center(&at_150, canvas);
+        assert!(
+            (c100.0 - c150.0).abs() <= 1 && (c100.1 - c150.1).abs() <= 1,
+            "center must stay under scale: {c100:?} vs {c150:?}"
+        );
+        let child_100 = overlay_group(&at_100).children[0].props().transform;
+        let child_150 = overlay_group(&at_150).children[0].props().transform;
+        assert_eq!(child_100.scale_x, 1_000);
+        assert!(
+            child_150.scale_x > 1_000,
+            "150% must still scale after canvas clamp, got {}",
+            child_150.scale_x
+        );
+    }
+
+    #[test]
+    fn omitted_and_explicit_top_left_match_and_drift() {
+        let canvas = Canvas::PREVIEW;
+        let mut omitted = timeline();
+        omitted.clips[1].position = crate::NormalizedPosition::new(2_500, 1_000);
+        omitted.clips[1].scale = crate::NormalizedScale::new(1_000);
+        let mut explicit = omitted.clone();
+        explicit.clips[1].anchor = Some(OverlayAnchor::TopLeft);
+        let o100 = evaluate_at(&omitted, Time::seconds(3), canvas).unwrap();
+        let e100 = evaluate_at(&explicit, Time::seconds(3), canvas).unwrap();
+        assert_eq!(
+            overlay_group(&o100).props.transform,
+            overlay_group(&e100).props.transform
+        );
+        omitted.clips[1].scale = crate::NormalizedScale::new(1_500);
+        explicit.clips[1].scale = crate::NormalizedScale::new(1_500);
+        let o150 = evaluate_at(&omitted, Time::seconds(3), canvas).unwrap();
+        let e150 = evaluate_at(&explicit, Time::seconds(3), canvas).unwrap();
+        assert_eq!(
+            overlay_group(&o150).props.transform,
+            overlay_group(&e150).props.transform
+        );
+        let c100 = scaled_box_center(&o100, canvas, 1_000);
+        let c150 = scaled_box_center(&o150, canvas, 1_500);
+        assert_ne!(
+            c100, c150,
+            "top-left scale must still drift the visual center"
+        );
+    }
+
     #[test]
     fn empty_outside_clips_still_has_canvas() {
         let tl = Timeline {
@@ -746,6 +854,7 @@ mod tests {
             fade_out: None,
             position: None,
             scale: None,
+            anchor: None,
             style: None,
             gain_db: None,
         });
@@ -768,6 +877,7 @@ mod tests {
             fade_out: None,
             position: None,
             scale: None,
+            anchor: None,
             style: None,
             gain_db: Some(-3),
         });
@@ -832,6 +942,7 @@ mod tests {
             fade_out: None,
             position: None,
             scale: None,
+            anchor: None,
             style: None,
             gain_db: None,
         });

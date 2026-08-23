@@ -67,13 +67,13 @@ fn out_of_range_and_unitless_position_are_lowering_diagnostics() {
 #[test]
 fn unknown_overlay_body_word_does_not_vanish() {
     for word in ["title", "callout"] {
-        let compilation = compile_overlay(word, "anchor top");
+        let compilation = compile_overlay(word, "origin center");
         assert!(
             compilation
                 .diagnostics
                 .iter()
-                .any(|diag| { diag.code == "LAT-OVL-003" && diag.message.contains("`anchor`") }),
-            "{word} anchor top: {:?}",
+                .any(|diag| { diag.code == "LAT-OVL-003" && diag.message.contains("`origin`") }),
+            "{word} origin center: {:?}",
             compilation.diagnostics
         );
         assert!(

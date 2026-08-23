@@ -57,6 +57,7 @@ pub fn lower_title(inv: &InvocationView, draft: &mut SceneDraft) -> Result<(), L
     visual.opacity = opacity;
     visual.position = parsed.position;
     visual.scale = parsed.scale;
+    visual.anchor = parsed.anchor;
     visual.style = parsed.style.clone().into_option();
     draft.placements.push(Placement {
         id,
@@ -71,6 +72,7 @@ pub fn lower_title(inv: &InvocationView, draft: &mut SceneDraft) -> Result<(), L
     let style_notes = overlay_explain_notes(
         parsed.position,
         parsed.scale,
+        parsed.anchor,
         &parsed.style,
         OverlayConvention::Title,
     );
@@ -103,6 +105,7 @@ pub fn lower_callout(inv: &InvocationView, draft: &mut SceneDraft) -> Result<(),
     let mut visual = Visual::text_overlay(text.clone());
     visual.position = parsed.position;
     visual.scale = parsed.scale;
+    visual.anchor = parsed.anchor;
     visual.style = parsed.style.clone().into_option();
     draft.placements.push(Placement {
         id,
@@ -116,6 +119,7 @@ pub fn lower_callout(inv: &InvocationView, draft: &mut SceneDraft) -> Result<(),
     let style_notes = overlay_explain_notes(
         parsed.position,
         parsed.scale,
+        parsed.anchor,
         &parsed.style,
         OverlayConvention::Callout,
     );

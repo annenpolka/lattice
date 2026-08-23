@@ -156,6 +156,7 @@ impl WasmStdlib {
         visual.opacity = fragment.opacity;
         visual.position = parsed.position;
         visual.scale = parsed.scale;
+        visual.anchor = parsed.anchor;
         visual.style = parsed.style.clone().into_option();
         draft.placements.push(Placement {
             id,
@@ -172,6 +173,7 @@ impl WasmStdlib {
         let style_notes = overlay_explain_notes(
             parsed.position,
             parsed.scale,
+            parsed.anchor,
             &parsed.style,
             OverlayConvention::Title,
         );

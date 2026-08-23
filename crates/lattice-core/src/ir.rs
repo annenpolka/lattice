@@ -142,6 +142,9 @@ pub struct Visual {
     /// Uniform aspect-preserving scale (`1000` = `100%`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub scale: Option<NormalizedScale>,
+    /// Scale / placement pivot. `None` is today's top-left. Not `origin`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub anchor: Option<crate::overlay::OverlayAnchor>,
     /// Explicit overlay color / size / weight / family / bar. Omitted style
     /// keeps today's title/callout convention at evaluate.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -193,6 +196,15 @@ mod tests {
         );
         let round: Visual = serde_json::from_str(&json).expect("roundtrip");
         assert_eq!(round.style, None);
+        assert_eq!(round.anchor, None);
+        assert!(
+            !json.contains("anchor"),
+            "omitted overlay anchor must skip: {json}"
+        );
+        assert!(
+            !json.contains("origin"),
+            "Visual must not grow an origin field: {json}"
+        );
     }
 }
 
@@ -248,6 +260,7 @@ impl Visual {
             fade_out: None,
             position: None,
             scale: None,
+            anchor: None,
             style: None,
         }
     }
@@ -261,6 +274,7 @@ impl Visual {
             fade_out: None,
             position: None,
             scale: None,
+            anchor: None,
             style: None,
         }
     }

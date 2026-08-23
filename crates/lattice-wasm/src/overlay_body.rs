@@ -6,17 +6,17 @@
 use std::fmt::Write as _;
 
 use lattice_core::{
-    Diagnostic, NormalizedPosition, NormalizedScale, OverlayAlign, OverlayBar, OverlaySize,
-    OverlayStyle, Rgba,
+    Diagnostic, NormalizedPosition, NormalizedScale, OverlayAlign, OverlayAnchor, OverlayBar,
+    OverlaySize, OverlayStyle, Rgba,
 };
 
 use crate::view::{BodyItem, InvocationView, SceneDraft, ValueView};
 
 /// Overlay body invocations that already have a lowering, plus `at`/`for`.
-/// CHI-90 added `align`. `anchor` remains CHI-91 (unknown).
+/// CHI-91 added `anchor` (placement pivot — not typeface).
 const OVERLAY_BODY_ALLOWLIST: &[&str] = &[
-    "opacity", "position", "scale", "at", "for", "color", "size", "weight", "family", "bar",
-    "align",
+    "opacity", "position", "scale", "anchor", "at", "for", "color", "size", "weight", "family",
+    "bar", "align",
 ];
 /// Generic parser modifiers that are already consumed as timing. Others
 /// (`over` / `using` / `by` / `from` / `to`) must not silent-drop.
@@ -31,6 +31,7 @@ pub const INVALID_WEIGHT: &str = "LAT-OVL-006";
 pub const INVALID_FAMILY: &str = "LAT-OVL-007";
 pub const INVALID_BAR: &str = "LAT-OVL-008";
 pub const INVALID_ALIGN: &str = "LAT-OVL-009";
+pub const INVALID_ANCHOR: &str = "LAT-OVL-010";
 
 /// Title vs callout convention used only for size explain (height/16 vs /20).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -53,6 +54,7 @@ impl OverlayConvention {
 pub struct OverlayBody {
     pub position: Option<NormalizedPosition>,
     pub scale: Option<NormalizedScale>,
+    pub anchor: Option<OverlayAnchor>,
     pub style: OverlayStyle,
 }
 
@@ -60,11 +62,13 @@ pub struct OverlayBody {
 pub fn parse_overlay_body(inv: &InvocationView, draft: &mut SceneDraft) -> OverlayBody {
     let position = body_position(inv, draft);
     let scale = body_scale(inv, draft);
+    let anchor = body_anchor(inv, draft);
     let style = body_style(inv, draft);
     diagnose_unknown_overlay_body(inv, draft);
     OverlayBody {
         position,
         scale,
+        anchor,
         style,
     }
 }
@@ -73,6 +77,7 @@ pub fn parse_overlay_body(inv: &InvocationView, draft: &mut SceneDraft) -> Overl
 pub fn overlay_explain_notes(
     position: Option<NormalizedPosition>,
     scale: Option<NormalizedScale>,
+    anchor: Option<OverlayAnchor>,
     style: &OverlayStyle,
     convention: OverlayConvention,
 ) -> String {
@@ -82,6 +87,9 @@ pub fn overlay_explain_notes(
     }
     if let Some(scale) = scale {
         let _ = write!(notes, " scale {scale}");
+    }
+    if let Some(anchor) = anchor {
+        let _ = write!(notes, " anchor {}", anchor.as_str());
     }
     if let Some(color) = style.color {
         let _ = write!(notes, " color {}", color.to_hex_rrggbb());
@@ -187,6 +195,26 @@ pub fn body_scale(inv: &InvocationView, draft: &mut SceneDraft) -> Option<Normal
         }
     }
     found
+}
+
+fn body_anchor(inv: &InvocationView, draft: &mut SceneDraft) -> Option<OverlayAnchor> {
+    let mut found = None;
+    for inner in body_invocations(inv, "anchor") {
+        match inner.args.first().and_then(parse_overlay_anchor) {
+            Some(anchor) if found.is_none() => found = Some(anchor),
+            Some(_) => {}
+            None => draft.diagnostics.push(Diagnostic::error(
+                INVALID_ANCHOR,
+                "invalid overlay `anchor`; expected `top-left`, `top-right`, `center`, `bottom-left`, or `bottom-right`",
+                Some(inner.span),
+            )),
+        }
+    }
+    found
+}
+
+fn parse_overlay_anchor(value: &ValueView) -> Option<OverlayAnchor> {
+    OverlayAnchor::from_name(value.as_name()?)
 }
 
 fn body_style(inv: &InvocationView, draft: &mut SceneDraft) -> OverlayStyle {
@@ -546,7 +574,7 @@ mod tests {
     fn unknown_body_word_does_not_vanish() {
         let inv = overlay_with_body(vec![
             body_command("foo", vec![ValueView::Name("center".into())]),
-            body_command("anchor", vec![ValueView::Name("top".into())]),
+            body_command("origin", vec![ValueView::Name("center".into())]),
         ]);
         let mut draft = draft();
         parse_overlay_body(&inv, &mut draft);
@@ -561,7 +589,7 @@ mod tests {
             "{words:?}"
         );
         assert!(
-            words.iter().any(|message| message.contains("`anchor`")),
+            words.iter().any(|message| message.contains("`origin`")),
             "{words:?}"
         );
     }
@@ -645,6 +673,7 @@ mod tests {
         let notes = overlay_explain_notes(
             parsed.position,
             parsed.scale,
+            parsed.anchor,
             &parsed.style,
             OverlayConvention::Title,
         );
@@ -678,7 +707,8 @@ mod tests {
                 color: Rgba::from_hex_rrggbb("#FF00FF").unwrap()
             })
         );
-        let notes = overlay_explain_notes(None, None, &parsed.style, OverlayConvention::Callout);
+        let notes =
+            overlay_explain_notes(None, None, None, &parsed.style, OverlayConvention::Callout);
         assert!(
             notes.contains("size 24px") && notes.contains("resolved 24px"),
             "{notes}"
@@ -754,15 +784,66 @@ mod tests {
     }
 
     #[test]
-    fn unknown_anchor_still_003() {
-        let inv = overlay_with_body(vec![body_command("anchor", vec![name("top")])]);
+    fn unknown_origin_still_003() {
+        let inv = overlay_with_body(vec![body_command("origin", vec![name("center")])]);
         let mut draft = draft();
         parse_overlay_body(&inv, &mut draft);
         assert!(
             draft
                 .diagnostics
                 .iter()
-                .any(|diag| diag.code == UNKNOWN_BODY_WORD && diag.message.contains("`anchor`")),
+                .any(|diag| diag.code == UNKNOWN_BODY_WORD && diag.message.contains("`origin`")),
+            "{:?}",
+            draft.diagnostics
+        );
+    }
+
+    #[test]
+    fn valid_anchor_center_does_not_diag() {
+        let inv = overlay_with_body(vec![body_command("anchor", vec![name("center")])]);
+        let mut draft = draft();
+        let parsed = parse_overlay_body(&inv, &mut draft);
+        assert!(draft.diagnostics.is_empty(), "{:?}", draft.diagnostics);
+        assert_eq!(parsed.anchor, Some(OverlayAnchor::Center));
+        let notes = overlay_explain_notes(
+            None,
+            None,
+            parsed.anchor,
+            &parsed.style,
+            OverlayConvention::Title,
+        );
+        assert!(notes.contains("anchor center"), "{notes}");
+    }
+
+    #[test]
+    fn invalid_anchor_is_lat_ovl_010() {
+        for arg in [name("top"), name("origin"), quoted("center"), unitless(1)] {
+            let inv = overlay_with_body(vec![body_command("anchor", vec![arg.clone()])]);
+            let mut draft = draft();
+            let parsed = parse_overlay_body(&inv, &mut draft);
+            assert!(
+                draft
+                    .diagnostics
+                    .iter()
+                    .any(|diag| { diag.code == INVALID_ANCHOR && diag.message.contains("anchor") }),
+                "{arg:?}: {:?}",
+                draft.diagnostics
+            );
+            assert_eq!(parsed.anchor, None);
+        }
+    }
+
+    #[test]
+    fn origin_is_not_an_anchor_alias() {
+        let inv = overlay_with_body(vec![body_command("origin", vec![name("center")])]);
+        let mut draft = draft();
+        let parsed = parse_overlay_body(&inv, &mut draft);
+        assert_eq!(parsed.anchor, None);
+        assert!(
+            draft
+                .diagnostics
+                .iter()
+                .any(|diag| diag.code == UNKNOWN_BODY_WORD),
             "{:?}",
             draft.diagnostics
         );
