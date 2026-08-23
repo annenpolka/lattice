@@ -560,13 +560,37 @@ impl StudioSession {
         &mut self,
         text: impl Into<String>,
     ) -> Result<EditProposal, EngineError> {
-        self.touched_projection = Projection::Inspector;
-        let edit = SemanticEdit::Title {
+        self.propose_overlay_edit(SemanticEdit::Title {
             text: Some(text.into()),
             at: None,
             duration: None,
             opacity: None,
-        };
+        })
+    }
+
+    pub fn propose_callout_text(
+        &mut self,
+        text: impl Into<String>,
+    ) -> Result<EditProposal, EngineError> {
+        self.propose_overlay_edit(SemanticEdit::Callout {
+            text: Some(text.into()),
+            at: None,
+            duration: None,
+        })
+    }
+
+    /// Inspector body rewrite for the current title or callout locus.
+    pub fn propose_overlay_text(
+        &mut self,
+        text: impl Into<String>,
+    ) -> Result<EditProposal, EngineError> {
+        let here = self.current_locus()?;
+        let edit = overlay_body_edit(here.as_ref(), text.into())?;
+        self.propose_overlay_edit(edit)
+    }
+
+    fn propose_overlay_edit(&mut self, edit: SemanticEdit) -> Result<EditProposal, EngineError> {
+        self.touched_projection = Projection::Inspector;
         let locus = self.target_locus_for(&edit)?;
         let proposal = self.engine.propose(&self.compilation, &locus, edit)?;
         self.review = Some(proposal.clone());
@@ -601,6 +625,23 @@ impl StudioSession {
             duration: None,
             opacity: None,
         })
+    }
+
+    pub fn apply_callout_text(&mut self, text: &str) -> Result<(), EngineError> {
+        self.touched_projection = Projection::Inspector;
+        self.apply_edit(SemanticEdit::Callout {
+            text: Some(text.into()),
+            at: None,
+            duration: None,
+        })
+    }
+
+    /// Inspector body rewrite for the current title or callout locus.
+    pub fn apply_overlay_text(&mut self, text: &str) -> Result<(), EngineError> {
+        self.touched_projection = Projection::Inspector;
+        let here = self.current_locus()?;
+        let edit = overlay_body_edit(here.as_ref(), text.to_string())?;
+        self.apply_edit(edit)
     }
 
     pub fn apply_edit(&mut self, edit: SemanticEdit) -> Result<(), EngineError> {
@@ -1501,4 +1542,23 @@ fn source_id_for_clip(session: &StudioSession, clip_id: &str) -> Option<String> 
         }
     }
     None
+}
+
+fn overlay_body_edit(here: Option<&Locus>, text: String) -> Result<SemanticEdit, EngineError> {
+    match here.map(|locus| locus.kind) {
+        Some(LocusKind::Title) => Ok(SemanticEdit::Title {
+            text: Some(text),
+            at: None,
+            duration: None,
+            opacity: None,
+        }),
+        Some(LocusKind::Callout) => Ok(SemanticEdit::Callout {
+            text: Some(text),
+            at: None,
+            duration: None,
+        }),
+        _ => Err(EngineError::Edit(
+            "overlay body needs a title or callout locus".into(),
+        )),
+    }
 }

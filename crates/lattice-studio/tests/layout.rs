@@ -417,6 +417,55 @@ fn apply_title_text_rewrites_vel_and_render_preview_writes_mp4() {
 }
 
 #[test]
+fn apply_title_and_callout_text_rewrites_vel_and_evaluate() {
+    let vel = temp_copy();
+    let mut session = StudioSession::open(&vel).unwrap();
+    let original = session.source().to_string();
+
+    session.point_at_title().unwrap();
+    let layout = session.layout().unwrap();
+    assert!(layout.inspector.title_fields);
+    assert!(!layout.inspector.callout_fields);
+    session.apply_title_text("World").expect("apply title");
+    assert!(session.source().contains("title \"World\""));
+
+    let callout = session
+        .loci()
+        .unwrap()
+        .into_iter()
+        .find(|locus| locus.kind == LocusKind::Callout)
+        .expect("callout");
+    session.point_at(callout.id);
+    let layout = session.layout().unwrap();
+    assert!(!layout.inspector.title_fields, "callout is not Title");
+    assert!(layout.inspector.callout_fields);
+    session
+        .apply_callout_text("Release")
+        .expect("apply callout");
+    assert_ne!(session.source(), original);
+    assert!(session.source().contains("callout \"Release\""));
+    assert!(!session.source().contains("callout \"Hold\""));
+
+    let engine = Engine::default();
+    let compilation = engine.compile(session.source()).unwrap();
+    let timeline = Engine::timeline(&compilation.project).unwrap();
+    assert_eq!(
+        timeline
+            .title_clips()
+            .next()
+            .and_then(|clip| clip.text.clone()),
+        Some("World".into())
+    );
+    assert_eq!(
+        timeline
+            .callout_clips()
+            .next()
+            .and_then(|clip| clip.text.clone()),
+        Some("Release".into())
+    );
+}
+
+#[test]
 #[allow(clippy::too_many_lines)]
 fn window_source_composes_documented_panes() {
     let main = include_str!("../src/main.rs");

@@ -74,7 +74,12 @@ pub fn legal_edits_for(locus: &Locus) -> Vec<LegalEdit> {
             ),
         ],
         LocusKind::Callout => vec![
-            legal("callout", &target, "definition", "rewrite callout time"),
+            legal(
+                "callout",
+                &target,
+                "definition",
+                "rewrite callout text or time",
+            ),
             legal(
                 "set-position",
                 &target,
@@ -206,5 +211,13 @@ mod tests {
         let edits = legal_edits_for(&locus(LocusKind::Title, "title:hello"));
         let verbs: Vec<_> = edits.iter().map(|edit| edit.verb.as_str()).collect();
         assert_eq!(verbs, ["title", "set-position", "resize-overlay"]);
+    }
+
+    #[test]
+    fn callout_legal_set_includes_body_text() {
+        let edits = legal_edits_for(&locus(LocusKind::Callout, "callout:hold"));
+        let verbs: Vec<_> = edits.iter().map(|edit| edit.verb.as_str()).collect();
+        assert_eq!(verbs, ["callout", "set-position", "resize-overlay"]);
+        assert_eq!(edits[0].effect, "rewrite callout text or time");
     }
 }

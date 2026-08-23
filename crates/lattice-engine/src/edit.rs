@@ -73,8 +73,8 @@ fn apply_semantic_edit(
         SemanticEdit::ReorderScene { before } => {
             apply_reorder(source, document, locus, before.as_deref())
         }
-        SemanticEdit::Callout { at, duration } => {
-            apply_callout(source, document, locus, *at, *duration)
+        SemanticEdit::Callout { text, at, duration } => {
+            apply_callout(source, document, locus, text.as_ref(), *at, *duration)
         }
         SemanticEdit::SetPosition { position } => {
             apply_position(source, document, locus, *position)
@@ -447,10 +447,11 @@ fn apply_callout(
     source: &str,
     document: &Document,
     locus: &Locus,
+    text: Option<&String>,
     at: Option<Time>,
     duration: Option<Time>,
 ) -> Result<String, EngineError> {
-    if at.is_none() && duration.is_none() {
+    if text.is_none() && at.is_none() && duration.is_none() {
         return Err(EngineError::Edit("callout edit has no fields".into()));
     }
     if duration.is_some_and(|time| time < Time::ZERO) {
@@ -459,7 +460,7 @@ fn apply_callout(
     let inv = find_invocation(document, locus, "callout").ok_or_else(|| {
         EngineError::Edit("callout locus did not match a callout invocation".into())
     })?;
-    splice_title(source, inv, "callout", None, at, duration, None)
+    splice_title(source, inv, "callout", text, at, duration, None)
 }
 
 fn apply_position(

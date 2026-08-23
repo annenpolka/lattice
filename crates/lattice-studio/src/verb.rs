@@ -131,8 +131,8 @@ impl Utterance {
 /// This is routing, not legality. A missing route is not an absent edit.
 /// Only real commit paths belong here: Timeline trim / gain / fade / overlay
 /// time / scene reorder / split / delete, Canvas geometry, Inspector title
-/// text. Toolbar routes nothing — it draws no target. Do not list a verb the
-/// UI cannot commit on that surface.
+/// and callout body. Toolbar routes nothing — it draws no target. Do not
+/// list a verb the UI cannot commit on that surface.
 #[must_use]
 #[allow(clippy::match_same_arms)]
 pub fn routed_verbs(projection: Projection, kind: LocusKind) -> Vec<&'static str> {
@@ -140,7 +140,7 @@ pub fn routed_verbs(projection: Projection, kind: LocusKind) -> Vec<&'static str
         (Projection::Timeline, LocusKind::Source) => vec!["trim", "set-gain", "set-fade"],
         (Projection::Inspector, LocusKind::Source) => vec!["set-gain", "set-fade"],
         (Projection::Timeline | Projection::Inspector, LocusKind::Title) => vec!["title"],
-        (Projection::Timeline, LocusKind::Callout) => vec!["callout"],
+        (Projection::Timeline | Projection::Inspector, LocusKind::Callout) => vec!["callout"],
         (Projection::Timeline, LocusKind::Scene) => vec!["reorder-scene", "split", "delete"],
         (Projection::Canvas, LocusKind::Title | LocusKind::Callout) => {
             vec!["set-position", "resize-overlay"]
@@ -702,6 +702,10 @@ mod tests {
         assert_eq!(
             routed_verbs(Projection::Inspector, LocusKind::Title),
             ["title"]
+        );
+        assert_eq!(
+            routed_verbs(Projection::Inspector, LocusKind::Callout),
+            ["callout"]
         );
         assert_eq!(
             routed_verbs(Projection::Inspector, LocusKind::Source),

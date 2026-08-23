@@ -154,7 +154,7 @@ enum Command {
         #[arg(long)]
         locus: String,
     },
-    /// Propose a semantic title edit. Does not write the VEL file.
+    /// Propose a semantic title or callout edit. Does not write the VEL file.
     Propose {
         file: PathBuf,
         #[arg(long)]
@@ -167,6 +167,12 @@ enum Command {
         title_for: Option<String>,
         #[arg(long)]
         title_opacity: Option<u8>,
+        #[arg(long)]
+        callout_text: Option<String>,
+        #[arg(long)]
+        callout_at: Option<String>,
+        #[arg(long)]
+        callout_for: Option<String>,
     },
     /// Apply a JSON proposal to the VEL file and recompile.
     Apply {
@@ -284,6 +290,9 @@ fn run(cli: Cli) -> Result<ExitCode, Box<dyn std::error::Error>> {
             title_at,
             title_for,
             title_opacity,
+            callout_text,
+            callout_at,
+            callout_for,
         } => propose_command(
             &file,
             locus.as_deref(),
@@ -291,6 +300,9 @@ fn run(cli: Cli) -> Result<ExitCode, Box<dyn std::error::Error>> {
             title_at.as_deref(),
             title_for.as_deref(),
             title_opacity,
+            callout_text,
+            callout_at.as_deref(),
+            callout_for.as_deref(),
             cli.json,
         ),
         Command::Apply { file, proposal } => apply_command(&file, &proposal, cli.json),
@@ -585,6 +597,7 @@ fn inspect_command(
     Ok(ExitCode::SUCCESS)
 }
 
+#[allow(clippy::too_many_arguments)]
 fn propose_command(
     file: &Path,
     locus: Option<&str>,
@@ -592,13 +605,30 @@ fn propose_command(
     title_at: Option<&str>,
     title_for: Option<&str>,
     title_opacity: Option<u8>,
+    callout_text: Option<String>,
+    callout_at: Option<&str>,
+    callout_for: Option<&str>,
     json: bool,
 ) -> Result<ExitCode, Box<dyn std::error::Error>> {
     let engine = Engine::default();
     let compilation = engine.compile_path(file)?;
     let before = compilation.source.clone();
+    let has_title = title_text.is_some()
+        || title_at.is_some()
+        || title_for.is_some()
+        || title_opacity.is_some();
+    let has_callout = callout_text.is_some() || callout_at.is_some() || callout_for.is_some();
+    if has_title && has_callout {
+        return Err("propose cannot mix title and callout fields".into());
+    }
     let target = if let Some(id) = locus {
         engine.inspect(&compilation, &LocusId::new(id))?.locus
+    } else if has_callout {
+        engine
+            .loci(&compilation)?
+            .into_iter()
+            .find(|locus| locus.kind == lattice_engine::LocusKind::Callout)
+            .ok_or("no callout locus")?
     } else {
         engine
             .loci(&compilation)?
@@ -606,11 +636,25 @@ fn propose_command(
             .find(|locus| locus.kind == lattice_engine::LocusKind::Title)
             .ok_or("no title locus")?
     };
-    let edit = SemanticEdit::Title {
-        text: title_text,
-        at: title_at.map(parse_cli_time).transpose()?,
-        duration: title_for.map(parse_cli_time).transpose()?,
-        opacity: title_opacity,
+    let edit = if target.kind == lattice_engine::LocusKind::Callout {
+        if has_title {
+            return Err("title fields need a title locus; use --callout-text".into());
+        }
+        SemanticEdit::Callout {
+            text: callout_text,
+            at: callout_at.map(parse_cli_time).transpose()?,
+            duration: callout_for.map(parse_cli_time).transpose()?,
+        }
+    } else {
+        if has_callout {
+            return Err("callout fields need a callout locus".into());
+        }
+        SemanticEdit::Title {
+            text: title_text,
+            at: title_at.map(parse_cli_time).transpose()?,
+            duration: title_for.map(parse_cli_time).transpose()?,
+            opacity: title_opacity,
+        }
     };
     let proposal = engine.propose(&compilation, &target, edit)?;
     if compilation.source != before {

@@ -55,6 +55,9 @@ pub struct InspectorView {
     pub go_to_definition: Option<Span>,
     /// Title-shaped fields exist only when here is Title.
     pub title_fields: bool,
+    /// Callout body fields exist only when here is Callout.
+    /// Caption stays `LocusKind::Placement` and does not open these.
+    pub callout_fields: bool,
     /// Property fields bound to this exact source `LocusId`, not `LocusKind`.
     pub gain_db: Option<i32>,
     pub fade_in: Option<Time>,
@@ -343,6 +346,7 @@ fn inspector_from_session(
             locus_id: None,
             go_to_definition: None,
             title_fields: false,
+            callout_fields: false,
             gain_db: None,
             fade_in: None,
             invoked,
@@ -368,6 +372,7 @@ fn inspector_from_session(
         locus_id: Some(locus.id.as_str().to_string()),
         go_to_definition: locus.source_span,
         title_fields: locus.kind == LocusKind::Title,
+        callout_fields: locus.kind == LocusKind::Callout,
         gain_db,
         fade_in,
         invoked,
