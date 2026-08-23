@@ -115,7 +115,7 @@ fn title_using_lower_third_expands_to_title_style_without_preset_name() {
         .map(|placement| placement.kind);
     assert_eq!(kind, Some(PlacementKind::Title));
     let visual = title_visual(&compilation);
-    let style = visual.style.expect("preset fills OverlayStyle");
+    let style = visual.style.as_ref().expect("preset fills OverlayStyle");
     assert_eq!(
         style.bar,
         Some(OverlayBar::Fill {
@@ -216,7 +216,7 @@ fn explicit_body_style_wins_over_lower_third() {
     );
     assert!(!compilation.has_errors(), "{:?}", compilation.diagnostics);
     let visual = title_visual(&compilation);
-    let style = visual.style.expect("style");
+    let style = visual.style.as_ref().expect("style");
     assert_eq!(style.color, Rgba::from_hex_rrggbb("#00FF00"));
     assert_eq!(style.size, Some(OverlaySize::Percent { milli: 500 }));
     assert_eq!(style.bar, Some(OverlayBar::Off));

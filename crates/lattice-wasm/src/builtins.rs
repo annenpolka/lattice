@@ -155,7 +155,7 @@ pub fn lower_callout(inv: &InvocationView, draft: &mut SceneDraft) -> Result<(),
         .and_then(ValueView::as_time)
         .unwrap_or(Time::seconds(2));
     let id = draft.next_placement_id("callout");
-    let parsed = parse_overlay_body(inv, draft);
+    let parsed = parse_overlay_body_for(inv, draft, OverlayConvention::Callout);
     let mut visual = Visual::text_overlay(text.clone());
     visual.position = parsed.position;
     visual.scale = parsed.scale;

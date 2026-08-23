@@ -58,7 +58,7 @@ pub fn title_preset_style(name: &str) -> Option<OverlayStyle> {
 
 /// First invocation-level `using` value. Body `using` stays an unknown word.
 #[must_use]
-pub fn invocation_using<'a>(inv: &'a InvocationView) -> Option<&'a ValueView> {
+pub fn invocation_using(inv: &InvocationView) -> Option<&ValueView> {
     inv.modifiers
         .iter()
         .find(|(name, _)| name == "using")
@@ -89,9 +89,7 @@ pub fn apply_using_preset(
     applies_to_title: bool,
     style: &mut OverlayStyle,
 ) -> Option<&'static str> {
-    let Some(value) = invocation_using(inv) else {
-        return None;
-    };
+    let value = invocation_using(inv)?;
     let Some(name) = value.as_name() else {
         draft.diagnostics.push(Diagnostic::error(
             UNKNOWN_PRESET,
