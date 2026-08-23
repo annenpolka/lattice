@@ -325,7 +325,7 @@ fn missing_glyph_excerpt(buffer: &Buffer, text: &str) -> Option<String> {
 
 fn attrs_for(spec: &FontSpec) -> Attrs<'_> {
     Attrs::new()
-        .family(Family::SansSerif)
+        .family(Family::Name(&spec.family))
         .weight(Weight(spec.weight))
         .style(if spec.italic {
             Style::Italic
@@ -438,6 +438,23 @@ mod tests {
             resolved_font: None,
             color: Rgba::WHITE,
         }
+    }
+
+    #[test]
+    fn attrs_honor_family_and_weight() {
+        let spec = FontSpec {
+            family: "LatticeSans".into(),
+            weight: 700,
+            italic: false,
+            size_px: 18,
+        };
+        let attrs = attrs_for(&spec);
+        assert!(matches!(attrs.family, Family::Name("LatticeSans")));
+        assert_eq!(attrs.weight, Weight(700));
+        let preview = FontSpec::preview_sans(18);
+        let normal = attrs_for(&preview);
+        assert!(matches!(normal.family, Family::Name("LatticeSans")));
+        assert_eq!(normal.weight, Weight(400));
     }
 
     #[test]

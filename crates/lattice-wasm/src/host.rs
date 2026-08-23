@@ -7,7 +7,7 @@ use lattice_core::{
     TimeMapSegment as CoreSegment, Visual,
 };
 
-use crate::overlay_body::overlay_geometry;
+use crate::overlay_body::{OverlayConvention, overlay_explain_notes, parse_overlay_body};
 use crate::view::{InvocationView, LoweringError, SceneDraft, ValueView};
 
 wasmtime::component::bindgen!({
@@ -134,7 +134,7 @@ impl WasmStdlib {
             .and_then(ValueView::as_time)
             .unwrap_or(Time::seconds(3));
         let opacity = title_opacity(inv);
-        let (position, scale) = overlay_geometry(inv, draft);
+        let parsed = parse_overlay_body(inv, draft);
         let span = to_wit_span(inv.span);
         let (mut store, bindings) = self.instantiate()?;
         let fragment = bindings
@@ -154,8 +154,9 @@ impl WasmStdlib {
         let id = draft.next_placement_id("title");
         let mut visual = Visual::text_overlay(fragment.text.clone());
         visual.opacity = fragment.opacity;
-        visual.position = position;
-        visual.scale = scale;
+        visual.position = parsed.position;
+        visual.scale = parsed.scale;
+        visual.style = parsed.style.clone().into_option();
         draft.placements.push(Placement {
             id,
             kind: PlacementKind::Title,
@@ -168,14 +169,18 @@ impl WasmStdlib {
         let opacity_note = fragment
             .opacity
             .map_or(String::new(), |value| format!(" opacity {value}"));
-        let position_note = position.map_or(String::new(), |value| format!(" position {value}"));
-        let scale_note = scale.map_or(String::new(), |value| format!(" scale {value}"));
+        let style_notes = overlay_explain_notes(
+            parsed.position,
+            parsed.scale,
+            &parsed.style,
+            OverlayConvention::Title,
+        );
         draft.explain(
             lattice_core::Origin::Invocation {
                 command: "title".into(),
             },
             format!(
-                "title {:?} at {at} for {hold}{opacity_note}{position_note}{scale_note}",
+                "title {:?} at {at} for {hold}{opacity_note}{style_notes}",
                 fragment.text
             ),
         );

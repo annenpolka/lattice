@@ -4,6 +4,7 @@
 use crate::NormalizedScale;
 use crate::ir::{PlacementKind, TimeSpan};
 use crate::locator::MediaLocator;
+use crate::overlay::{OverlayBar, OverlaySize, OverlayStyle};
 use crate::property::{Curve, Easing, Keyframe, Property};
 use crate::scene::{
     AnimatedStyle, AssetRef, AudioClip, AudioPlan, BlendMode, Canvas, FontIdentity, FontSpec,
@@ -329,26 +330,25 @@ fn overlay_group(
         bar_bounds,
         transform,
     );
-    let fill = if callout { Rgba::CYAN } else { Rgba::YELLOW };
+    let style = clip.style.as_ref();
+    let fill = overlay_bar_fill(style, callout);
     let z = if callout { 20 } else { 10 };
     let text = clip.text.clone().unwrap_or_default();
-    let font_size = if callout {
-        (canvas.height / 20).max(12)
-    } else {
-        (canvas.height / 16).max(14)
-    };
-    let mut children = vec![RenderNode::Shape(ShapeNode {
-        props: NodeProps {
-            transform: bar_transform,
-            opacity,
-            clip: None,
-            z: 0,
-            blend: BlendMode::SrcOver,
-        },
-        bounds: bar_bounds,
-        kind: ShapeKind::Rectangle,
-        fill,
-    })];
+    let mut children = Vec::new();
+    if let Some(fill) = fill {
+        children.push(RenderNode::Shape(ShapeNode {
+            props: NodeProps {
+                transform: bar_transform,
+                opacity,
+                clip: None,
+                z: 0,
+                blend: BlendMode::SrcOver,
+            },
+            bounds: bar_bounds,
+            kind: ShapeKind::Rectangle,
+            fill,
+        }));
+    }
     if !text.is_empty() {
         children.push(RenderNode::Text(TextNode {
             props: NodeProps {
@@ -360,9 +360,9 @@ fn overlay_group(
             },
             bounds,
             text,
-            font: FontSpec::preview_sans(font_size),
+            font: overlay_font_spec(style, canvas, callout),
             resolved_font: font.cloned(),
-            color: Rgba::WHITE,
+            color: overlay_text_color(style),
         }));
     }
     RenderNode::Group(GroupNode {
@@ -433,6 +433,55 @@ fn overlay_transforms(
     (transform, bar_transform, text_transform)
 }
 
+/// Convention type size used when overlay `size` is omitted.
+/// Title: `canvas.height / 16` (min 14). Callout: `/ 20` (min 12).
+fn convention_font_size(canvas: Canvas, callout: bool) -> u32 {
+    if callout {
+        (canvas.height / 20).max(12)
+    } else {
+        (canvas.height / 16).max(14)
+    }
+}
+
+/// Priority: explicit `size` > convention. Percent is a ratio of the convention base.
+fn overlay_font_size(style: Option<&OverlayStyle>, canvas: Canvas, callout: bool) -> u32 {
+    let base = convention_font_size(canvas, callout);
+    match style.and_then(|style| style.size) {
+        Some(OverlaySize::Px { px }) => px.max(1),
+        Some(OverlaySize::Percent { milli }) => u32::try_from(
+            u64::from(base)
+                .saturating_mul(u64::from(milli))
+                .saturating_div(1_000),
+        )
+        .unwrap_or(1)
+        .max(1),
+        None => base,
+    }
+}
+
+fn overlay_font_spec(style: Option<&OverlayStyle>, canvas: Canvas, callout: bool) -> FontSpec {
+    let mut spec = FontSpec::preview_sans(overlay_font_size(style, canvas, callout));
+    if let Some(family) = style.and_then(|style| style.family.as_ref()) {
+        spec.family.clone_from(family);
+    }
+    if let Some(weight) = style.and_then(|style| style.weight) {
+        spec.weight = weight;
+    }
+    spec
+}
+
+fn overlay_text_color(style: Option<&OverlayStyle>) -> Rgba {
+    style.and_then(|style| style.color).unwrap_or(Rgba::WHITE)
+}
+
+fn overlay_bar_fill(style: Option<&OverlayStyle>, callout: bool) -> Option<Rgba> {
+    match style.and_then(|style| style.bar) {
+        Some(OverlayBar::Off) => None,
+        Some(OverlayBar::Fill { color }) => Some(color),
+        None => Some(if callout { Rgba::CYAN } else { Rgba::YELLOW }),
+    }
+}
+
 fn uniform_scale_about_anchor(
     scale: NormalizedScale,
     anchor: (i32, i32),
@@ -484,6 +533,7 @@ mod tests {
             fade_out: None,
             position: None,
             scale: None,
+            style: None,
             gain_db: Some(-3),
         }
     }
@@ -500,6 +550,7 @@ mod tests {
             fade_out: None,
             position: None,
             scale: None,
+            style: None,
             gain_db: None,
         }
     }
@@ -689,6 +740,7 @@ mod tests {
             fade_out: None,
             position: None,
             scale: None,
+            style: None,
             gain_db: None,
         });
         let scene = evaluate_at(&tl, Time::seconds(3), Canvas::PREVIEW).unwrap();
@@ -710,10 +762,122 @@ mod tests {
             fade_out: None,
             position: None,
             scale: None,
+            style: None,
             gain_db: Some(-3),
         });
         let plan = audio_plan_from_timeline(&tl);
         assert_eq!(plan.windows[0].gain_db, -3);
         assert_eq!(plan.duration, Time::seconds(10));
+    }
+
+    fn overlay_text(scene: &RenderScene) -> Option<&TextNode> {
+        fn walk(nodes: &[RenderNode]) -> Option<&TextNode> {
+            for node in nodes {
+                match node {
+                    RenderNode::Text(text) => return Some(text),
+                    RenderNode::Group(group) => {
+                        if let Some(text) = walk(&group.children) {
+                            return Some(text);
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            None
+        }
+        walk(&scene.nodes)
+    }
+
+    fn overlay_bars(scene: &RenderScene) -> Vec<Rgba> {
+        fn walk(nodes: &[RenderNode], out: &mut Vec<Rgba>) {
+            for node in nodes {
+                match node {
+                    RenderNode::Shape(shape) => out.push(shape.fill),
+                    RenderNode::Group(group) => walk(&group.children, out),
+                    _ => {}
+                }
+            }
+        }
+        let mut out = Vec::new();
+        walk(&scene.nodes, &mut out);
+        out
+    }
+
+    #[test]
+    fn omitted_overlay_style_keeps_title_yellow_and_convention_font() {
+        let scene = evaluate_at(&timeline(), Time::seconds(3), Canvas::PREVIEW).unwrap();
+        let text = overlay_text(&scene).expect("title text");
+        assert_eq!(text.color, Rgba::WHITE);
+        assert_eq!(text.font, FontSpec::preview_sans(14));
+        assert_eq!(overlay_bars(&scene), vec![Rgba::YELLOW]);
+    }
+
+    #[test]
+    fn omitted_callout_style_keeps_cyan_bar_and_convention_font() {
+        let mut tl = timeline();
+        tl.clips.push(TimelineClip {
+            id: "c".into(),
+            kind: PlacementKind::Callout,
+            span: TimeSpan::new(Time::seconds(2), Time::seconds(3)),
+            source: None,
+            text: Some("Hold".into()),
+            opacity: None,
+            fade_in: None,
+            fade_out: None,
+            position: None,
+            scale: None,
+            style: None,
+            gain_db: None,
+        });
+        let scene = evaluate_at(&tl, Time::seconds(3), Canvas::PREVIEW).unwrap();
+        let bars = overlay_bars(&scene);
+        assert!(bars.contains(&Rgba::YELLOW));
+        assert!(bars.contains(&Rgba::CYAN));
+        let callout = scene.nodes.iter().find_map(|node| match node {
+            RenderNode::Group(group) if group.props.z == 20 => {
+                group.children.iter().find_map(|child| match child {
+                    RenderNode::Text(text) => Some(text),
+                    _ => None,
+                })
+            }
+            _ => None,
+        });
+        let callout = callout.expect("callout text");
+        assert_eq!(callout.font.size_px, 12);
+        assert_eq!(callout.color, Rgba::WHITE);
+    }
+
+    #[test]
+    fn explicit_overlay_style_sets_font_color_and_omits_bar() {
+        let mut tl = timeline();
+        tl.clips[1].style = Some(OverlayStyle {
+            color: Rgba::from_hex_rrggbb("#00FF00"),
+            size: Some(OverlaySize::Percent { milli: 500 }),
+            weight: Some(700),
+            family: Some("LatticeSans".into()),
+            bar: Some(OverlayBar::Off),
+        });
+        let scene = evaluate_at(&tl, Time::seconds(3), Canvas::PREVIEW).unwrap();
+        let text = overlay_text(&scene).expect("styled title");
+        assert_eq!(text.color, Rgba::from_hex_rrggbb("#00FF00").unwrap());
+        assert_eq!(text.font.family, "LatticeSans");
+        assert_eq!(text.font.weight, 700);
+        assert_eq!(text.font.size_px, 7);
+        assert!(overlay_bars(&scene).is_empty());
+
+        tl.clips[1].style = Some(OverlayStyle {
+            size: Some(OverlaySize::Px { px: 24 }),
+            bar: Some(OverlayBar::Fill {
+                color: Rgba::from_hex_rrggbb("#FF00FF").unwrap(),
+            }),
+            ..OverlayStyle::default()
+        });
+        let scene = evaluate_at(&tl, Time::seconds(3), Canvas::PREVIEW).unwrap();
+        let text = overlay_text(&scene).expect("px lock");
+        assert_eq!(text.font.size_px, 24);
+        assert_eq!(
+            overlay_bars(&scene),
+            vec![Rgba::from_hex_rrggbb("#FF00FF").unwrap()]
+        );
     }
 }
