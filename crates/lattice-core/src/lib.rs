@@ -9,6 +9,7 @@ mod evaluate;
 mod ir;
 mod locator;
 mod locus;
+mod overlay;
 mod property;
 mod provenance;
 mod resolve;
@@ -33,6 +34,7 @@ pub use locus::{
     CoreProjection, Locus, LocusId, LocusKind, LocusProjection, SourceProjection,
     TimelineProjection, VisualProjection,
 };
+pub use overlay::{OverlayBar, OverlaySize, OverlayStyle};
 pub use property::{Curve, Easing, Interpolate, Keyframe, Property};
 pub use provenance::{Origin, Provenance};
 pub use resolve::{AssetIdentity, LockedAsset, ResolveLock, ResolvedAsset};
