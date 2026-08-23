@@ -3,6 +3,7 @@ use lattice_core::{
     TimeMap, TimeSpan, Visual,
 };
 
+use crate::overlay_body::overlay_geometry;
 use crate::view::{BodyItem, InvocationView, LoweringError, SceneDraft, ValueView};
 
 pub fn lower_freeze(inv: &InvocationView, draft: &mut SceneDraft) -> Result<(), LoweringError> {
@@ -50,8 +51,7 @@ pub fn lower_title(inv: &InvocationView, draft: &mut SceneDraft) -> Result<(), L
         .and_then(super::view::ValueView::as_time)
         .unwrap_or(Time::seconds(3));
     let opacity = body_opacity(inv);
-    let position = body_position(inv);
-    let scale = body_scale(inv);
+    let (position, scale) = overlay_geometry(inv, draft);
     let id = draft.next_placement_id("title");
     let mut visual = Visual::text_overlay(text.clone());
     visual.opacity = opacity;
@@ -94,8 +94,7 @@ pub fn lower_callout(inv: &InvocationView, draft: &mut SceneDraft) -> Result<(),
         .and_then(ValueView::as_time)
         .unwrap_or(Time::seconds(2));
     let id = draft.next_placement_id("callout");
-    let position = body_position(inv);
-    let scale = body_scale(inv);
+    let (position, scale) = overlay_geometry(inv, draft);
     let mut visual = Visual::text_overlay(text.clone());
     visual.position = position;
     visual.scale = scale;
@@ -229,25 +228,6 @@ fn body_opacity(inv: &InvocationView) -> Option<u8> {
             .first()
             .and_then(ValueView::as_int)
             .and_then(|value| u8::try_from(value).ok()),
-        _ => None,
-    })
-}
-
-fn body_position(inv: &InvocationView) -> Option<lattice_core::NormalizedPosition> {
-    inv.body.iter().find_map(|item| match item {
-        BodyItem::Invocation(inner) if inner.command == "position" => inner
-            .args
-            .first()
-            .and_then(ValueView::as_normalized_position),
-        _ => None,
-    })
-}
-
-fn body_scale(inv: &InvocationView) -> Option<lattice_core::NormalizedScale> {
-    inv.body.iter().find_map(|item| match item {
-        BodyItem::Invocation(inner) if inner.command == "scale" => {
-            inner.args.first().and_then(ValueView::as_normalized_scale)
-        }
         _ => None,
     })
 }

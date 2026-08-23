@@ -7,6 +7,7 @@ use lattice_core::{
     TimeMapSegment as CoreSegment, Visual,
 };
 
+use crate::overlay_body::overlay_geometry;
 use crate::view::{InvocationView, LoweringError, SceneDraft, ValueView};
 
 wasmtime::component::bindgen!({
@@ -133,8 +134,7 @@ impl WasmStdlib {
             .and_then(ValueView::as_time)
             .unwrap_or(Time::seconds(3));
         let opacity = title_opacity(inv);
-        let position = body_position(inv);
-        let scale = body_scale(inv);
+        let (position, scale) = overlay_geometry(inv, draft);
         let span = to_wit_span(inv.span);
         let (mut store, bindings) = self.instantiate()?;
         let fragment = bindings
@@ -191,27 +191,6 @@ fn title_opacity(inv: &InvocationView) -> Option<u8> {
             .first()
             .and_then(ValueView::as_int)
             .and_then(|value| u8::try_from(value).ok()),
-        _ => None,
-    })
-}
-
-fn body_position(inv: &InvocationView) -> Option<lattice_core::NormalizedPosition> {
-    use crate::view::BodyItem;
-    inv.body.iter().find_map(|item| match item {
-        BodyItem::Invocation(inner) if inner.command == "position" => inner
-            .args
-            .first()
-            .and_then(ValueView::as_normalized_position),
-        _ => None,
-    })
-}
-
-fn body_scale(inv: &InvocationView) -> Option<lattice_core::NormalizedScale> {
-    use crate::view::BodyItem;
-    inv.body.iter().find_map(|item| match item {
-        BodyItem::Invocation(inner) if inner.command == "scale" => {
-            inner.args.first().and_then(ValueView::as_normalized_scale)
-        }
         _ => None,
     })
 }

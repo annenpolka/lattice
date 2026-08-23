@@ -6,6 +6,7 @@
 
 mod builtins;
 mod host;
+mod overlay_body;
 mod registry;
 mod view;
 
