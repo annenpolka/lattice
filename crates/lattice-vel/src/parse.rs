@@ -762,4 +762,32 @@ scene demo {
             Expr::String { value, .. } if value == "この数字"
         ));
     }
+
+    #[test]
+    fn using_ident_is_a_generic_modifier_not_a_preset_node() {
+        let doc =
+            parse(r#"scene x { title "Ada Lovelace\nEditor" using lower-third { at 0s for 3s } }"#)
+                .unwrap();
+        let Item::Scene { body, .. } = &doc.items[0] else {
+            panic!("expected scene");
+        };
+        let Item::Invocation(inv) = &body.items[0] else {
+            panic!("expected generic title invocation");
+        };
+        assert_eq!(inv.name, "title");
+        assert!(
+            !inv.modifiers.iter().any(|m| m.name == "lower-third"),
+            "parser must not bake `lower-third` into a dedicated modifier"
+        );
+        let using = inv
+            .modifiers
+            .iter()
+            .find(|m| m.name == "using")
+            .expect("reserved unused `using` stays a generic modifier");
+        assert!(
+            matches!(&using.value, Expr::Ident { name, .. } if name == "lower-third"),
+            "IDENT is generic: {:?}",
+            using.value
+        );
+    }
 }

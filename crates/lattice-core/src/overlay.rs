@@ -78,8 +78,10 @@ impl OverlayAnchor {
     }
 }
 
-/// Explicit overlay typeface / color / bar / align. Absent fields fall through
-/// explicit > preset > convention > default at evaluate.
+/// Explicit overlay typeface / color / bar / align. Omitted fields keep
+/// title/callout convention at evaluate. Named VEL presets (`using IDENT`)
+/// fill omitted fields in the stdlib lowering registry; Core never stores a
+/// preset name.
 ///
 /// `align` is a CHI-90 body word — not part of the CHI-87 color/size/weight/
 /// family/bar list.
