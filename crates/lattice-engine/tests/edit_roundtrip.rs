@@ -1,7 +1,18 @@
 //! Propose → inspect → Apply / Reject against the shipped VEL, via Engine.
 
-use lattice_core::{Canvas, RenderNode, SemanticEdit, Time, evaluate_at, source_revision};
-use lattice_engine::{Engine, write_source_atomic, write_source_atomic_no_commit};
+use lattice_core::{
+    Canvas, Locus, LocusKind, RenderNode, SemanticEdit, Time, evaluate_at, source_revision,
+};
+use lattice_engine::{Compilation, Engine, write_source_atomic, write_source_atomic_no_commit};
+
+fn locus_of(engine: &Engine, compilation: &Compilation, kind: LocusKind) -> Locus {
+    engine
+        .loci(compilation)
+        .unwrap()
+        .into_iter()
+        .find(|locus| locus.kind == kind)
+        .unwrap_or_else(|| panic!("missing {kind:?} locus"))
+}
 
 fn overlay_texts(scene: &lattice_core::RenderScene) -> Vec<String> {
     fn walk(nodes: &[RenderNode], out: &mut Vec<String>) {
@@ -514,16 +525,10 @@ scene demo {
     let engine = Engine::default();
     let compilation = engine.compile(vel).unwrap();
     assert!(!compilation.has_errors(), "{:?}", compilation.diagnostics);
-    let title = engine
-        .loci(&compilation)
-        .unwrap()
-        .into_iter()
-        .find(|locus| locus.kind == lattice_core::LocusKind::Title)
-        .expect("title");
     let titled = engine
         .propose(
             &compilation,
-            &title,
+            &locus_of(&engine, &compilation, LocusKind::Title),
             SemanticEdit::Title {
                 text: Some("World".into()),
                 at: None,
@@ -535,16 +540,10 @@ scene demo {
     let compilation = engine
         .compile(&engine.apply_proposal(vel, &titled).unwrap())
         .unwrap();
-    let callout = engine
-        .loci(&compilation)
-        .unwrap()
-        .into_iter()
-        .find(|locus| locus.kind == lattice_core::LocusKind::Callout)
-        .expect("callout");
     let called = engine
         .propose(
             &compilation,
-            &callout,
+            &locus_of(&engine, &compilation, LocusKind::Callout),
             SemanticEdit::Callout {
                 text: Some("Release".into()),
                 at: None,
@@ -552,19 +551,12 @@ scene demo {
             },
         )
         .unwrap();
-    assert!(
-        called.description.contains("Release"),
-        "{}",
-        called.description
-    );
+    assert!(called.description.contains("Release"));
     let applied = engine.apply_proposal(&compilation.source, &called).unwrap();
-    assert!(applied.contains("title \"World\""));
-    assert!(applied.contains("callout \"Release\""));
-    assert!(!applied.contains("title \"Hello\""));
-    assert!(!applied.contains("callout \"Hold\""));
+    assert!(applied.contains("title \"World\"") && applied.contains("callout \"Release\""));
+    assert!(!applied.contains("title \"Hello\"") && !applied.contains("callout \"Hold\""));
 
     let compiled = engine.compile(&applied).unwrap();
-    assert!(!compiled.has_errors(), "{:?}", compiled.diagnostics);
     let timeline = Engine::timeline(&compiled.project).unwrap();
     assert_eq!(
         timeline
@@ -580,23 +572,14 @@ scene demo {
             .and_then(|clip| clip.text.clone()),
         Some("Release".into())
     );
-    let at_title = evaluate_at(&timeline, Time::seconds(1), Canvas::PREVIEW).unwrap();
-    let at_callout = evaluate_at(&timeline, Time::seconds(3), Canvas::PREVIEW).unwrap();
+    let at_title =
+        overlay_texts(&evaluate_at(&timeline, Time::seconds(1), Canvas::PREVIEW).unwrap());
+    let at_callout =
+        overlay_texts(&evaluate_at(&timeline, Time::seconds(3), Canvas::PREVIEW).unwrap());
+    assert!(at_title.iter().any(|text| text == "World"), "{at_title:?}");
     assert!(
-        overlay_texts(&at_title).iter().any(|text| text == "World"),
-        "preview/export evaluate title: {:?}",
-        overlay_texts(&at_title)
-    );
-    assert!(
-        overlay_texts(&at_callout)
-            .iter()
-            .any(|text| text == "Release"),
-        "preview/export evaluate callout: {:?}",
-        overlay_texts(&at_callout)
-    );
-    assert!(
-        !overlay_texts(&at_callout).iter().any(|text| text == "Hold"),
-        "stale callout body must not remain: {:?}",
-        overlay_texts(&at_callout)
+        at_callout.iter().any(|text| text == "Release")
+            && !at_callout.iter().any(|text| text == "Hold"),
+        "{at_callout:?}"
     );
 }

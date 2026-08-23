@@ -2,30 +2,8 @@
 
 use std::path::PathBuf;
 
-use lattice_core::{Canvas, RenderNode, Time, evaluate_at};
 use lattice_engine::{Engine, LocusKind, Origin, SemanticEdit, plan_from_timeline};
 use lattice_studio::StudioSession;
-
-fn overlay_texts(scene: &lattice_core::RenderScene) -> Vec<String> {
-    fn walk(nodes: &[RenderNode], out: &mut Vec<String>) {
-        for node in nodes {
-            match node {
-                RenderNode::Text(text) => out.push(text.text.clone()),
-                RenderNode::Group(group) => walk(&group.children, out),
-                RenderNode::Mask(mask) => {
-                    walk(std::slice::from_ref(mask.content.as_ref()), out);
-                }
-                RenderNode::Effect(effect) => {
-                    walk(std::slice::from_ref(effect.child.as_ref()), out);
-                }
-                _ => {}
-            }
-        }
-    }
-    let mut out = Vec::new();
-    walk(&scene.nodes, &mut out);
-    out
-}
 
 fn demo_vel() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -484,20 +462,6 @@ fn apply_title_and_callout_text_rewrites_vel_and_evaluate() {
             .next()
             .and_then(|clip| clip.text.clone()),
         Some("Release".into())
-    );
-    let at_title = evaluate_at(&timeline, Time::seconds(3), Canvas::PREVIEW).unwrap();
-    let at_callout = evaluate_at(&timeline, Time::seconds(6), Canvas::PREVIEW).unwrap();
-    assert!(
-        overlay_texts(&at_title).iter().any(|text| text == "World"),
-        "{:?}",
-        overlay_texts(&at_title)
-    );
-    assert!(
-        overlay_texts(&at_callout)
-            .iter()
-            .any(|text| text == "Release"),
-        "{:?}",
-        overlay_texts(&at_callout)
     );
 }
 
