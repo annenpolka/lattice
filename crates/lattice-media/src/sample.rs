@@ -639,6 +639,7 @@ mod tests {
                 fade_out: None,
                 position: None,
                 scale: None,
+                style: None,
                 gain_db: None,
             }],
         };
