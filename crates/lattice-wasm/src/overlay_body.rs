@@ -7,9 +7,12 @@ use lattice_core::{Diagnostic, NormalizedPosition, NormalizedScale};
 
 use crate::view::{BodyItem, InvocationView, SceneDraft, ValueView};
 
-/// Overlay body words that already have a lowering, plus `at`/`for` if they
-/// appear as body invocations. `align` / `anchor` are not implemented yet.
+/// Overlay body invocations that already have a lowering, plus `at`/`for`.
+/// `align` / `anchor` are not implemented yet.
 const OVERLAY_BODY_ALLOWLIST: &[&str] = &["opacity", "position", "scale", "at", "for"];
+/// Generic parser modifiers that are already consumed as timing. Others
+/// (`over` / `using` / `by` / `from` / `to`) must not silent-drop.
+const OVERLAY_MODIFIER_ALLOWLIST: &[&str] = &["at", "for"];
 
 pub const INVALID_POSITION: &str = "LAT-OVL-001";
 pub const INVALID_SCALE: &str = "LAT-OVL-002";
@@ -76,17 +79,28 @@ pub fn body_scale(inv: &InvocationView, draft: &mut SceneDraft) -> Option<Normal
 
 pub fn diagnose_unknown_overlay_body(inv: &InvocationView, draft: &mut SceneDraft) {
     for item in &inv.body {
-        let BodyItem::Invocation(inner) = item else {
-            continue;
-        };
-        if OVERLAY_BODY_ALLOWLIST.contains(&inner.command.as_str()) {
-            continue;
+        match item {
+            BodyItem::Invocation(inner) => {
+                if OVERLAY_BODY_ALLOWLIST.contains(&inner.command.as_str()) {
+                    continue;
+                }
+                draft.diagnostics.push(Diagnostic::error(
+                    UNKNOWN_BODY_WORD,
+                    format!("unknown overlay body word `{}`", inner.command),
+                    Some(inner.span),
+                ));
+            }
+            BodyItem::Modifier { name, .. } => {
+                if OVERLAY_MODIFIER_ALLOWLIST.contains(&name.as_str()) {
+                    continue;
+                }
+                draft.diagnostics.push(Diagnostic::error(
+                    UNKNOWN_BODY_WORD,
+                    format!("unknown overlay body word `{name}`"),
+                    Some(inv.span),
+                ));
+            }
         }
-        draft.diagnostics.push(Diagnostic::error(
-            UNKNOWN_BODY_WORD,
-            format!("unknown overlay body word `{}`", inner.command),
-            Some(inner.span),
-        ));
     }
 }
 
@@ -238,5 +252,45 @@ mod tests {
             words.iter().any(|message| message.contains("`anchor`")),
             "{words:?}"
         );
+    }
+
+    fn body_modifier(name: &str) -> BodyItem {
+        BodyItem::Modifier {
+            name: name.into(),
+            value: ValueView::Name("clip".into()),
+        }
+    }
+
+    #[test]
+    fn unknown_body_modifiers_do_not_vanish() {
+        let inv = overlay_with_body(vec![
+            body_modifier("at"),
+            body_modifier("for"),
+            body_modifier("over"),
+            body_modifier("using"),
+            body_modifier("by"),
+            body_modifier("from"),
+            body_modifier("to"),
+        ]);
+        let mut draft = draft();
+        overlay_geometry(&inv, &mut draft);
+        let words: Vec<_> = draft
+            .diagnostics
+            .iter()
+            .filter(|diag| diag.code == UNKNOWN_BODY_WORD)
+            .map(|diag| diag.message.clone())
+            .collect();
+        for allowed in ["`at`", "`for`"] {
+            assert!(
+                words.iter().all(|message| !message.contains(allowed)),
+                "{allowed} should stay allowed: {words:?}"
+            );
+        }
+        for unknown in ["`over`", "`using`", "`by`", "`from`", "`to`"] {
+            assert!(
+                words.iter().any(|message| message.contains(unknown)),
+                "{unknown} vanished: {words:?}"
+            );
+        }
     }
 }
