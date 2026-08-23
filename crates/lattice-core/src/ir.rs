@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::locator::MediaLocator;
+use crate::overlay::OverlayStyle;
 use crate::provenance::Provenance;
 use crate::space::{NormalizedPosition, NormalizedScale};
 use crate::time::Time;
@@ -141,6 +142,10 @@ pub struct Visual {
     /// Uniform aspect-preserving scale (`1000` = `100%`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub scale: Option<NormalizedScale>,
+    /// Explicit overlay color / size / weight / family / bar. Omitted style
+    /// keeps today's title/callout convention at evaluate.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub style: Option<OverlayStyle>,
 }
 
 #[cfg(test)]
@@ -177,6 +182,17 @@ mod tests {
         let empty = TimeSpan::new(Time::seconds(3), Time::ZERO);
         assert!(empty.contains(Time::seconds(3)));
         assert!(!empty.contains(Time::seconds(4)));
+    }
+
+    #[test]
+    fn omitted_overlay_style_is_absent_from_visual_json() {
+        let json = serde_json::to_string(&Visual::text_overlay("Hello")).expect("json");
+        assert!(
+            !json.contains("style"),
+            "omitted overlay style must skip: {json}"
+        );
+        let round: Visual = serde_json::from_str(&json).expect("roundtrip");
+        assert_eq!(round.style, None);
     }
 }
 
@@ -232,6 +248,7 @@ impl Visual {
             fade_out: None,
             position: None,
             scale: None,
+            style: None,
         }
     }
 
@@ -244,6 +261,7 @@ impl Visual {
             fade_out: None,
             position: None,
             scale: None,
+            style: None,
         }
     }
 }
