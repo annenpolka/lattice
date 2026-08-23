@@ -86,6 +86,26 @@ impl Rgba {
         b: 255,
         a: 255,
     };
+
+    /// Quoted overlay `color` / `bar` literal: `#RRGGBB` only.
+    #[must_use]
+    pub fn from_hex_rrggbb(text: &str) -> Option<Self> {
+        let hex = text.strip_prefix('#')?;
+        if hex.len() != 6 || !hex.as_bytes().iter().all(u8::is_ascii_hexdigit) {
+            return None;
+        }
+        Some(Self {
+            r: u8::from_str_radix(&hex[0..2], 16).ok()?,
+            g: u8::from_str_radix(&hex[2..4], 16).ok()?,
+            b: u8::from_str_radix(&hex[4..6], 16).ok()?,
+            a: 255,
+        })
+    }
+
+    #[must_use]
+    pub fn to_hex_rrggbb(self) -> String {
+        format!("#{:02X}{:02X}{:02X}", self.r, self.g, self.b)
+    }
 }
 
 /// Translate in pixels, scale in millipercent (1000 = 1.0), rotation in millidegrees.
@@ -471,5 +491,27 @@ mod tests {
         };
         let (_, opacity) = style.snapshot(Time::seconds(1));
         assert_eq!(opacity, 50);
+    }
+
+    #[test]
+    fn hex_rrggbb_is_quoted_six_digit_only() {
+        assert_eq!(
+            Rgba::from_hex_rrggbb("#00FF00"),
+            Some(Rgba {
+                r: 0,
+                g: 255,
+                b: 0,
+                a: 255
+            })
+        );
+        assert_eq!(
+            Rgba::from_hex_rrggbb("#00ff00").unwrap().to_hex_rrggbb(),
+            "#00FF00"
+        );
+        assert!(Rgba::from_hex_rrggbb("green").is_none());
+        assert!(Rgba::from_hex_rrggbb("00FF00").is_none());
+        assert!(Rgba::from_hex_rrggbb("#FFF").is_none());
+        assert!(Rgba::from_hex_rrggbb("#00FF00AA").is_none());
+        assert!(Rgba::from_hex_rrggbb("#GG0000").is_none());
     }
 }
