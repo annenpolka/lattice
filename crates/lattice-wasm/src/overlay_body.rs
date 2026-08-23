@@ -10,6 +10,7 @@ use lattice_core::{
     OverlaySize, OverlayStyle, Rgba,
 };
 
+use crate::overlay_preset::apply_using_preset;
 use crate::view::{BodyItem, InvocationView, SceneDraft, ValueView};
 
 /// Overlay body invocations that already have a lowering, plus `at`/`for`.
@@ -59,6 +60,8 @@ pub struct OverlayBody {
     pub scale: Option<NormalizedScale>,
     pub anchor: Option<OverlayAnchor>,
     pub style: OverlayStyle,
+    /// Applied title preset IDENT, for explain only. Never written to Core.
+    pub applied_preset: Option<&'static str>,
 }
 
 /// Shared by builtins and the Wasm host. Invalid style values diag; they do not silent-drop.
@@ -77,6 +80,12 @@ pub fn parse_overlay_body_for(
     let anchor = body_anchor(inv, draft);
     let mut style = body_style(inv, draft);
     diagnose_unknown_overlay_body(inv, draft);
+    let applied_preset = apply_using_preset(
+        inv,
+        draft,
+        convention == OverlayConvention::Title,
+        &mut style,
+    );
     if convention == OverlayConvention::Caption && style.bar.is_none() {
         style.bar = Some(OverlayBar::Off);
     }
@@ -85,6 +94,7 @@ pub fn parse_overlay_body_for(
         scale,
         anchor,
         style,
+        applied_preset,
     }
 }
 

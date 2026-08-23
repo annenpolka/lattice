@@ -72,6 +72,10 @@ pub fn lower_title(inv: &InvocationView, draft: &mut SceneDraft) -> Result<(), L
         provenance: Provenance::invocation("title", Some(inv.span)),
     });
     let opacity_note = opacity.map_or(String::new(), |value| format!(" opacity {value}"));
+    let preset_note = parsed
+        .applied_preset
+        .map(|name| format!(" using {name}"))
+        .unwrap_or_default();
     let style_notes = overlay_explain_notes(
         parsed.position,
         parsed.scale,
@@ -83,7 +87,7 @@ pub fn lower_title(inv: &InvocationView, draft: &mut SceneDraft) -> Result<(), L
         Origin::Invocation {
             command: "title".into(),
         },
-        format!("title {text:?} at {at} for {hold}{opacity_note}{style_notes}"),
+        format!("title {text:?} at {at} for {hold}{opacity_note}{preset_note}{style_notes}"),
     );
     Ok(())
 }

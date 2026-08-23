@@ -174,6 +174,10 @@ impl WasmStdlib {
         let opacity_note = fragment
             .opacity
             .map_or(String::new(), |value| format!(" opacity {value}"));
+        let preset_note = parsed
+            .applied_preset
+            .map(|name| format!(" using {name}"))
+            .unwrap_or_default();
         let style_notes = overlay_explain_notes(
             parsed.position,
             parsed.scale,
@@ -186,7 +190,7 @@ impl WasmStdlib {
                 command: "title".into(),
             },
             format!(
-                "title {:?} at {at} for {hold}{opacity_note}{style_notes}",
+                "title {:?} at {at} for {hold}{opacity_note}{preset_note}{style_notes}",
                 fragment.text
             ),
         );

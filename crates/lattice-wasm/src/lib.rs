@@ -8,6 +8,7 @@ mod builtins;
 mod caption;
 mod host;
 mod overlay_body;
+mod overlay_preset;
 mod registry;
 mod view;
 
