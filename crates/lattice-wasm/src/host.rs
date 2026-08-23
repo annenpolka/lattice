@@ -7,7 +7,10 @@ use lattice_core::{
     TimeMapSegment as CoreSegment, Visual,
 };
 
-use crate::overlay_body::{OverlayConvention, overlay_explain_notes, parse_overlay_body};
+use crate::caption::merge_caption_timing;
+use crate::overlay_body::{
+    OverlayConvention, overlay_explain_notes, parse_overlay_body, parse_overlay_body_for,
+};
 use crate::view::{InvocationView, LoweringError, SceneDraft, ValueView};
 
 wasmtime::component::bindgen!({
@@ -35,7 +38,7 @@ impl wasmtime_wasi::WasiView for Caps {
     }
 }
 
-/// Hosted `freeze` / `title` implementations.
+/// Hosted `freeze` / `title` / `caption` implementations.
 pub struct WasmStdlib {
     engine: wasmtime::Engine,
     component: wasmtime::component::Component,
@@ -62,6 +65,7 @@ impl WasmStdlib {
         match inv.command.as_str() {
             "freeze" => self.lower_freeze(inv, draft),
             "title" => self.lower_title(inv, draft),
+            "caption" => self.lower_caption(inv, draft),
             other => Err(LoweringError::Message(format!(
                 "wasm stdlib does not implement `{other}`"
             ))),
@@ -183,6 +187,76 @@ impl WasmStdlib {
             },
             format!(
                 "title {:?} at {at} for {hold}{opacity_note}{style_notes}",
+                fragment.text
+            ),
+        );
+        Ok(())
+    }
+
+    fn lower_caption(
+        &self,
+        inv: &InvocationView,
+        draft: &mut SceneDraft,
+    ) -> Result<(), LoweringError> {
+        let text = inv
+            .args
+            .first()
+            .and_then(ValueView::as_string)
+            .ok_or_else(|| LoweringError::Message("`caption` needs a string".into()))?
+            .to_string();
+        let Some(timing) = merge_caption_timing(inv, draft) else {
+            return Ok(());
+        };
+        let opacity = title_opacity(inv);
+        let parsed = parse_overlay_body_for(inv, draft, OverlayConvention::Caption);
+        let span = to_wit_span(inv.span);
+        let (mut store, bindings) = self.instantiate()?;
+        let fragment = bindings
+            .lattice_stdlib_lowering()
+            .call_caption(
+                &mut store,
+                &text,
+                to_wit_time(timing.at),
+                to_wit_time(timing.hold),
+                opacity,
+                span,
+            )
+            .map_err(map_err)?
+            .map_err(LoweringError::Message)?;
+        let at = from_wit_time(fragment.start)?;
+        let hold = from_wit_time(fragment.duration)?;
+        let id = draft.next_placement_id("caption");
+        let mut visual = Visual::text_overlay(fragment.text.clone());
+        visual.opacity = fragment.opacity;
+        visual.position = parsed.position;
+        visual.scale = parsed.scale;
+        visual.anchor = parsed.anchor;
+        visual.style = parsed.style.clone().into_option();
+        draft.placements.push(Placement {
+            id,
+            kind: PlacementKind::Title,
+            source_id: None,
+            span: lattice_core::TimeSpan::new(at, hold),
+            visual: Some(visual),
+            audio: None,
+            provenance: Provenance::invocation("caption", Some(inv.span)),
+        });
+        let opacity_note = fragment
+            .opacity
+            .map_or(String::new(), |value| format!(" opacity {value}"));
+        let style_notes = overlay_explain_notes(
+            parsed.position,
+            parsed.scale,
+            parsed.anchor,
+            &parsed.style,
+            OverlayConvention::Caption,
+        );
+        draft.explain(
+            lattice_core::Origin::Invocation {
+                command: "caption".into(),
+            },
+            format!(
+                "caption {:?} at {at} for {hold}{opacity_note}{style_notes}",
                 fragment.text
             ),
         );

@@ -1,6 +1,6 @@
 use crate::builtins::{
-    apply_commentary, lower_callout, lower_fade, lower_freeze, lower_gain, lower_speech,
-    lower_title,
+    apply_commentary, lower_callout, lower_caption, lower_fade, lower_freeze, lower_gain,
+    lower_speech, lower_title,
 };
 use crate::view::{InvocationView, LoweringError, SceneDraft};
 
@@ -18,6 +18,7 @@ impl LoweringRegistry {
             builtins: vec![
                 ("freeze", lower_freeze),
                 ("title", lower_title),
+                ("caption", lower_caption),
                 ("callout", lower_callout),
                 ("fade", lower_fade),
                 ("gain", lower_gain),
@@ -32,7 +33,7 @@ impl LoweringRegistry {
     }
 
     pub fn lower(&self, inv: &InvocationView, draft: &mut SceneDraft) -> Result<(), LoweringError> {
-        if matches!(inv.command.as_str(), "freeze" | "title")
+        if matches!(inv.command.as_str(), "freeze" | "title" | "caption")
             && let Some(wasm) = &self.wasm
         {
             return wasm.lower(inv, draft);

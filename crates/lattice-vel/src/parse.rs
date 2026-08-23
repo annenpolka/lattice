@@ -700,6 +700,22 @@ scene demo {
     }
 
     #[test]
+    fn caption_is_a_generic_invocation_not_an_ast_node() {
+        let doc = parse(r#"scene x { caption "cue" at 1s for 2s }"#).unwrap();
+        let Item::Scene { body, .. } = &doc.items[0] else {
+            panic!("expected scene");
+        };
+        let Item::Invocation(inv) = &body.items[0] else {
+            panic!("expected generic invocation");
+        };
+        assert_eq!(inv.name, "caption");
+        assert!(matches!(inv.args.first(), Some(Expr::String { value, .. }) if value == "cue"));
+        assert!(inv.modifiers.iter().any(|m| m.name == "at"));
+        assert!(inv.modifiers.iter().any(|m| m.name == "for"));
+        assert!(inv.body.is_none(), "body-less cue keeps at/for inline");
+    }
+
+    #[test]
     fn parses_negative_quantity_as_generic_expr() {
         let doc = parse(r"scene x { gain fight by -3 }").unwrap();
         let Item::Scene { body, .. } = &doc.items[0] else {

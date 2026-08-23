@@ -3,7 +3,10 @@ use lattice_core::{
     TimeMap, TimeSpan, Visual,
 };
 
-use crate::overlay_body::{OverlayConvention, overlay_explain_notes, parse_overlay_body};
+use crate::caption::merge_caption_timing;
+use crate::overlay_body::{
+    OverlayConvention, overlay_explain_notes, parse_overlay_body, parse_overlay_body_for,
+};
 use crate::view::{BodyItem, InvocationView, LoweringError, SceneDraft, ValueView};
 
 pub fn lower_freeze(inv: &InvocationView, draft: &mut SceneDraft) -> Result<(), LoweringError> {
@@ -81,6 +84,53 @@ pub fn lower_title(inv: &InvocationView, draft: &mut SceneDraft) -> Result<(), L
             command: "title".into(),
         },
         format!("title {text:?} at {at} for {hold}{opacity_note}{style_notes}"),
+    );
+    Ok(())
+}
+
+pub fn lower_caption(inv: &InvocationView, draft: &mut SceneDraft) -> Result<(), LoweringError> {
+    let text = inv
+        .args
+        .first()
+        .and_then(ValueView::as_string)
+        .ok_or_else(|| LoweringError::Message("`caption` needs a string".into()))?
+        .to_string();
+    let Some(timing) = merge_caption_timing(inv, draft) else {
+        return Ok(());
+    };
+    let at = timing.at;
+    let hold = timing.hold;
+    let opacity = body_opacity(inv);
+    let parsed = parse_overlay_body_for(inv, draft, OverlayConvention::Caption);
+    let id = draft.next_placement_id("caption");
+    let mut visual = Visual::text_overlay(text.clone());
+    visual.opacity = opacity;
+    visual.position = parsed.position;
+    visual.scale = parsed.scale;
+    visual.anchor = parsed.anchor;
+    visual.style = parsed.style.clone().into_option();
+    draft.placements.push(Placement {
+        id,
+        kind: PlacementKind::Title,
+        source_id: None,
+        span: TimeSpan::new(at, hold),
+        visual: Some(visual),
+        audio: None,
+        provenance: Provenance::invocation("caption", Some(inv.span)),
+    });
+    let opacity_note = opacity.map_or(String::new(), |value| format!(" opacity {value}"));
+    let style_notes = overlay_explain_notes(
+        parsed.position,
+        parsed.scale,
+        parsed.anchor,
+        &parsed.style,
+        OverlayConvention::Caption,
+    );
+    draft.explain(
+        Origin::Invocation {
+            command: "caption".into(),
+        },
+        format!("caption {text:?} at {at} for {hold}{opacity_note}{style_notes}"),
     );
     Ok(())
 }

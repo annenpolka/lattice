@@ -4,7 +4,7 @@ version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
-description = "Lowering registry. Wasmtime hosts freeze/title WIT; other words stay in-process until they move."
+description = "Lowering registry. Wasmtime hosts freeze/title/caption WIT; other words stay in-process until they move."
 
 [dependencies]
 lattice-core.workspace = true

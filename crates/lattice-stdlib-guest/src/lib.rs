@@ -30,22 +30,43 @@ impl Guest for Stdlib {
         opacity: Option<u8>,
         span: Span,
     ) -> Result<PlacementFragment, String> {
-        if text.is_empty() {
-            return Err("`title` needs a string".into());
-        }
-        let at = from_wit_time(at)?;
-        let hold = from_wit_time(hold)?;
-        if hold < Time::ZERO {
-            return Err("title duration must not be negative".into());
-        }
-        Ok(PlacementFragment {
-            start: to_wit_time(at),
-            duration: to_wit_time(hold),
-            text,
-            opacity,
-            span,
-        })
+        placement_fragment("title", text, at, hold, opacity, span)
     }
+
+    fn caption(
+        text: String,
+        at: RationalTime,
+        hold: RationalTime,
+        opacity: Option<u8>,
+        span: Span,
+    ) -> Result<PlacementFragment, String> {
+        placement_fragment("caption", text, at, hold, opacity, span)
+    }
+}
+
+fn placement_fragment(
+    word: &str,
+    text: String,
+    at: RationalTime,
+    hold: RationalTime,
+    opacity: Option<u8>,
+    span: Span,
+) -> Result<PlacementFragment, String> {
+    if text.is_empty() {
+        return Err(format!("`{word}` needs a string"));
+    }
+    let at = from_wit_time(at)?;
+    let hold = from_wit_time(hold)?;
+    if hold < Time::ZERO {
+        return Err(format!("{word} duration must not be negative"));
+    }
+    Ok(PlacementFragment {
+        start: to_wit_time(at),
+        duration: to_wit_time(hold),
+        text,
+        opacity,
+        span,
+    })
 }
 
 fn from_wit_time(time: RationalTime) -> Result<Time, String> {
@@ -70,10 +91,7 @@ fn from_wit_map(map: TimeMap) -> Result<CoreTimeMap, String> {
             rate: from_wit_time(segment.rate)?,
         });
     }
-    Ok(CoreTimeMap {
-        duration,
-        segments,
-    })
+    Ok(CoreTimeMap { duration, segments })
 }
 
 fn to_wit_map(map: &CoreTimeMap) -> TimeMap {

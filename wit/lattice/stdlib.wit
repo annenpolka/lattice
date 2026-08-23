@@ -38,6 +38,10 @@ interface lowering {
 
     /// Build a title placement fragment. No FFmpeg / GPUI.
     title: func(text: string, at: rational-time, hold: rational-time, opacity: option<u8>, span: span) -> result<placement-fragment, string>;
+
+    /// Build a caption cue fragment. Timing merge stays on the host.
+    /// Lowers onto the existing title overlay. No FFmpeg / GPUI / karaoke.
+    caption: func(text: string, at: rational-time, hold: rational-time, opacity: option<u8>, span: span) -> result<placement-fragment, string>;
 }
 
 world stdlib {
