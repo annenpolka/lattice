@@ -1,8 +1,8 @@
 //! CHI-87: overlay style vocab from generic VEL body into `FontSpec` / `TextNode`.
 
 use lattice_core::{
-    Canvas, OverlayBar, OverlaySize, OverlayStyle, PlacementKind, RenderNode, RenderScene, Rgba,
-    TextNode, Time, Visual, evaluate_at,
+    Canvas, OverlayAlign, OverlayBar, OverlaySize, OverlayStyle, PlacementKind, RenderNode,
+    RenderScene, Rgba, TextNode, Time, Visual, evaluate_at,
 };
 use lattice_engine::Engine;
 
@@ -355,21 +355,19 @@ fn invalid_bar_diags() {
 }
 
 #[test]
-fn align_center_stays_unknown() {
+fn align_center_is_known_style_word() {
     for word in ["title", "callout"] {
         let compilation = compile_overlay(word, "align center");
         assert!(
-            has_diag(&compilation, "LAT-OVL-003", "`align`"),
+            !compilation.has_errors(),
             "{word}: {:?}",
             compilation.diagnostics
         );
-        assert!(
-            compilation
-                .diagnostics
-                .iter()
-                .all(|diag| diag.code != "LAT-OVL-003" || diag.message.contains("`align`")),
-            "align must not be a working style word: {:?}",
-            compilation.diagnostics
+        assert_eq!(
+            overlay_visual(&compilation, word)
+                .style
+                .and_then(|s| s.align),
+            Some(OverlayAlign::Center)
         );
     }
 }
