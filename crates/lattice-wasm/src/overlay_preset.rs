@@ -812,4 +812,21 @@ mod tests {
                 .is_none()
         );
     }
+
+    #[test]
+    fn handles_document_is_only_overlay_preset() {
+        let registry = LoweringRegistry::stdlib();
+        assert!(registry.handles_document("overlay-preset"));
+        assert!(!registry.handles_document("stray"));
+        assert!(!registry.handles_document("title"));
+        let span = lattice_core::Span::new(0, 5, 1, 1);
+        let unknown = registry.unknown_document_invocation("stray", span);
+        assert_eq!(unknown.code, "LAT-DSL-001");
+        assert_eq!(unknown.span, Some(span));
+        assert!(!unknown.message.contains("Index"));
+        let invalid = registry.invalid_document_args("overlay-preset", span);
+        assert_eq!(invalid.code, INVALID_PRESET);
+        assert_eq!(invalid.span, Some(span));
+        assert!(!invalid.message.contains("Index"));
+    }
 }

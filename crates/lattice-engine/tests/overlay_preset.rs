@@ -531,6 +531,62 @@ scene intro {
 }
 
 #[test]
+fn stray_top_level_invocation_is_lat_dsl_001_with_span() {
+    let compilation = compile_with_source(
+        r#"project "overlay-preset"
+media game "capture.mp4"
+sequence main { intro }
+stray game[0s..2s]
+scene intro {
+  game[0s..4s] as clip
+}
+"#,
+    );
+    assert!(
+        compilation.has_errors(),
+        "stray must be a diagnostic, not a hard EngineError"
+    );
+    let diag = compilation
+        .diagnostics
+        .iter()
+        .find(|diag| diag.code == "LAT-DSL-001")
+        .expect("LAT-DSL-001");
+    assert!(diag.span.is_some(), "LAT-DSL-001 must carry a source span");
+    assert!(diag.message.contains("`stray`"), "{}", diag.message);
+    assert!(
+        !diag.message.contains("Index") && !diag.message.contains("Range"),
+        "user-facing error must not be a Rust Debug dump: {}",
+        diag.message
+    );
+}
+
+#[test]
+fn overlay_preset_index_arg_is_lat_ovl_015_with_span() {
+    let compilation = compile_with_source(
+        r#"project "overlay-preset"
+media game "capture.mp4"
+sequence main { intro }
+overlay-preset game[0s..2s]
+scene intro {
+  game[0s..4s] as clip
+}
+"#,
+    );
+    assert!(compilation.has_errors());
+    let diag = compilation
+        .diagnostics
+        .iter()
+        .find(|diag| diag.code == "LAT-OVL-015")
+        .expect("LAT-OVL-015");
+    assert!(diag.span.is_some(), "LAT-OVL-015 must carry a source span");
+    assert!(
+        !diag.message.contains("Index") && !diag.message.contains("Range"),
+        "user-facing error must not be a Rust Debug dump: {}",
+        diag.message
+    );
+}
+
+#[test]
 fn lower_third_explain_names_wasm_layer() {
     let compilation = compile_scene(
         r#"title "Ada Lovelace\nEditor" using lower-third {

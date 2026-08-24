@@ -66,6 +66,39 @@ impl LoweringRegistry {
     }
 
     /// Document-scope words. Engine does not match command names.
+    #[must_use]
+    pub fn handles_document(&self, command: &str) -> bool {
+        matches!(command, "overlay-preset")
+    }
+
+    /// Unknown top-level invocation (not a document-scope word).
+    #[must_use]
+    pub fn unknown_document_invocation(&self, name: &str, span: lattice_core::Span) -> Diagnostic {
+        Diagnostic::error(
+            "LAT-DSL-001",
+            format!("unknown invocation `{name}` (not a document-scope word)"),
+            Some(span),
+        )
+    }
+
+    /// Document-scope word whose arguments could not be converted.
+    #[must_use]
+    pub fn invalid_document_args(&self, command: &str, span: lattice_core::Span) -> Diagnostic {
+        match command {
+            "overlay-preset" => Diagnostic::error(
+                crate::overlay_preset::INVALID_PRESET,
+                "unsupported argument in `overlay-preset`",
+                Some(span),
+            ),
+            other => Diagnostic::error(
+                "LAT-DSL-001",
+                format!("unsupported argument in `{other}`"),
+                Some(span),
+            ),
+        }
+    }
+
+    /// Document-scope words. Engine does not match command names.
     pub fn lower_document(
         &self,
         inv: &InvocationView,

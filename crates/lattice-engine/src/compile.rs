@@ -449,7 +449,7 @@ impl Engine {
             &mut overlay_presets,
             &mut diagnostics,
             &mut explain,
-        )?;
+        );
 
         for item in document.items.iter().chain(nested_items(document)) {
             if let Item::Sequence { name, body, .. } = item {
@@ -584,17 +584,26 @@ fn collect_document_invocations(
     presets: &mut OverlayPresetRegistry,
     diagnostics: &mut Vec<Diagnostic>,
     explain: &mut Vec<ExplainEvent>,
-) -> Result<(), EngineError> {
+) {
     for item in document.items.iter().chain(nested_items(document)) {
         let Item::Invocation(inv) = item else {
             continue;
         };
-        let view = invocation_view(inv)?;
-        if let Some(line) = registry.lower_document(&view, presets, diagnostics) {
-            explain.push(to_event(line));
+        if !registry.handles_document(&inv.name) {
+            diagnostics.push(registry.unknown_document_invocation(&inv.name, inv.span));
+            continue;
+        }
+        match invocation_view(inv) {
+            Ok(view) => {
+                if let Some(line) = registry.lower_document(&view, presets, diagnostics) {
+                    explain.push(to_event(line));
+                }
+            }
+            Err(_) => {
+                diagnostics.push(registry.invalid_document_args(&inv.name, inv.span));
+            }
         }
     }
-    Ok(())
 }
 
 fn collect_header(document: &Document, project: &mut Project, diagnostics: &mut Vec<Diagnostic>) {
