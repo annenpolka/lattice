@@ -11,7 +11,9 @@ use lattice_media::{
     probe_media,
 };
 use lattice_vel::{Document, Expr, Item, ParseError};
-use lattice_wasm::{ExplainLine, LoweringRegistry, SceneDraft};
+use lattice_wasm::{
+    ExplainLine, LoweringRegistry, OverlayPresetRegistry, SceneDraft, register_dsl_preset,
+};
 use serde::Serialize;
 use thiserror::Error;
 
@@ -88,6 +90,11 @@ impl Default for Engine {
 }
 
 impl Engine {
+    #[must_use]
+    pub fn with_registry(registry: LoweringRegistry) -> Self {
+        Self { registry }
+    }
+
     pub fn compile(&self, source: &str) -> Result<Compilation, EngineError> {
         self.compile_origin(source, None)
     }
@@ -436,6 +443,13 @@ impl Engine {
         let mut diagnostics = Vec::new();
         let mut explain = Vec::new();
         collect_header(document, &mut project, &mut diagnostics);
+        let mut overlay_presets = self.registry.overlay_presets();
+        collect_overlay_presets(
+            document,
+            &mut overlay_presets,
+            &mut diagnostics,
+            &mut explain,
+        )?;
 
         for item in document.items.iter().chain(nested_items(document)) {
             if let Item::Sequence { name, body, .. } = item {
@@ -464,49 +478,14 @@ impl Engine {
             }
         }
 
-        for item in &document.items {
-            let Item::Scene {
-                name,
-                over,
-                body,
-                span,
-            } = item
-            else {
-                continue;
-            };
-            let mut draft = SceneDraft {
-                name: name.clone(),
-                over: over.as_ref().map(over_path),
-                sources: Vec::new(),
-                placements: Vec::new(),
-                media: Vec::new(),
-                source_fade_in: Vec::new(),
-                source_gain_db: Vec::new(),
-                explain: Vec::new(),
-                diagnostics: Vec::new(),
-            };
-            for inner in &body.items {
-                match inner {
-                    Item::Binding { expr, name, span } => {
-                        draft.sources.push(binding_source(name, expr, *span)?);
-                    }
-                    Item::Invocation(inv) => {
-                        let view = invocation_view(inv)?;
-                        self.registry
-                            .lower(&view, &mut draft)
-                            .map_err(|err| TimeEvalError::Message(err.to_string()))?;
-                    }
-                    _ => {}
-                }
-            }
-            self.registry
-                .apply_convention(project.convention.as_deref(), &mut draft);
-            explain.extend(draft.explain.iter().cloned().map(to_event));
-            diagnostics.append(&mut draft.diagnostics);
-            validate_scene(&draft, *span, &mut diagnostics);
-            project.media.append(&mut draft.media);
-            project.scenes.push(draft.finish(format!("scene:{name}")));
-        }
+        compile_scenes(
+            document,
+            &self.registry,
+            &overlay_presets,
+            &mut project,
+            &mut diagnostics,
+            &mut explain,
+        )?;
 
         if project.name == "untitled" {
             diagnostics.push(Diagnostic::warning(
@@ -543,6 +522,81 @@ fn nested_items(document: &Document) -> impl Iterator<Item = &Item> {
         };
         items.iter()
     })
+}
+
+fn compile_scenes(
+    document: &Document,
+    registry: &LoweringRegistry,
+    overlay_presets: &OverlayPresetRegistry,
+    project: &mut Project,
+    diagnostics: &mut Vec<Diagnostic>,
+    explain: &mut Vec<ExplainEvent>,
+) -> Result<(), EngineError> {
+    for item in &document.items {
+        let Item::Scene {
+            name,
+            over,
+            body,
+            span,
+        } = item
+        else {
+            continue;
+        };
+        let mut draft = SceneDraft {
+            name: name.clone(),
+            over: over.as_ref().map(over_path),
+            sources: Vec::new(),
+            placements: Vec::new(),
+            media: Vec::new(),
+            source_fade_in: Vec::new(),
+            source_gain_db: Vec::new(),
+            explain: Vec::new(),
+            diagnostics: Vec::new(),
+            overlay_presets: overlay_presets.clone(),
+        };
+        for inner in &body.items {
+            match inner {
+                Item::Binding { expr, name, span } => {
+                    draft.sources.push(binding_source(name, expr, *span)?);
+                }
+                Item::Invocation(inv) => {
+                    let view = invocation_view(inv)?;
+                    registry
+                        .lower(&view, &mut draft)
+                        .map_err(|err| TimeEvalError::Message(err.to_string()))?;
+                }
+                _ => {}
+            }
+        }
+        registry.apply_convention(project.convention.as_deref(), &mut draft);
+        explain.extend(draft.explain.iter().cloned().map(to_event));
+        diagnostics.append(&mut draft.diagnostics);
+        validate_scene(&draft, *span, diagnostics);
+        project.media.append(&mut draft.media);
+        project.scenes.push(draft.finish(format!("scene:{name}")));
+    }
+    Ok(())
+}
+
+fn collect_overlay_presets(
+    document: &Document,
+    presets: &mut OverlayPresetRegistry,
+    diagnostics: &mut Vec<Diagnostic>,
+    explain: &mut Vec<ExplainEvent>,
+) -> Result<(), EngineError> {
+    for item in document.items.iter().chain(nested_items(document)) {
+        let Item::Invocation(inv) = item else {
+            continue;
+        };
+        if inv.name != "overlay-preset" {
+            continue;
+        }
+        let view = invocation_view(inv)?;
+        if let Some(line) = register_dsl_preset(&view, presets, diagnostics) {
+            explain.push(to_event(line));
+        }
+    }
+    Ok(())
 }
 
 fn collect_header(document: &Document, project: &mut Project, diagnostics: &mut Vec<Diagnostic>) {

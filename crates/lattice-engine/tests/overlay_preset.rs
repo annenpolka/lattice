@@ -1,10 +1,10 @@
-//! CHI-85: `title using lower-third` is a stdlib preset, not a Core kind.
+//! CHI-85 / CHI-92: `using IDENT` looks up an extensible overlay-preset registry.
 
 use lattice_core::{
-    Canvas, OverlayBar, OverlaySize, PlacementKind, RenderNode, RenderScene, Rgba, TextNode, Time,
-    Visual, evaluate_at,
+    Canvas, OverlayBar, OverlaySize, OverlayStyle, PlacementKind, RenderNode, RenderScene, Rgba,
+    TextNode, Time, Visual, evaluate_at,
 };
-use lattice_engine::Engine;
+use lattice_engine::{Engine, LoweringRegistry, OverlayPresetSource};
 
 fn compile_scene(inner: &str) -> lattice_engine::Compilation {
     let source = format!(
@@ -293,4 +293,189 @@ fn caption_using_lower_third_still_diags() {
         "{:?}",
         compilation.diagnostics
     );
+}
+
+fn compile_with_source(source: &str) -> lattice_engine::Compilation {
+    Engine::default().compile(source).unwrap()
+}
+
+#[test]
+fn dsl_overlay_preset_applies_on_title_using() {
+    let compilation = compile_with_source(
+        r##"project "overlay-preset"
+media game "capture.mp4"
+sequence main { intro }
+overlay-preset name-plate {
+  bar "#FFFF00"
+  size 90%
+  family "LatticeSans"
+}
+scene intro {
+  game[0s..4s] as clip
+  title "Ada Lovelace\nEditor" using name-plate {
+    at 0s for 3s
+  }
+}
+"##,
+    );
+    assert!(!compilation.has_errors(), "{:?}", compilation.diagnostics);
+    let visual = title_visual(&compilation);
+    let style = visual
+        .style
+        .as_ref()
+        .expect("dsl preset fills OverlayStyle");
+    assert_eq!(
+        style.bar,
+        Some(OverlayBar::Fill {
+            color: Rgba::YELLOW
+        })
+    );
+    assert_eq!(style.size, Some(OverlaySize::Percent { milli: 900 }));
+    assert_eq!(style.family.as_deref(), Some("LatticeSans"));
+    let json = serde_json::to_string(&visual).unwrap();
+    assert!(!json.contains("name-plate"));
+    assert!(!json.contains("overlay-preset"));
+    assert!(
+        compilation.explain.iter().any(|event| event
+            .message
+            .contains("overlay-preset `name-plate` registered")),
+        "{:?}",
+        compilation.explain
+    );
+    assert!(
+        compilation
+            .explain
+            .iter()
+            .any(|event| event.message.contains("using name-plate")),
+        "{:?}",
+        compilation.explain
+    );
+}
+
+#[test]
+fn wasm_registered_ident_applies_on_title_using() {
+    let mut registry = LoweringRegistry::stdlib();
+    registry
+        .register_overlay_preset(
+            "guest-plate",
+            OverlayStyle {
+                size: Some(OverlaySize::Percent { milli: 500 }),
+                family: Some("GuestSans".into()),
+                bar: Some(OverlayBar::Fill {
+                    color: Rgba::from_hex_rrggbb("#00FF00").unwrap(),
+                }),
+                ..OverlayStyle::default()
+            },
+            OverlayPresetSource::Wasm,
+        )
+        .unwrap();
+    let source = r#"project "overlay-preset"
+media game "capture.mp4"
+sequence main { intro }
+scene intro {
+  game[0s..4s] as clip
+  title "Ada Lovelace\nEditor" using guest-plate {
+    at 0s for 3s
+  }
+}
+"#;
+    let compilation = Engine::with_registry(registry).compile(source).unwrap();
+    assert!(!compilation.has_errors(), "{:?}", compilation.diagnostics);
+    let style = title_visual(&compilation).style.expect("wasm preset");
+    assert_eq!(style.size, Some(OverlaySize::Percent { milli: 500 }));
+    assert_eq!(style.family.as_deref(), Some("GuestSans"));
+    assert_eq!(
+        style.bar,
+        Some(OverlayBar::Fill {
+            color: Rgba::from_hex_rrggbb("#00FF00").unwrap()
+        })
+    );
+    let json = serde_json::to_string(&title_visual(&compilation)).unwrap();
+    assert!(!json.contains("guest-plate"));
+}
+
+#[test]
+fn dsl_redefinition_is_lowering_diag_not_overwrite() {
+    let compilation = compile_with_source(
+        r#"project "overlay-preset"
+media game "capture.mp4"
+sequence main { intro }
+overlay-preset name-plate {
+  family "FirstSans"
+}
+overlay-preset name-plate {
+  family "SecondSans"
+}
+scene intro {
+  game[0s..4s] as clip
+  title "Ada Lovelace\nEditor" using name-plate {
+    at 0s for 3s
+  }
+}
+"#,
+    );
+    assert!(
+        has_diag(&compilation, "LAT-OVL-014", "`name-plate`"),
+        "{:?}",
+        compilation.diagnostics
+    );
+    let style = title_visual(&compilation)
+        .style
+        .expect("first registration");
+    assert_eq!(style.family.as_deref(), Some("FirstSans"));
+}
+
+#[test]
+fn dsl_overlay_preset_geometry_is_invalid() {
+    let compilation = compile_with_source(
+        r#"project "overlay-preset"
+media game "capture.mp4"
+sequence main { intro }
+overlay-preset name-plate {
+  family "LatticeSans"
+  position (10%, 20%)
+}
+scene intro {
+  game[0s..4s] as clip
+  title "Ada Lovelace\nEditor" using name-plate {
+    at 0s for 3s
+  }
+}
+"#,
+    );
+    assert!(
+        has_diag(&compilation, "LAT-OVL-015", "`position`"),
+        "{:?}",
+        compilation.diagnostics
+    );
+    let style = title_visual(&compilation)
+        .style
+        .expect("style still registers");
+    assert_eq!(style.family.as_deref(), Some("LatticeSans"));
+    assert!(title_visual(&compilation).position.is_none());
+}
+
+#[test]
+fn explicit_body_wins_over_dsl_preset() {
+    let compilation = compile_with_source(
+        r##"project "overlay-preset"
+media game "capture.mp4"
+sequence main { intro }
+overlay-preset name-plate {
+  color "#FFFF00"
+  size 90%
+}
+scene intro {
+  game[0s..4s] as clip
+  title "Ada Lovelace\nEditor" using name-plate {
+    at 0s for 3s
+    color "#00FF00"
+  }
+}
+"##,
+    );
+    assert!(!compilation.has_errors(), "{:?}", compilation.diagnostics);
+    let style = title_visual(&compilation).style.expect("merged");
+    assert_eq!(style.color, Rgba::from_hex_rrggbb("#00FF00"));
+    assert_eq!(style.size, Some(OverlaySize::Percent { milli: 900 }));
 }

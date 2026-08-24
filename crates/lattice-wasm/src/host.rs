@@ -3,8 +3,8 @@
 //! No ambient network, filesystem, or random. Components emit Core semantics.
 
 use lattice_core::{
-    Placement, PlacementKind, Provenance, Span as CoreSpan, Time, TimeMap as CoreTimeMap,
-    TimeMapSegment as CoreSegment, Visual,
+    OverlayAlign, OverlayBar, OverlaySize, OverlayStyle, Placement, PlacementKind, Provenance,
+    Rgba, Span as CoreSpan, Time, TimeMap as CoreTimeMap, TimeMapSegment as CoreSegment, Visual,
 };
 
 use crate::caption::merge_caption_timing;
@@ -19,7 +19,8 @@ wasmtime::component::bindgen!({
 });
 
 use exports::lattice::stdlib::lowering::{
-    RationalTime, Span as WitSpan, TimeMap as WitTimeMap, TimeMapSegment as WitSegment,
+    OverlayStyle as WitOverlayStyle, RationalTime, Span as WitSpan, TimeMap as WitTimeMap,
+    TimeMapSegment as WitSegment,
 };
 
 const STDLIB_WASM: &[u8] = include_bytes!("../../../stdlib/lattice-stdlib.wasm");
@@ -59,6 +60,18 @@ impl WasmStdlib {
             component,
             linker,
         })
+    }
+
+    pub fn overlay_presets(&self) -> Result<Vec<(String, OverlayStyle)>, LoweringError> {
+        let (mut store, bindings) = self.instantiate()?;
+        let entries = bindings
+            .lattice_stdlib_lowering()
+            .call_overlay_presets(&mut store)
+            .map_err(map_err)?;
+        entries
+            .into_iter()
+            .map(|(name, style)| Ok((name, from_wit_overlay_style(&style)?)))
+            .collect()
     }
 
     pub fn lower(&self, inv: &InvocationView, draft: &mut SceneDraft) -> Result<(), LoweringError> {
@@ -329,6 +342,57 @@ fn from_wit_map(map: &WitTimeMap) -> Result<CoreTimeMap, LoweringError> {
     Ok(CoreTimeMap {
         duration: from_wit_time(map.duration)?,
         segments,
+    })
+}
+
+fn from_wit_overlay_style(style: &WitOverlayStyle) -> Result<OverlayStyle, LoweringError> {
+    let color = style
+        .color
+        .as_deref()
+        .map(|hex| {
+            Rgba::from_hex_rrggbb(hex).ok_or_else(|| {
+                LoweringError::Message(format!("invalid overlay-preset color `{hex}`"))
+            })
+        })
+        .transpose()?;
+    let size = match (style.size_milli, style.size_px) {
+        (Some(milli), None) => Some(OverlaySize::Percent { milli }),
+        (None, Some(px)) => Some(OverlaySize::Px { px }),
+        (None, None) => None,
+        (Some(_), Some(_)) => {
+            return Err(LoweringError::Message(
+                "overlay-preset size cannot set both milli and px".into(),
+            ));
+        }
+    };
+    let bar = match style.bar.as_deref() {
+        None => None,
+        Some("off") => Some(OverlayBar::Off),
+        Some(hex) => {
+            let color = Rgba::from_hex_rrggbb(hex).ok_or_else(|| {
+                LoweringError::Message(format!("invalid overlay-preset bar `{hex}`"))
+            })?;
+            Some(OverlayBar::Fill { color })
+        }
+    };
+    let align = match style.align.as_deref() {
+        None => None,
+        Some("left") => Some(OverlayAlign::Left),
+        Some("center") => Some(OverlayAlign::Center),
+        Some("right") => Some(OverlayAlign::Right),
+        Some(other) => {
+            return Err(LoweringError::Message(format!(
+                "invalid overlay-preset align `{other}`"
+            )));
+        }
+    };
+    Ok(OverlayStyle {
+        color,
+        size,
+        weight: style.weight,
+        family: style.family.clone(),
+        bar,
+        align,
     })
 }
 

@@ -790,4 +790,49 @@ scene demo {
             using.value
         );
     }
+
+    #[test]
+    fn overlay_preset_is_a_generic_invocation_not_a_declaration() {
+        let source = r##"
+overlay-preset name-plate {
+  bar "#FFFF00"
+  size 90%
+  family "LatticeSans"
+}
+scene x { title "Ada Lovelace\nEditor" using name-plate }
+"##;
+        let doc = parse(source).unwrap();
+        let Item::Invocation(preset) = &doc.items[0] else {
+            panic!(
+                "overlay-preset must stay a generic invocation: {:?}",
+                doc.items[0]
+            );
+        };
+        assert_eq!(preset.name, "overlay-preset");
+        assert!(
+            matches!(&preset.args[0], Expr::Ident { name, .. } if name == "name-plate"),
+            "IDENT is generic: {:?}",
+            preset.args[0]
+        );
+        assert!(
+            !DECLARATIONS.contains(&"overlay-preset"),
+            "parser must not bake overlay-preset into DECLARATIONS"
+        );
+        let Item::Scene { body, .. } = &doc.items[1] else {
+            panic!("expected scene");
+        };
+        let Item::Invocation(title) = &body.items[0] else {
+            panic!("expected title");
+        };
+        let using = title
+            .modifiers
+            .iter()
+            .find(|m| m.name == "using")
+            .expect("using stays a generic modifier");
+        assert!(
+            matches!(&using.value, Expr::Ident { name, .. } if name == "name-plate"),
+            "{:?}",
+            using.value
+        );
+    }
 }
