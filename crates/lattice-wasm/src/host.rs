@@ -3,8 +3,8 @@
 //! No ambient network, filesystem, or random. Components emit Core semantics.
 
 use lattice_core::{
-    Placement, PlacementKind, Provenance, Span as CoreSpan, Time, TimeMap as CoreTimeMap,
-    TimeMapSegment as CoreSegment, Visual,
+    OverlayAlign, OverlayBar, OverlaySize, OverlayStyle, Placement, PlacementKind, Provenance,
+    Rgba, Span as CoreSpan, Time, TimeMap as CoreTimeMap, TimeMapSegment as CoreSegment, Visual,
 };
 
 use crate::caption::merge_caption_timing;
@@ -19,7 +19,8 @@ wasmtime::component::bindgen!({
 });
 
 use exports::lattice::stdlib::lowering::{
-    RationalTime, Span as WitSpan, TimeMap as WitTimeMap, TimeMapSegment as WitSegment,
+    OverlayStyle as WitOverlayStyle, RationalTime, Span as WitSpan, TimeMap as WitTimeMap,
+    TimeMapSegment as WitSegment,
 };
 
 const STDLIB_WASM: &[u8] = include_bytes!("../../../stdlib/lattice-stdlib.wasm");
@@ -59,6 +60,18 @@ impl WasmStdlib {
             component,
             linker,
         })
+    }
+
+    pub fn overlay_presets(&self) -> Result<Vec<(String, OverlayStyle)>, LoweringError> {
+        let (mut store, bindings) = self.instantiate()?;
+        let entries = bindings
+            .lattice_stdlib_lowering()
+            .call_overlay_presets(&mut store)
+            .map_err(map_err)?;
+        entries
+            .into_iter()
+            .map(|(name, style)| Ok((name, from_wit_overlay_style(&style)?)))
+            .collect()
     }
 
     pub fn lower(&self, inv: &InvocationView, draft: &mut SceneDraft) -> Result<(), LoweringError> {
@@ -174,10 +187,10 @@ impl WasmStdlib {
         let opacity_note = fragment
             .opacity
             .map_or(String::new(), |value| format!(" opacity {value}"));
-        let preset_note = parsed
-            .applied_preset
-            .map(|name| format!(" using {name}"))
-            .unwrap_or_default();
+        let preset_note = crate::overlay_preset::preset_explain_note(
+            parsed.applied_preset.as_deref(),
+            parsed.applied_preset_source,
+        );
         let style_notes = overlay_explain_notes(
             parsed.position,
             parsed.scale,
@@ -332,6 +345,160 @@ fn from_wit_map(map: &WitTimeMap) -> Result<CoreTimeMap, LoweringError> {
     })
 }
 
+fn from_wit_overlay_style(style: &WitOverlayStyle) -> Result<OverlayStyle, LoweringError> {
+    let color = style
+        .color
+        .as_deref()
+        .map(|hex| {
+            Rgba::from_hex_rrggbb(hex).ok_or_else(|| {
+                LoweringError::Message(format!("invalid overlay-preset color `{hex}`"))
+            })
+        })
+        .transpose()?;
+    let size = match (style.size_milli, style.size_px) {
+        (Some(milli), None) => Some(OverlaySize::Percent { milli }),
+        (None, Some(px)) => Some(OverlaySize::Px { px }),
+        (None, None) => None,
+        (Some(_), Some(_)) => {
+            return Err(LoweringError::Message(
+                "overlay-preset size cannot set both milli and px".into(),
+            ));
+        }
+    };
+    let bar = match style.bar.as_deref() {
+        None => None,
+        Some("off") => Some(OverlayBar::Off),
+        Some(hex) => {
+            let color = Rgba::from_hex_rrggbb(hex).ok_or_else(|| {
+                LoweringError::Message(format!("invalid overlay-preset bar `{hex}`"))
+            })?;
+            Some(OverlayBar::Fill { color })
+        }
+    };
+    let align = match style.align.as_deref() {
+        None => None,
+        Some("left") => Some(OverlayAlign::Left),
+        Some("center") => Some(OverlayAlign::Center),
+        Some("right") => Some(OverlayAlign::Right),
+        Some(other) => {
+            return Err(LoweringError::Message(format!(
+                "invalid overlay-preset align `{other}`"
+            )));
+        }
+    };
+    Ok(OverlayStyle {
+        color,
+        size,
+        weight: style.weight,
+        family: style.family.clone(),
+        bar,
+        align,
+    })
+}
+
 fn map_err(err: impl std::fmt::Display) -> LoweringError {
     LoweringError::Message(err.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn empty_wit() -> WitOverlayStyle {
+        WitOverlayStyle {
+            color: None,
+            size_milli: None,
+            size_px: None,
+            weight: None,
+            family: None,
+            bar: None,
+            align: None,
+        }
+    }
+
+    #[test]
+    fn from_wit_maps_color_size_px_weight_align_bar_off() {
+        let style = from_wit_overlay_style(&WitOverlayStyle {
+            color: Some("#00FF00".into()),
+            size_milli: None,
+            size_px: Some(24),
+            weight: Some(700),
+            family: Some("GuestSans".into()),
+            bar: Some("off".into()),
+            align: Some("center".into()),
+        })
+        .unwrap();
+        assert_eq!(style.color, Rgba::from_hex_rrggbb("#00FF00"));
+        assert_eq!(style.size, Some(OverlaySize::Px { px: 24 }));
+        assert_eq!(style.weight, Some(700));
+        assert_eq!(style.family.as_deref(), Some("GuestSans"));
+        assert_eq!(style.bar, Some(OverlayBar::Off));
+        assert_eq!(style.align, Some(OverlayAlign::Center));
+    }
+
+    #[test]
+    fn from_wit_maps_size_milli_and_bar_fill() {
+        let style = from_wit_overlay_style(&WitOverlayStyle {
+            size_milli: Some(900),
+            bar: Some("#FFFF00".into()),
+            align: Some("left".into()),
+            ..empty_wit()
+        })
+        .unwrap();
+        assert_eq!(style.size, Some(OverlaySize::Percent { milli: 900 }));
+        assert_eq!(
+            style.bar,
+            Some(OverlayBar::Fill {
+                color: Rgba::YELLOW
+            })
+        );
+        assert_eq!(style.align, Some(OverlayAlign::Left));
+    }
+
+    #[test]
+    fn from_wit_rejects_milli_and_px_together() {
+        let err = from_wit_overlay_style(&WitOverlayStyle {
+            size_milli: Some(900),
+            size_px: Some(24),
+            ..empty_wit()
+        })
+        .unwrap_err();
+        assert!(err.to_string().contains("both milli and px"), "{err}");
+    }
+
+    #[test]
+    fn from_wit_rejects_invalid_color_and_bar_hex() {
+        let color = from_wit_overlay_style(&WitOverlayStyle {
+            color: Some("green".into()),
+            ..empty_wit()
+        })
+        .unwrap_err();
+        assert!(color.to_string().contains("color"), "{color}");
+        let bar = from_wit_overlay_style(&WitOverlayStyle {
+            bar: Some("yellow".into()),
+            ..empty_wit()
+        })
+        .unwrap_err();
+        assert!(bar.to_string().contains("bar"), "{bar}");
+    }
+
+    #[test]
+    fn from_wit_rejects_invalid_align() {
+        let err = from_wit_overlay_style(&WitOverlayStyle {
+            align: Some("middle".into()),
+            ..empty_wit()
+        })
+        .unwrap_err();
+        assert!(err.to_string().contains("align"), "{err}");
+    }
+
+    #[test]
+    fn from_wit_maps_align_right() {
+        let style = from_wit_overlay_style(&WitOverlayStyle {
+            align: Some("right".into()),
+            ..empty_wit()
+        })
+        .unwrap();
+        assert_eq!(style.align, Some(OverlayAlign::Right));
+    }
 }

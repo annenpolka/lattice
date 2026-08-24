@@ -15,7 +15,8 @@ pub fn expr_time(expr: &Expr) -> Result<Time, TimeEvalError> {
         Expr::Time(literal) => literal_time(literal),
         Expr::Quantity(q) if q.is_time_unit() => quantity_time(q),
         other => Err(TimeEvalError::Message(format!(
-            "expected a time, got {other:?}"
+            "expected a time, got {}",
+            expr_kind(other)
         ))),
     }
 }
@@ -65,6 +66,20 @@ fn quantity_time(q: &Quantity) -> Result<Time, TimeEvalError> {
             span: q.span,
         },
     })
+}
+
+pub fn expr_kind(expr: &Expr) -> &'static str {
+    match expr {
+        Expr::String { .. } => "string",
+        Expr::Ident { .. } => "ident",
+        Expr::Path { .. } => "path",
+        Expr::Quantity(_) => "quantity",
+        Expr::Time(_) => "time",
+        Expr::Range { .. } => "range",
+        Expr::Index { .. } => "index",
+        Expr::Tuple { .. } => "tuple",
+        Expr::End { .. } => "end",
+    }
 }
 
 pub fn expr_name(expr: &Expr) -> Option<String> {

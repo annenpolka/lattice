@@ -61,7 +61,9 @@ pub struct OverlayBody {
     pub anchor: Option<OverlayAnchor>,
     pub style: OverlayStyle,
     /// Applied title preset IDENT, for explain only. Never written to Core.
-    pub applied_preset: Option<&'static str>,
+    pub applied_preset: Option<String>,
+    /// Layer that supplied the IDENT. Explain only.
+    pub applied_preset_source: Option<crate::overlay_registry::OverlayPresetSource>,
 }
 
 /// Shared by builtins and the Wasm host. Invalid style values diag; they do not silent-drop.
@@ -80,7 +82,7 @@ pub fn parse_overlay_body_for(
     let anchor = body_anchor(inv, draft);
     let mut style = body_style(inv, draft);
     diagnose_unknown_overlay_body(inv, draft);
-    let applied_preset = apply_using_preset(
+    let applied = apply_using_preset(
         inv,
         draft,
         convention == OverlayConvention::Title,
@@ -94,7 +96,8 @@ pub fn parse_overlay_body_for(
         scale,
         anchor,
         style,
-        applied_preset,
+        applied_preset: applied.as_ref().map(|(name, _)| name.clone()),
+        applied_preset_source: applied.map(|(_, source)| source),
     }
 }
 
@@ -240,6 +243,13 @@ fn body_anchor(inv: &InvocationView, draft: &mut SceneDraft) -> Option<OverlayAn
 
 fn parse_overlay_anchor(value: &ValueView) -> Option<OverlayAnchor> {
     OverlayAnchor::from_name(value.as_name()?)
+}
+
+pub(crate) fn parse_overlay_style_fields(
+    inv: &InvocationView,
+    draft: &mut SceneDraft,
+) -> OverlayStyle {
+    body_style(inv, draft)
 }
 
 fn body_style(inv: &InvocationView, draft: &mut SceneDraft) -> OverlayStyle {
@@ -500,14 +510,7 @@ mod tests {
     fn draft() -> SceneDraft {
         SceneDraft {
             name: "intro".into(),
-            over: None,
-            sources: Vec::new(),
-            placements: Vec::new(),
-            media: Vec::new(),
-            source_fade_in: Vec::new(),
-            source_gain_db: Vec::new(),
-            explain: Vec::new(),
-            diagnostics: Vec::new(),
+            ..SceneDraft::default()
         }
     }
 

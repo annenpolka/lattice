@@ -151,6 +151,63 @@ scene shot {
 }
 
 #[test]
+fn compile_json_stray_top_level_has_diagnostic_payload() {
+    let dir = std::env::temp_dir().join("lattice-cli-stray-top-level");
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let vel = dir.join("main.vel");
+    std::fs::write(
+        &vel,
+        r#"project "stray"
+
+media game "capture.mp4"
+
+sequence main {
+  shot
+}
+
+stray game[0s..2s]
+
+scene shot {
+  game[0s..1s] as clip
+}
+"#,
+    )
+    .unwrap();
+    let output = Command::new(lattice_bin())
+        .args(["--json", "compile", vel.to_str().unwrap()])
+        .output()
+        .expect("spawn compile");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert_eq!(
+        output.status.code(),
+        Some(1),
+        "compile diagnostics use exit 1 with JSON, not exit 2 Debug: {stderr}\n{stdout}"
+    );
+    let payload: serde_json::Value = serde_json::from_str(&stdout).expect("compile JSON");
+    assert_eq!(payload["ok"], false);
+    let diagnostics = payload["diagnostics"]
+        .as_array()
+        .expect("diagnostics array");
+    let stray = diagnostics
+        .iter()
+        .find(|diag| diag["code"] == "LAT-DSL-001")
+        .expect("LAT-DSL-001");
+    assert!(stray["span"].is_object(), "{stray}");
+    assert!(
+        stray["message"]
+            .as_str()
+            .is_some_and(|message| message.contains("`stray`")),
+        "{stray}"
+    );
+    assert!(
+        !stdout.contains("Index") && !stderr.contains("Index"),
+        "must not leak Rust Debug: {stderr}\n{stdout}"
+    );
+}
+
+#[test]
 fn gpu_json_failure_is_machine_readable() {
     let dir = std::env::temp_dir().join("lattice-cli-gpu-json");
     let _ = std::fs::remove_dir_all(&dir);

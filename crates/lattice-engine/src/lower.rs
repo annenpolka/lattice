@@ -1,7 +1,7 @@
 use lattice_vel::{Block, Expr, Item};
 use lattice_wasm::{BodyItem, InvocationView, ValueView};
 
-use crate::time_eval::{TimeEvalError, expr_time};
+use crate::time_eval::{TimeEvalError, expr_kind, expr_time};
 
 pub fn invocation_view(inv: &lattice_vel::Invocation) -> Result<InvocationView, TimeEvalError> {
     Ok(InvocationView {
@@ -66,7 +66,8 @@ fn value_view(expr: &Expr) -> Result<ValueView, TimeEvalError> {
             "`end` is only valid inside a range".into(),
         )),
         other => Err(TimeEvalError::Message(format!(
-            "unsupported argument {other:?}"
+            "unsupported argument ({})",
+            expr_kind(other)
         ))),
     }
 }

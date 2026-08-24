@@ -4,6 +4,8 @@ use lattice_core::{
 };
 use thiserror::Error;
 
+use crate::overlay_registry::OverlayPresetRegistry;
+
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
 pub enum LoweringError {
     #[error("{0}")]
@@ -137,7 +139,7 @@ pub struct ExplainLine {
     pub message: String,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct SceneDraft {
     pub name: String,
     pub over: Option<String>,
@@ -148,6 +150,8 @@ pub struct SceneDraft {
     pub source_gain_db: Vec<(String, i32)>,
     pub explain: Vec<ExplainLine>,
     pub diagnostics: Vec<Diagnostic>,
+    /// Document-scoped title presets. Core never sees the IDENT.
+    pub overlay_presets: OverlayPresetRegistry,
 }
 
 impl SceneDraft {

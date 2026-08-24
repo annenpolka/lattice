@@ -42,6 +42,20 @@ interface lowering {
     /// Build a caption cue fragment. Timing merge stays on the host.
     /// Lowers onto the existing title overlay. No FFmpeg / GPUI / karaoke.
     caption: func(text: string, at: rational-time, hold: rational-time, opacity: option<u8>, span: span) -> result<placement-fragment, string>;
+
+    /// Title overlay style fields only. No position / scale / anchor.
+    record overlay-style {
+        color: option<string>,
+        size-milli: option<u16>,
+        size-px: option<u32>,
+        weight: option<u16>,
+        family: option<string>,
+        bar: option<string>,
+        align: option<string>,
+    }
+
+    /// Guest-provided title presets. Host registers these at stdlib init.
+    overlay-presets: func() -> list<tuple<string, overlay-style>>;
 }
 
 world stdlib {

@@ -6,9 +6,13 @@ wit_bindgen::generate!({
 });
 
 use crate::exports::lattice::stdlib::lowering::{
-    Guest, PlacementFragment, RationalTime, Span, TimeMap, TimeMapSegment,
+    Guest, OverlayStyle as WitOverlayStyle, PlacementFragment, RationalTime, Span, TimeMap,
+    TimeMapSegment,
 };
-use lattice_core::{Time, TimeMap as CoreTimeMap, TimeMapSegment as CoreSegment};
+use lattice_core::{
+    OverlayAlign, OverlayBar, OverlaySize, OverlayStyle, Rgba, Time, TimeMap as CoreTimeMap,
+    TimeMapSegment as CoreSegment,
+};
 
 struct Stdlib;
 
@@ -41,6 +45,20 @@ impl Guest for Stdlib {
         span: Span,
     ) -> Result<PlacementFragment, String> {
         placement_fragment("caption", text, at, hold, opacity, span)
+    }
+
+    fn overlay_presets() -> Vec<(String, WitOverlayStyle)> {
+        vec![(
+            "lower-third".into(),
+            to_wit_overlay_style(&OverlayStyle {
+                size: Some(OverlaySize::Percent { milli: 900 }),
+                family: Some("LatticeSans".into()),
+                bar: Some(OverlayBar::Fill {
+                    color: Rgba::YELLOW,
+                }),
+                ..OverlayStyle::default()
+            }),
+        )]
     }
 }
 
@@ -92,6 +110,32 @@ fn from_wit_map(map: TimeMap) -> Result<CoreTimeMap, String> {
         });
     }
     Ok(CoreTimeMap { duration, segments })
+}
+
+fn to_wit_overlay_style(style: &OverlayStyle) -> WitOverlayStyle {
+    WitOverlayStyle {
+        color: style.color.map(Rgba::to_hex_rrggbb),
+        size_milli: match style.size {
+            Some(OverlaySize::Percent { milli }) => Some(milli),
+            _ => None,
+        },
+        size_px: match style.size {
+            Some(OverlaySize::Px { px }) => Some(px),
+            _ => None,
+        },
+        weight: style.weight,
+        family: style.family.clone(),
+        bar: match style.bar {
+            Some(OverlayBar::Off) => Some("off".into()),
+            Some(OverlayBar::Fill { color }) => Some(color.to_hex_rrggbb()),
+            None => None,
+        },
+        align: style.align.map(|align| match align {
+            OverlayAlign::Left => "left".into(),
+            OverlayAlign::Center => "center".into(),
+            OverlayAlign::Right => "right".into(),
+        }),
+    }
 }
 
 fn to_wit_map(map: &CoreTimeMap) -> TimeMap {

@@ -92,14 +92,7 @@ mod tests {
     fn draft() -> SceneDraft {
         SceneDraft {
             name: "intro".into(),
-            over: None,
-            sources: Vec::new(),
-            placements: Vec::new(),
-            media: Vec::new(),
-            source_fade_in: Vec::new(),
-            source_gain_db: Vec::new(),
-            explain: Vec::new(),
-            diagnostics: Vec::new(),
+            ..SceneDraft::default()
         }
     }
 
