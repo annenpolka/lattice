@@ -187,10 +187,10 @@ impl WasmStdlib {
         let opacity_note = fragment
             .opacity
             .map_or(String::new(), |value| format!(" opacity {value}"));
-        let preset_note = parsed
-            .applied_preset
-            .map(|name| format!(" using {name}"))
-            .unwrap_or_default();
+        let preset_note = crate::overlay_preset::preset_explain_note(
+            parsed.applied_preset.as_deref(),
+            parsed.applied_preset_source,
+        );
         let style_notes = overlay_explain_notes(
             parsed.position,
             parsed.scale,
@@ -398,4 +398,107 @@ fn from_wit_overlay_style(style: &WitOverlayStyle) -> Result<OverlayStyle, Lower
 
 fn map_err(err: impl std::fmt::Display) -> LoweringError {
     LoweringError::Message(err.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn empty_wit() -> WitOverlayStyle {
+        WitOverlayStyle {
+            color: None,
+            size_milli: None,
+            size_px: None,
+            weight: None,
+            family: None,
+            bar: None,
+            align: None,
+        }
+    }
+
+    #[test]
+    fn from_wit_maps_color_size_px_weight_align_bar_off() {
+        let style = from_wit_overlay_style(&WitOverlayStyle {
+            color: Some("#00FF00".into()),
+            size_milli: None,
+            size_px: Some(24),
+            weight: Some(700),
+            family: Some("GuestSans".into()),
+            bar: Some("off".into()),
+            align: Some("center".into()),
+        })
+        .unwrap();
+        assert_eq!(style.color, Rgba::from_hex_rrggbb("#00FF00"));
+        assert_eq!(style.size, Some(OverlaySize::Px { px: 24 }));
+        assert_eq!(style.weight, Some(700));
+        assert_eq!(style.family.as_deref(), Some("GuestSans"));
+        assert_eq!(style.bar, Some(OverlayBar::Off));
+        assert_eq!(style.align, Some(OverlayAlign::Center));
+    }
+
+    #[test]
+    fn from_wit_maps_size_milli_and_bar_fill() {
+        let style = from_wit_overlay_style(&WitOverlayStyle {
+            size_milli: Some(900),
+            bar: Some("#FFFF00".into()),
+            align: Some("left".into()),
+            ..empty_wit()
+        })
+        .unwrap();
+        assert_eq!(style.size, Some(OverlaySize::Percent { milli: 900 }));
+        assert_eq!(
+            style.bar,
+            Some(OverlayBar::Fill {
+                color: Rgba::YELLOW
+            })
+        );
+        assert_eq!(style.align, Some(OverlayAlign::Left));
+    }
+
+    #[test]
+    fn from_wit_rejects_milli_and_px_together() {
+        let err = from_wit_overlay_style(&WitOverlayStyle {
+            size_milli: Some(900),
+            size_px: Some(24),
+            ..empty_wit()
+        })
+        .unwrap_err();
+        assert!(err.to_string().contains("both milli and px"), "{err}");
+    }
+
+    #[test]
+    fn from_wit_rejects_invalid_color_and_bar_hex() {
+        let color = from_wit_overlay_style(&WitOverlayStyle {
+            color: Some("green".into()),
+            ..empty_wit()
+        })
+        .unwrap_err();
+        assert!(color.to_string().contains("color"), "{color}");
+        let bar = from_wit_overlay_style(&WitOverlayStyle {
+            bar: Some("yellow".into()),
+            ..empty_wit()
+        })
+        .unwrap_err();
+        assert!(bar.to_string().contains("bar"), "{bar}");
+    }
+
+    #[test]
+    fn from_wit_rejects_invalid_align() {
+        let err = from_wit_overlay_style(&WitOverlayStyle {
+            align: Some("middle".into()),
+            ..empty_wit()
+        })
+        .unwrap_err();
+        assert!(err.to_string().contains("align"), "{err}");
+    }
+
+    #[test]
+    fn from_wit_maps_align_right() {
+        let style = from_wit_overlay_style(&WitOverlayStyle {
+            align: Some("right".into()),
+            ..empty_wit()
+        })
+        .unwrap();
+        assert_eq!(style.align, Some(OverlayAlign::Right));
+    }
 }

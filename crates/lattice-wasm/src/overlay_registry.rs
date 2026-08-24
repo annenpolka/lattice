@@ -24,6 +24,17 @@ pub enum OverlayPresetSource {
     Builtin,
 }
 
+impl OverlayPresetSource {
+    #[must_use]
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Dsl => "dsl",
+            Self::Wasm => "wasm",
+            Self::Builtin => "builtin",
+        }
+    }
+}
+
 /// Layered title-preset registry. Empty [`Default`] has no entries.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct OverlayPresetRegistry {
@@ -70,15 +81,46 @@ impl OverlayPresetRegistry {
     /// DSL > wasm > builtin.
     #[must_use]
     pub fn lookup(&self, name: &str) -> Option<&OverlayStyle> {
-        self.dsl
-            .get(name)
-            .or_else(|| self.wasm.get(name))
-            .or_else(|| self.builtin.get(name))
+        self.lookup_entry(name).map(|(style, _)| style)
     }
 
+    /// Style plus the layer that won. Core still never sees the IDENT.
     #[must_use]
-    pub fn title_preset_style(&self, name: &str) -> Option<OverlayStyle> {
-        self.lookup(name).cloned()
+    pub fn lookup_entry(&self, name: &str) -> Option<(&OverlayStyle, OverlayPresetSource)> {
+        if let Some(style) = self.dsl.get(name) {
+            return Some((style, OverlayPresetSource::Dsl));
+        }
+        if let Some(style) = self.wasm.get(name) {
+            return Some((style, OverlayPresetSource::Wasm));
+        }
+        self.builtin
+            .get(name)
+            .map(|style| (style, OverlayPresetSource::Builtin))
+    }
+
+    /// Winning layer strictly below `source` (used for shadow explain).
+    #[must_use]
+    pub fn winning_below(
+        &self,
+        name: &str,
+        source: OverlayPresetSource,
+    ) -> Option<OverlayPresetSource> {
+        match source {
+            OverlayPresetSource::Dsl => self
+                .wasm
+                .contains_key(name)
+                .then_some(OverlayPresetSource::Wasm)
+                .or_else(|| {
+                    self.builtin
+                        .contains_key(name)
+                        .then_some(OverlayPresetSource::Builtin)
+                }),
+            OverlayPresetSource::Wasm => self
+                .builtin
+                .contains_key(name)
+                .then_some(OverlayPresetSource::Builtin),
+            OverlayPresetSource::Builtin => None,
+        }
     }
 
     #[must_use]
@@ -133,12 +175,6 @@ pub fn lower_third_style() -> OverlayStyle {
         }),
         ..OverlayStyle::default()
     }
-}
-
-/// Title-only IDENT lookup against the builtin layer.
-#[must_use]
-pub fn title_preset_style(name: &str) -> Option<OverlayStyle> {
-    OverlayPresetRegistry::builtin().title_preset_style(name)
 }
 
 /// Merge preset under explicit body fields. Does not touch geometry.

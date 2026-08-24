@@ -11,9 +11,7 @@ use lattice_media::{
     probe_media,
 };
 use lattice_vel::{Document, Expr, Item, ParseError};
-use lattice_wasm::{
-    ExplainLine, LoweringRegistry, OverlayPresetRegistry, SceneDraft, register_dsl_preset,
-};
+use lattice_wasm::{ExplainLine, LoweringRegistry, OverlayPresetRegistry, SceneDraft};
 use serde::Serialize;
 use thiserror::Error;
 
@@ -443,9 +441,11 @@ impl Engine {
         let mut diagnostics = Vec::new();
         let mut explain = Vec::new();
         collect_header(document, &mut project, &mut diagnostics);
+        diagnostics.extend(self.registry.preset_diagnostics().iter().cloned());
         let mut overlay_presets = self.registry.overlay_presets();
-        collect_overlay_presets(
+        collect_document_invocations(
             document,
+            &self.registry,
             &mut overlay_presets,
             &mut diagnostics,
             &mut explain,
@@ -578,8 +578,9 @@ fn compile_scenes(
     Ok(())
 }
 
-fn collect_overlay_presets(
+fn collect_document_invocations(
     document: &Document,
+    registry: &LoweringRegistry,
     presets: &mut OverlayPresetRegistry,
     diagnostics: &mut Vec<Diagnostic>,
     explain: &mut Vec<ExplainEvent>,
@@ -588,11 +589,8 @@ fn collect_overlay_presets(
         let Item::Invocation(inv) = item else {
             continue;
         };
-        if inv.name != "overlay-preset" {
-            continue;
-        }
         let view = invocation_view(inv)?;
-        if let Some(line) = register_dsl_preset(&view, presets, diagnostics) {
+        if let Some(line) = registry.lower_document(&view, presets, diagnostics) {
             explain.push(to_event(line));
         }
     }
@@ -704,6 +702,15 @@ mod tests {
                 .explain
                 .iter()
                 .any(|event| event.message.contains("canvas-fill"))
+        );
+    }
+
+    #[test]
+    fn compile_rs_does_not_match_overlay_preset_as_a_literal() {
+        let src = include_str!("compile.rs");
+        assert!(
+            !src.contains("\"overlay-preset\""),
+            "document-scope words belong on LoweringRegistry, not Engine literals"
         );
     }
 }

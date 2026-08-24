@@ -346,7 +346,7 @@ scene intro {
         compilation
             .explain
             .iter()
-            .any(|event| event.message.contains("using name-plate")),
+            .any(|event| event.message.contains("using name-plate (dsl)")),
         "{:?}",
         compilation.explain
     );
@@ -392,6 +392,14 @@ scene intro {
     );
     let json = serde_json::to_string(&title_visual(&compilation)).unwrap();
     assert!(!json.contains("guest-plate"));
+    assert!(
+        compilation
+            .explain
+            .iter()
+            .any(|event| event.message.contains("using guest-plate (wasm)")),
+        "{:?}",
+        compilation.explain
+    );
 }
 
 #[test]
@@ -478,4 +486,64 @@ scene intro {
     let style = title_visual(&compilation).style.expect("merged");
     assert_eq!(style.color, Rgba::from_hex_rrggbb("#00FF00"));
     assert_eq!(style.size, Some(OverlaySize::Percent { milli: 900 }));
+}
+
+#[test]
+fn dsl_shadowing_lower_third_explains_the_layer() {
+    let compilation = compile_with_source(
+        r#"project "overlay-preset"
+media game "capture.mp4"
+sequence main { intro }
+overlay-preset lower-third {
+  family "DslSans"
+}
+scene intro {
+  game[0s..4s] as clip
+  title "Ada Lovelace\nEditor" using lower-third {
+    at 0s for 3s
+  }
+}
+"#,
+    );
+    assert!(!compilation.has_errors(), "{:?}", compilation.diagnostics);
+    assert_eq!(
+        title_visual(&compilation)
+            .style
+            .as_ref()
+            .and_then(|style| style.family.as_deref()),
+        Some("DslSans")
+    );
+    assert!(
+        compilation.explain.iter().any(|event| event
+            .message
+            .contains("overlay-preset `lower-third` registered (dsl; shadows wasm)")),
+        "{:?}",
+        compilation.explain
+    );
+    assert!(
+        compilation
+            .explain
+            .iter()
+            .any(|event| event.message.contains("using lower-third (dsl)")),
+        "{:?}",
+        compilation.explain
+    );
+}
+
+#[test]
+fn lower_third_explain_names_wasm_layer() {
+    let compilation = compile_scene(
+        r#"title "Ada Lovelace\nEditor" using lower-third {
+    at 0s for 3s
+  }"#,
+    );
+    assert!(!compilation.has_errors(), "{:?}", compilation.diagnostics);
+    assert!(
+        compilation
+            .explain
+            .iter()
+            .any(|event| event.message.contains("using lower-third (wasm)")),
+        "{:?}",
+        compilation.explain
+    );
 }

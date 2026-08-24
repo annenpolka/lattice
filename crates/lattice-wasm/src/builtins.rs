@@ -72,10 +72,10 @@ pub fn lower_title(inv: &InvocationView, draft: &mut SceneDraft) -> Result<(), L
         provenance: Provenance::invocation("title", Some(inv.span)),
     });
     let opacity_note = opacity.map_or(String::new(), |value| format!(" opacity {value}"));
-    let preset_note = parsed
-        .applied_preset
-        .map(|name| format!(" using {name}"))
-        .unwrap_or_default();
+    let preset_note = crate::overlay_preset::preset_explain_note(
+        parsed.applied_preset.as_deref(),
+        parsed.applied_preset_source,
+    );
     let style_notes = overlay_explain_notes(
         parsed.position,
         parsed.scale,

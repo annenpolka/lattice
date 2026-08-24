@@ -8,9 +8,9 @@ use lattice_core::{Diagnostic, OverlayStyle};
 
 use crate::overlay_body::{UNKNOWN_BODY_WORD, parse_overlay_style_fields};
 use crate::overlay_registry::{
-    LOWER_THIRD, OverlayPresetRegistry, OverlayPresetSource, merge_explicit_over_preset,
+    OverlayPresetRegistry, OverlayPresetSource, merge_explicit_over_preset,
 };
-use crate::view::{BodyItem, ExplainLine, InvocationView, SceneDraft, ValueView};
+use crate::view::{BodyItem, ExplainLine, InvocationView, LoweringError, SceneDraft, ValueView};
 
 /// Unknown or inapplicable `using IDENT`.
 pub const UNKNOWN_PRESET: &str = "LAT-OVL-013";
@@ -20,6 +20,9 @@ pub const REDEFINED_PRESET: &str = "LAT-OVL-014";
 
 /// Invalid `overlay-preset` (missing IDENT, geometry in v0 body).
 pub const INVALID_PRESET: &str = "LAT-OVL-015";
+
+/// Hosted `overlay-presets` call failed. Do not degrade to unknown IDENT alone.
+pub const PRESET_LOAD: &str = "LAT-OVL-016";
 
 const PRESET_STYLE_WORDS: &[&str] = &["color", "size", "weight", "family", "bar", "align"];
 const PRESET_GEOMETRY_WORDS: &[&str] = &["position", "scale", "anchor"];
@@ -43,7 +46,7 @@ pub fn apply_using_preset(
     draft: &mut SceneDraft,
     applies_to_title: bool,
     style: &mut OverlayStyle,
-) -> Option<String> {
+) -> Option<(String, OverlayPresetSource)> {
     let value = invocation_using(inv)?;
     let Some(name) = value.as_name() else {
         draft.diagnostics.push(Diagnostic::error(
@@ -61,10 +64,10 @@ pub fn apply_using_preset(
         ));
         return None;
     }
-    let Some(preset) = draft.overlay_presets.title_preset_style(name) else {
+    let Some((preset, source)) = draft.overlay_presets.lookup_entry(name) else {
         let known = draft.overlay_presets.known_names();
         let listed = if known.is_empty() {
-            LOWER_THIRD.to_string()
+            "none registered".to_string()
         } else {
             known
                 .iter()
@@ -79,9 +82,48 @@ pub fn apply_using_preset(
         ));
         return None;
     };
+    let preset = preset.clone();
     let explicit = std::mem::take(style);
     *style = merge_explicit_over_preset(explicit, preset);
-    Some(name.to_string())
+    Some((name.to_string(), source))
+}
+
+/// Explain suffix. Names the winning layer; Core still never stores the IDENT.
+#[must_use]
+pub fn preset_explain_note(name: Option<&str>, source: Option<OverlayPresetSource>) -> String {
+    match (name, source) {
+        (Some(name), Some(source)) => format!(" using {name} ({})", source.as_str()),
+        (Some(name), None) => format!(" using {name}"),
+        _ => String::new(),
+    }
+}
+
+/// Ingest guest `overlay-presets`. Same-layer redef is [`REDEFINED_PRESET`].
+/// A failed call is [`PRESET_LOAD`] — not a silent unknown IDENT later.
+pub fn ingest_wasm_presets(
+    presets: &mut OverlayPresetRegistry,
+    entries: Result<Vec<(String, OverlayStyle)>, LoweringError>,
+) -> Vec<Diagnostic> {
+    match entries {
+        Ok(entries) => {
+            let mut diagnostics = Vec::new();
+            for (name, style) in entries {
+                if let Err(existing) = presets.register(name, style, OverlayPresetSource::Wasm) {
+                    diagnostics.push(Diagnostic::error(
+                        REDEFINED_PRESET,
+                        format!("overlay-preset `{existing}` is already defined"),
+                        None,
+                    ));
+                }
+            }
+            diagnostics
+        }
+        Err(err) => vec![Diagnostic::error(
+            PRESET_LOAD,
+            format!("wasm overlay-presets failed: {err}"),
+            None,
+        )],
+    }
 }
 
 /// Register a document-scope `overlay-preset IDENT { style fields }`.
@@ -110,12 +152,10 @@ pub fn register_dsl_preset(
         return None;
     }
     diagnose_preset_body(inv, name, diagnostics);
-    let mut scratch = SceneDraft {
-        overlay_presets: OverlayPresetRegistry::default(),
-        ..SceneDraft::default()
-    };
+    let mut scratch = SceneDraft::default();
     let style = parse_overlay_style_fields(inv, &mut scratch);
     diagnostics.append(&mut scratch.diagnostics);
+    let shadowed = presets.winning_below(name, OverlayPresetSource::Dsl);
     if let Err(existing) = presets.register(name, style, OverlayPresetSource::Dsl) {
         diagnostics.push(Diagnostic::error(
             REDEFINED_PRESET,
@@ -124,11 +164,14 @@ pub fn register_dsl_preset(
         ));
         return None;
     }
+    let shadow_note = shadowed
+        .map(|layer| format!("; shadows {}", layer.as_str()))
+        .unwrap_or_default();
     Some(ExplainLine {
         origin: lattice_core::Origin::Invocation {
             command: "overlay-preset".into(),
         },
-        message: format!("overlay-preset `{name}` registered"),
+        message: format!("overlay-preset `{name}` registered (dsl{shadow_note})"),
     })
 }
 
@@ -169,7 +212,9 @@ fn diagnose_preset_body(inv: &InvocationView, name: &str, diagnostics: &mut Vec<
 
 #[cfg(test)]
 mod tests {
-    use lattice_core::{OverlayBar, OverlaySize, PlacementKind, Rgba, Severity, Span, Visual};
+    use lattice_core::{
+        OverlayBar, OverlaySize, OverlayStyle, PlacementKind, Rgba, Severity, Span, Visual,
+    };
 
     use super::*;
     use crate::overlay_body::{
@@ -177,7 +222,7 @@ mod tests {
         parse_overlay_body_for,
     };
     use crate::overlay_registry::{
-        LOWER_THIRD_FAMILY, LOWER_THIRD_SIZE_MILLI, lower_third_style, title_preset_style,
+        LOWER_THIRD, LOWER_THIRD_FAMILY, LOWER_THIRD_SIZE_MILLI, lower_third_style,
     };
     use crate::registry::LoweringRegistry;
     use crate::view::{BodyItem, InvocationView, SceneDraft, ValueView};
@@ -189,6 +234,7 @@ mod tests {
     fn draft() -> SceneDraft {
         SceneDraft {
             name: "intro".into(),
+            overlay_presets: OverlayPresetRegistry::builtin(),
             ..SceneDraft::default()
         }
     }
@@ -255,10 +301,27 @@ mod tests {
     }
 
     #[test]
+    fn empty_scene_draft_does_not_resolve_builtin_presets() {
+        let inv = title_using(LOWER_THIRD, Vec::new());
+        let mut draft = SceneDraft::default();
+        let parsed = parse_overlay_body(&inv, &mut draft);
+        assert!(
+            draft
+                .diagnostics
+                .iter()
+                .any(|diag| diag.code == UNKNOWN_PRESET && diag.message.contains("none registered")),
+            "{:?}",
+            draft.diagnostics
+        );
+        assert_eq!(parsed.applied_preset, None);
+    }
+
+    #[test]
     fn registry_maps_lower_third_on_title_only() {
-        assert!(title_preset_style(LOWER_THIRD).is_some());
-        assert!(title_preset_style("upper-third").is_none());
-        assert!(title_preset_style("callout").is_none());
+        let registry = OverlayPresetRegistry::builtin();
+        assert!(registry.lookup(LOWER_THIRD).is_some());
+        assert!(registry.lookup("upper-third").is_none());
+        assert!(registry.lookup("callout").is_none());
     }
 
     #[test]
@@ -275,6 +338,10 @@ mod tests {
         let parsed = parse_overlay_body(&inv, &mut draft);
         assert!(draft.diagnostics.is_empty(), "{:?}", draft.diagnostics);
         assert_eq!(parsed.applied_preset.as_deref(), Some(LOWER_THIRD));
+        assert_eq!(
+            parsed.applied_preset_source,
+            Some(OverlayPresetSource::Builtin)
+        );
         assert_eq!(
             parsed.style.bar,
             Some(OverlayBar::Fill {
@@ -641,5 +708,108 @@ mod tests {
             "{diagnostics:?}"
         );
         assert!(presets.is_empty());
+    }
+
+    #[test]
+    fn wasm_same_layer_redef_is_lowering_diag_not_silent() {
+        let mut presets = OverlayPresetRegistry::default();
+        let style = lower_third_style();
+        let diagnostics = ingest_wasm_presets(
+            &mut presets,
+            Ok(vec![
+                ("plate".into(), style.clone()),
+                ("plate".into(), style),
+            ]),
+        );
+        assert!(
+            diagnostics
+                .iter()
+                .any(|diag| diag.code == REDEFINED_PRESET && diag.message.contains("`plate`")),
+            "{diagnostics:?}"
+        );
+        assert_eq!(presets.lookup("plate"), Some(&lower_third_style()));
+    }
+
+    #[test]
+    fn wasm_overlay_presets_failure_is_load_diag_not_unknown() {
+        let mut presets = OverlayPresetRegistry::builtin();
+        let diagnostics = ingest_wasm_presets(
+            &mut presets,
+            Err(LoweringError::Message("component exploded".into())),
+        );
+        assert!(
+            diagnostics.iter().any(|diag| {
+                diag.code == PRESET_LOAD && diag.message.contains("component exploded")
+            }),
+            "{diagnostics:?}"
+        );
+        assert!(presets.lookup(LOWER_THIRD).is_some());
+    }
+
+    #[test]
+    fn dsl_shadow_explain_names_the_lower_layer() {
+        let mut presets = OverlayPresetRegistry::builtin();
+        presets
+            .register(
+                LOWER_THIRD,
+                OverlayStyle {
+                    family: Some("WasmSans".into()),
+                    ..OverlayStyle::default()
+                },
+                OverlayPresetSource::Wasm,
+            )
+            .unwrap();
+        let mut diagnostics = Vec::new();
+        let inv = preset_inv(
+            LOWER_THIRD,
+            vec![body_command("family", vec![quoted("DslSans")])],
+        );
+        let line =
+            register_dsl_preset(&inv, &mut presets, &mut diagnostics).expect("dsl registration");
+        assert!(diagnostics.is_empty(), "{diagnostics:?}");
+        assert!(
+            line.message.contains("registered (dsl; shadows wasm)"),
+            "{}",
+            line.message
+        );
+        let mut draft = draft();
+        draft.overlay_presets = presets;
+        let parsed = parse_overlay_body(&title_using(LOWER_THIRD, Vec::new()), &mut draft);
+        assert_eq!(parsed.applied_preset_source, Some(OverlayPresetSource::Dsl));
+        assert_eq!(
+            preset_explain_note(
+                parsed.applied_preset.as_deref(),
+                parsed.applied_preset_source
+            ),
+            " using lower-third (dsl)"
+        );
+    }
+
+    #[test]
+    fn lower_document_dispatches_overlay_preset() {
+        let registry = LoweringRegistry::stdlib();
+        let mut presets = OverlayPresetRegistry::default();
+        let mut diagnostics = Vec::new();
+        let line = registry
+            .lower_document(
+                &preset_inv(
+                    "name-plate",
+                    vec![body_command("family", vec![quoted("Sans")])],
+                ),
+                &mut presets,
+                &mut diagnostics,
+            )
+            .expect("document word");
+        assert!(line.message.contains("registered (dsl)"));
+        assert!(presets.lookup("name-plate").is_some());
+        assert!(
+            registry
+                .lower_document(
+                    &title_using(LOWER_THIRD, Vec::new()),
+                    &mut presets,
+                    &mut diagnostics
+                )
+                .is_none()
+        );
     }
 }

@@ -139,7 +139,7 @@ pub struct ExplainLine {
     pub message: String,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct SceneDraft {
     pub name: String,
     pub over: Option<String>,
@@ -152,23 +152,6 @@ pub struct SceneDraft {
     pub diagnostics: Vec<Diagnostic>,
     /// Document-scoped title presets. Core never sees the IDENT.
     pub overlay_presets: OverlayPresetRegistry,
-}
-
-impl Default for SceneDraft {
-    fn default() -> Self {
-        Self {
-            name: String::new(),
-            over: None,
-            sources: Vec::new(),
-            placements: Vec::new(),
-            media: Vec::new(),
-            source_fade_in: Vec::new(),
-            source_gain_db: Vec::new(),
-            explain: Vec::new(),
-            diagnostics: Vec::new(),
-            overlay_presets: OverlayPresetRegistry::builtin(),
-        }
-    }
 }
 
 impl SceneDraft {
