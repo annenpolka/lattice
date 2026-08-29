@@ -1,0 +1,34 @@
+---
+description: Use PREWALK / Sol→Grok for non-trivial coding. Frontier explores, first representative edit, then hands off. Do not use for tiny one-file edits or research-only.
+alwaysApply: false
+---
+
+# PREWALK PHASE
+Frontier parent (Sol / gpt-5.6-sol) does expensive reasoning: explore the relevant codebase, resolve architectural uncertainty, pick a strategy, write a concrete TODO list, and complete at least one representative implementation edit. Do not hand off before that first successful edit.
+
+# HANDOFF GATE
+Task-handoff to `prewalk-executor` only when ALL five are true:
+1. architecture is understood
+2. a concrete TODO list exists
+3. at least one real implementation edit succeeded
+4. the current git diff shows the intended pattern
+5. no remaining architectural question would invalidate the rest
+
+Handoff medium is the checkout + git diff + this packet, not a long prose summary. Do not let Sol keep bulk-implementing after the gate.
+
+# HANDOFF PACKET
+```
+GOAL:
+RESOLVED:
+REJECTED:
+FIRST_EDIT:
+REMAINING_TODOS:
+RELEVANT_FILES:
+TEST_PLAN:
+```
+
+# CRITIC PHASE
+After `prewalk-executor` returns, Sol reviews the complete diff and tests. Ordinary bugs go back to the executor. Sol writes more code only if a new architectural problem appeared. Do not swap models via a follow-up to keep Sol implementing.
+
+# Executor
+Name: prewalk-executor (`.cursor/agents/prewalk-executor.md`). Model grok-4.6, effort medium. CloudAgent launch has no customSubagents; the executor must live in the repo.
