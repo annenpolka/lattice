@@ -21,8 +21,8 @@ use std::sync::{Arc, Condvar, Mutex};
 use gpui::{
     App, AppContext, Application, Bounds, ClipboardItem, Context, CursorStyle, Entity, FocusHandle,
     Focusable, InputHandler, InteractiveElement, IntoElement, KeyDownEvent, MouseButton,
-    MouseDownEvent, MouseMoveEvent, MouseUpEvent, ObjectFit, ParentElement, Pixels, Render,
-    RenderImage, ScrollDelta, ScrollHandle, ScrollWheelEvent, SharedString,
+    MouseDownEvent, MouseMoveEvent, MouseUpEvent, ObjectFit, ParentElement, PathPromptOptions,
+    Pixels, Render, RenderImage, ScrollDelta, ScrollHandle, ScrollWheelEvent, SharedString,
     StatefulInteractiveElement, Styled, StyledImage, TextRun, Timer, TitlebarOptions,
     UTF16Selection, Window, WindowBounds, WindowOptions, canvas, div, img, px, rgb, size,
 };
@@ -2594,7 +2594,7 @@ impl StudioView {
                     .items_center()
                     .gap_1()
                     .child(action_button("Open Video…", LINE, cx, move |this, cx| {
-                        this.open_video_clicked();
+                        this.open_video_clicked(cx);
                         cx.notify();
                     }))
                     .child(action_button("Save", TEAL, cx, move |this, cx| {
@@ -2775,12 +2775,49 @@ impl StudioView {
             ))
     }
 
-    fn open_video_clicked(&mut self) {
-        let Some(path) = open_video_path() else {
-            self.last_render =
-                Some("Open Video…: set LATTICE_OPEN_VIDEO to an MP4 path, or pick a file".into());
+    fn open_video_clicked(&mut self, cx: &mut Context<Self>) {
+        if let Some(path) = open_video_environment_path() {
+            self.open_video(path);
             return;
-        };
+        }
+
+        self.last_render = Some("Open Video…: choose a media file".into());
+        let receiver = cx.prompt_for_paths(PathPromptOptions {
+            files: true,
+            directories: false,
+            multiple: false,
+            prompt: Some("Open Video in Lattice".into()),
+        });
+        cx.spawn(async move |this, cx| {
+            let selected = receiver.await;
+            let _ = this.update(cx, |this, cx| {
+                match selected {
+                    Ok(Ok(Some(paths))) => {
+                        if let Some(path) = paths.into_iter().next() {
+                            this.open_video(path);
+                        } else {
+                            this.last_render = Some("Open Video… cancelled".into());
+                        }
+                    }
+                    Ok(Ok(None)) => {
+                        this.last_render = Some("Open Video… cancelled".into());
+                    }
+                    Ok(Err(error)) => {
+                        trace::log(format!("open video picker failed: {error}"));
+                        this.last_render = Some(format!("open video picker: {error}"));
+                    }
+                    Err(error) => {
+                        trace::log(format!("open video picker channel failed: {error}"));
+                        this.last_render = Some(format!("open video picker channel: {error}"));
+                    }
+                }
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    fn open_video(&mut self, path: PathBuf) {
         match StudioSession::open_video(&path) {
             Ok(session) => {
                 trace::log(format!("open_video ok {}", path.display()));
@@ -3010,7 +3047,7 @@ impl StudioView {
 
     fn handle_source_key(&mut self, event: &KeyDownEvent, cx: &mut Context<Self>) {
         let key = event.keystroke.key.as_str();
-        if event.keystroke.modifiers.control && key == "a" {
+        if event.keystroke.modifiers.secondary() && key == "a" {
             let end = self.source_draft.encode_utf16().count();
             self.source_selection_utf16 = 0..end;
             self.source_marked_utf16 = None;
@@ -3074,7 +3111,7 @@ impl StudioView {
     }
 
     fn handle_key(&mut self, event: &KeyDownEvent, cx: &mut Context<Self>) {
-        if event.keystroke.modifiers.control && event.keystroke.key == "z" {
+        if event.keystroke.modifiers.secondary() && event.keystroke.key == "z" {
             let result = if event.keystroke.modifiers.shift {
                 self.session.redo()
             } else {
@@ -3088,7 +3125,7 @@ impl StudioView {
             cx.notify();
             return;
         }
-        if event.keystroke.modifiers.control && event.keystroke.key == "y" {
+        if event.keystroke.modifiers.secondary() && event.keystroke.key == "y" {
             if let Err(err) = self.session.redo() {
                 trace::log(format!("redo: {err}"));
             }
@@ -3123,7 +3160,7 @@ impl StudioView {
             ScrollDelta::Pixels(pt) => f64::from(f32::from(pt.x) + f32::from(pt.y)),
             ScrollDelta::Lines(pt) => f64::from(f32::from(pt.x) + f32::from(pt.y)) * 40.0,
         };
-        if event.modifiers.control {
+        if event.modifiers.secondary() {
             let factor = if delta < 0.0 { 1.15 } else { 1.0 / 1.15 };
             let anchor = self.session.time_at_x(x);
             self.session.zoom_around(anchor, factor);
@@ -4503,39 +4540,14 @@ fn selector_component(value: &str) -> String {
         .to_string()
 }
 
-fn open_video_path() -> Option<PathBuf> {
+fn open_video_environment_path() -> Option<PathBuf> {
     if let Some(path) = std::env::var_os("LATTICE_OPEN_VIDEO") {
         let path = PathBuf::from(path);
         if path.is_file() {
             return Some(path);
         }
     }
-    #[cfg(windows)]
-    {
-        windows_pick_mp4()
-    }
-    #[cfg(not(windows))]
-    {
-        None
-    }
-}
-
-#[cfg(windows)]
-fn windows_pick_mp4() -> Option<PathBuf> {
-    let output = std::process::Command::new("powershell")
-        .args([
-            "-NoProfile",
-            "-Command",
-            "Add-Type -AssemblyName System.Windows.Forms; $d = New-Object System.Windows.Forms.OpenFileDialog; $d.Filter = 'Video (*.mp4)|*.mp4|All files (*.*)|*.*'; if ($d.ShowDialog() -eq 'OK') { $d.FileName }",
-        ])
-        .output()
-        .ok()?;
-    let text = String::from_utf8_lossy(&output.stdout).trim().to_string();
-    if text.is_empty() {
-        return None;
-    }
-    let path = PathBuf::from(text);
-    path.is_file().then_some(path)
+    None
 }
 
 const TIMELINE_WIDTH: f32 = 640.0;

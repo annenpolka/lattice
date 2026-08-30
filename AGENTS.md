@@ -33,7 +33,7 @@ The dependency column below lists Lattice-to-Lattice dependencies; ordinary exte
 | `lattice-media` | core | CPU/DX12 compositors, PCM mix, FFmpeg I/O, reusable sample sessions | VEL surface syntax, GPUI, application workflow |
 | `lattice-engine` | core, vel, wasm, media | compile/validate/explain/locus/rewrite/resolve/render orchestration | GPUI, CPAL, FFmpeg argv |
 | `lattice-cli` | core, engine | CLI/JSON surface and explicit phase composition | duplicated compile, edit, resolve, or render semantics |
-| `lattice-studio` | engine | GPUI view/input, volatile session/Undo, viewport/playhead, preview scheduling, Windows audio-device sync | forked compiler/evaluator/rewriter, a parallel selection model, FFmpeg argv |
+| `lattice-studio` | engine | GPUI view/input, volatile session/Undo, viewport/playhead, preview scheduling, Windows/macOS audio-device sync | forked compiler/evaluator/rewriter, a parallel selection model, FFmpeg argv |
 
 ## Current Alpha vertical slice
 
@@ -45,7 +45,7 @@ Keep changes inside this implemented product shape unless the task explicitly ex
 4. Resolve generated `speech` and fonts into `lattice.lock.json`. Compile records intent only and never performs provider I/O.
 5. Flatten to a `Timeline`, then call Core evaluation to obtain `RenderScene` and `AudioPlan` at time `t`.
 6. Preview and export share `SampleSession`: the CPU reference compositor and the explicit Windows DX12 compositor consume the same scene; export and Studio monitoring share the same PCM mix.
-7. Studio keeps preview frames in memory, coalesces playback work, and exposes source-backed timeline edits, Canvas move/four-corner resize, Review Apply/Reject, Resolve, renderer selection, and Windows audio monitoring.
+7. Studio keeps preview frames in memory, coalesces playback work, and exposes source-backed timeline edits, Canvas move/four-corner resize, Review Apply/Reject, Resolve, renderer selection, and Windows/macOS audio monitoring.
 
 `callout`, `fade`, `gain`, `speech`, and the commentary convention remain in-process host lowerings behind the WIT-compatible registry. Sequence flow is currently Engine-owned ordering/explain logic, not a registry builtin. Replace the remaining registry lowering bodies with components without changing Core types or surface syntax. OTIO, a project database, an automatic renderer fallback, and an in-process agent runtime remain outside this slice.
 
@@ -84,14 +84,18 @@ cargo test --workspace
 
 The root workspace does not include the nested `crates/lattice-stdlib-guest` workspace. Its component build is a separate operation; root tests do verify the committed Wasm artifact freshness.
 
-Local Studio process smoke (Windows desktop; not CI). GPUI windowing on GitHub-hosted runners is not a reliable gate:
+Local Studio process smoke (Windows/macOS desktop; not CI). GPUI windowing on GitHub-hosted runners is not a reliable gate:
 
 ```powershell
 ./scripts/studio-smoke.ps1 -Renderer cpu
 ./scripts/studio-smoke.ps1 -Renderer gpu-dx12
 ```
 
-The smoke creates/resolves an A/V fixture when no VEL path is supplied and requires a usable default Windows audio output. The GPU form additionally requires a working DX12 adapter. Use `./scripts/prepare-gameplay-commentary.ps1` when exercising the checked-in Alpha VEL directly; production paths must never synthesize missing user media.
+```bash
+./scripts/studio-smoke-macos.sh
+```
+
+The Windows smoke creates/resolves an A/V fixture when no VEL path is supplied and requires a usable default Windows audio output. The GPU form additionally requires a working DX12 adapter. The macOS smoke is a bounded CPU/GPUI fixture smoke with preview and device audio disabled; separately launch a resolved VEL on a logged-in Mac to exercise FFmpeg and CoreAudio. Use `./scripts/prepare-gameplay-commentary.ps1` when exercising the checked-in Alpha VEL directly; production paths must never synthesize missing user media.
 
 Studio UI behavior belongs in `#[gpui::test]` tests backed by `VisualTestContext` and stable
 `debug_selector` names. Resolve selectors to current rendered bounds and dispatch real GPUI input;

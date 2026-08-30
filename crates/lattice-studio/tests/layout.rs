@@ -555,6 +555,14 @@ fn window_source_composes_documented_panes() {
         "Open Video… must call StudioSession::open_video"
     );
     assert!(
+        main.contains("prompt_for_paths") && main.contains("PathPromptOptions"),
+        "Open Video… must use GPUI's native platform file picker"
+    );
+    assert!(
+        !main.contains("System.Windows.Forms.OpenFileDialog"),
+        "Open Video… must not fork a Windows-only picker"
+    );
+    assert!(
         main.contains("img("),
         "Canvas must draw the preview frame image"
     );
