@@ -16,17 +16,17 @@ default = ["window"]
 window = ["dep:gpui", "dep:image"]
 
 [dependencies]
-gpui = { version = "0.2.2", optional = true }
+gpui = { version = "=0.2.2", optional = true, features = ["runtime_shaders"] }
 image = { version = "0.25.10", default-features = false, optional = true }
 lattice-engine.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
 
-[target.'cfg(windows)'.dependencies]
+[target.'cfg(any(windows, target_os = "macos"))'.dependencies]
 cpal = { version = "=0.18.2", default-features = false }
 
 [dev-dependencies]
-gpui = { version = "0.2.2", features = ["test-support"] }
+gpui = { version = "=0.2.2", features = ["runtime_shaders", "test-support"] }
 lattice-media.workspace = true
 
 [lints]

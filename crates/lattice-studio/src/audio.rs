@@ -634,7 +634,7 @@ fn frames_to_micros(frames: i64, sample_rate: u32) -> i64 {
     })
 }
 
-#[cfg(windows)]
+#[cfg(any(windows, target_os = "macos"))]
 mod platform {
     use std::sync::atomic::{AtomicU64, Ordering};
     use std::sync::{Arc, Mutex};
@@ -971,19 +971,27 @@ mod tests {
     }
 
     fn test_program(value: f32) -> AudioProgram {
-        let sample_rate = 1_000;
-        let channels = 2;
-        let frame_count = 2_000;
+        test_program_for_format(
+            value,
+            AudioDeviceFormat {
+                sample_rate: 1_000,
+                channels: 2,
+            },
+        )
+    }
+
+    fn test_program_for_format(value: f32, format: AudioDeviceFormat) -> AudioProgram {
+        let frame_count = usize::try_from(format.sample_rate).unwrap() * 2;
         AudioProgram {
             pcm: Arc::new(PcmBuffer {
-                sample_rate,
-                channels,
-                samples: vec![value; frame_count * usize::from(channels)],
+                sample_rate: format.sample_rate,
+                channels: format.channels,
+                samples: vec![value; frame_count * usize::from(format.channels)],
             }),
             report: AudioMixReport {
                 duration: Time::seconds(2),
-                sample_rate,
-                channels,
+                sample_rate: format.sample_rate,
+                channels: format.channels,
                 frame_count,
                 window_count: 1,
                 hold_window_count: 0,
@@ -1174,9 +1182,27 @@ scene demo {
             .is_none()
         );
     }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    #[ignore = "requires a logged-in macOS session with a default output device"]
+    fn macos_default_output_stream_plays_and_pauses_silence() {
+        let format = AudioMonitor::output_format().expect("macOS default CoreAudio output");
+        assert!(format.sample_rate > 0);
+        assert!(format.channels > 0);
+
+        let mut monitor = AudioMonitor::load(
+            test_program_for_format(0.0, format),
+            AudioMonitorConfig::default(),
+        )
+        .expect("build a CoreAudio output stream");
+        monitor.play(Time::ZERO).expect("start CoreAudio stream");
+        std::thread::sleep(std::time::Duration::from_millis(50));
+        monitor.pause(Time::ZERO).expect("pause CoreAudio stream");
+    }
 }
 
-#[cfg(not(windows))]
+#[cfg(not(any(windows, target_os = "macos")))]
 mod platform {
     use super::{AudioDeviceFormat, AudioDeviceInitError, AudioOutput, PcmBuffer};
     use std::sync::Arc;

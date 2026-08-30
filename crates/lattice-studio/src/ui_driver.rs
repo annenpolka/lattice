@@ -10,6 +10,15 @@ use gpui::{
 
 const DRAG_STEPS: usize = 5;
 
+fn secondary_keystroke(key: &str) -> String {
+    let modifier = if cfg!(target_os = "macos") {
+        "cmd"
+    } else {
+        "ctrl"
+    };
+    format!("{modifier}-{key}")
+}
+
 pub(crate) struct UiDriver<'a> {
     cx: &'a mut VisualTestContext,
 }
@@ -131,15 +140,16 @@ impl<'a> UiDriver<'a> {
         selector: impl Into<String>,
         delta_x: f32,
         delta_y: f32,
-        control: bool,
+        secondary: bool,
     ) {
         let position = self.point_at(selector, 0.5, 0.5);
         self.cx.simulate_event(ScrollWheelEvent {
             position,
             delta: ScrollDelta::Pixels(point(px(delta_x), px(delta_y))),
-            modifiers: Modifiers {
-                control,
-                ..Modifiers::none()
+            modifiers: if secondary {
+                Modifiers::secondary_key()
+            } else {
+                Modifiers::none()
             },
             ..Default::default()
         });
@@ -163,7 +173,7 @@ mod tests {
         LocusId, RawFrame, RendererBackend, RendererRequest, RendererSelection, Time,
     };
 
-    use super::UiDriver;
+    use super::{UiDriver, secondary_keystroke};
     use crate::{StudioView, render_image_from_raw};
 
     fn fixture_session(tag: &str) -> lattice_studio::StudioSession {
@@ -307,7 +317,7 @@ scene intro {
             reviewed
         );
         assert_eq!(ui.read(&view, |view, _| view.session.undo_len()), 1);
-        ui.press("ctrl-z");
+        ui.press(&secondary_keystroke("z"));
         assert_eq!(
             ui.read(&view, |view, _| view.session.source().to_string()),
             reviewed
@@ -522,7 +532,7 @@ scene intro {
         assert!(source_has_scale);
         assert_eq!(undo_len, 1);
 
-        ui.press("ctrl-z");
+        ui.press(&secondary_keystroke("z"));
         assert_eq!(
             ui.read(&view, |view, _| view.session.source().to_string()),
             original
