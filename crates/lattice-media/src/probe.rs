@@ -6,13 +6,14 @@ use serde::Deserialize;
 use thiserror::Error;
 
 use crate::export::ffprobe_bin;
+use crate::runtime::FfmpegRuntimeError;
 
 #[derive(Debug, Error)]
 pub enum ProbeError {
-    #[error("failed to run ffprobe: {0}")]
-    Spawn(#[from] std::io::Error),
-    #[error("ffprobe failed (status {status}): {stderr}")]
-    Ffprobe { status: String, stderr: String },
+    #[error(transparent)]
+    Runtime(#[from] FfmpegRuntimeError),
+    #[error("media I/O failed: {0}")]
+    Io(#[from] std::io::Error),
     #[error("ffprobe duration was not a number: {0}")]
     Parse(String),
     #[error(transparent)]
@@ -63,7 +64,8 @@ pub fn probe_duration(path: impl AsRef<Path>) -> Result<Time, ProbeError> {
 
 /// Probe duration, video, and audio metadata via ffprobe JSON.
 pub fn probe_media(path: impl AsRef<Path>) -> Result<MediaInfo, ProbeError> {
-    let output = Command::new(ffprobe_bin())
+    let executable = ffprobe_bin();
+    let output = Command::new(&executable)
         .args([
             "-v",
             "error",
@@ -73,12 +75,17 @@ pub fn probe_media(path: impl AsRef<Path>) -> Result<MediaInfo, ProbeError> {
             "json",
         ])
         .arg(path.as_ref())
-        .output()?;
+        .output()
+        .map_err(|source| {
+            FfmpegRuntimeError::ffprobe_unavailable(&executable, "probing media", source)
+        })?;
     if !output.status.success() {
-        return Err(ProbeError::Ffprobe {
-            status: output.status.to_string(),
-            stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
-        });
+        return Err(FfmpegRuntimeError::ffprobe_failed(
+            "probing media",
+            output.status.to_string(),
+            String::from_utf8_lossy(&output.stderr).into_owned(),
+        )
+        .into());
     }
     let parsed: FfprobeJson =
         serde_json::from_slice(&output.stdout).map_err(|err| ProbeError::Parse(err.to_string()))?;
@@ -262,18 +269,23 @@ pub fn extract_pcm_s16le_span(
     path: impl AsRef<Path>,
     duration: Option<Time>,
 ) -> Result<Vec<u8>, ProbeError> {
-    let mut command = Command::new(crate::export::ffmpeg_bin());
+    let executable = crate::export::ffmpeg_bin();
+    let mut command = Command::new(&executable);
     command.args(["-y", "-i"]).arg(path.as_ref());
     if let Some(duration) = duration {
         command.args(["-t", &crate::export::ffmpeg_seconds(duration)]);
     }
     command.args(["-vn", "-ac", "1", "-ar", "8000", "-f", "s16le", "-"]);
-    let output = command.output()?;
+    let output = command.output().map_err(|source| {
+        FfmpegRuntimeError::ffmpeg_unavailable(&executable, "extracting PCM audio", source)
+    })?;
     if !output.status.success() {
-        return Err(ProbeError::Ffprobe {
-            status: output.status.to_string(),
-            stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
-        });
+        return Err(FfmpegRuntimeError::ffmpeg_failed(
+            "extracting PCM audio",
+            output.status.to_string(),
+            String::from_utf8_lossy(&output.stderr).into_owned(),
+        )
+        .into());
     }
     Ok(output.stdout)
 }

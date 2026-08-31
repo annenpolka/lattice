@@ -29,10 +29,19 @@ pub enum TokenKind {
     Dot,
     Minus,
     Plus,
+    Comment,
+    Invalid,
     Eof,
 }
 
 pub fn lex(source: &str) -> Result<Vec<Token>, ParseError> {
+    Ok(lex_with_comments(source)?
+        .into_iter()
+        .filter(|token| token.kind != TokenKind::Comment)
+        .collect())
+}
+
+pub(crate) fn lex_with_comments(source: &str) -> Result<Vec<Token>, ParseError> {
     let mut lexer = Lexer::new(source);
     let mut tokens = Vec::new();
     loop {
@@ -44,6 +53,40 @@ pub fn lex(source: &str) -> Result<Vec<Token>, ParseError> {
         }
     }
     Ok(tokens)
+}
+
+/// Lossless-enough tokenization for editor projections.
+///
+/// Unlike [`lex`], this retains comments and recovers after invalid or
+/// incomplete input. Parser behavior remains strict and uses [`lex`].
+pub(crate) fn lex_lossy(source: &str) -> Vec<Token> {
+    let mut lexer = Lexer::new(source);
+    let mut tokens = Vec::new();
+    loop {
+        let start = lexer.mark();
+        match lexer.next_token() {
+            Ok(token) => {
+                let eof = token.kind == TokenKind::Eof;
+                tokens.push(token);
+                if eof {
+                    break;
+                }
+            }
+            Err(error) => {
+                if lexer.pos == start.pos {
+                    lexer.bump();
+                }
+                let end = lexer.pos.max(start.pos);
+                tokens.push(lexer.token(TokenKind::Invalid, start, end));
+                if lexer.eof() {
+                    tokens.push(lexer.token(TokenKind::Eof, lexer.mark(), lexer.pos));
+                    break;
+                }
+                debug_assert!(error.span.start <= error.span.end);
+            }
+        }
+    }
+    tokens
 }
 
 struct Lexer<'src> {
@@ -66,13 +109,22 @@ impl<'src> Lexer<'src> {
     }
 
     fn next_token(&mut self) -> Result<Token, ParseError> {
-        self.skip_spaces_and_comments();
+        self.skip_spaces();
         let start = self.mark();
         if self.eof() {
             return Ok(self.token(TokenKind::Eof, start, self.pos));
         }
         let b = self.bytes[self.pos];
         match b {
+            b'/' if self.peek_at(1) == Some(b'/') => {
+                while let Some(b) = self.peek() {
+                    if b == b'\n' {
+                        break;
+                    }
+                    self.bump();
+                }
+                Ok(self.token(TokenKind::Comment, start, self.pos))
+            }
             b'\n' => {
                 self.bump();
                 while self.peek() == Some(b'\n') || self.peek() == Some(b'\r') {
@@ -132,22 +184,9 @@ impl<'src> Lexer<'src> {
         }
     }
 
-    fn skip_spaces_and_comments(&mut self) {
-        loop {
-            match self.peek() {
-                Some(b' ' | b'\t') => {
-                    self.bump();
-                }
-                Some(b'/') if self.peek_at(1) == Some(b'/') => {
-                    while let Some(b) = self.peek() {
-                        if b == b'\n' {
-                            break;
-                        }
-                        self.bump();
-                    }
-                }
-                _ => break,
-            }
+    fn skip_spaces(&mut self) {
+        while matches!(self.peek(), Some(b' ' | b'\t')) {
+            self.bump();
         }
     }
 
@@ -316,6 +355,22 @@ mod tests {
             tokens
                 .iter()
                 .any(|t| t.kind == TokenKind::String && t.text.contains("こんにちは"))
+        );
+    }
+
+    #[test]
+    fn strict_lex_discards_comments_but_lossy_lex_recovers_after_invalid_input() {
+        let source = "title \"ok\" // note\n@ callout \"still highlighted\"";
+        let strict = lex("title \"ok\" // note\n").unwrap();
+        assert!(strict.iter().all(|token| token.kind != TokenKind::Comment));
+
+        let lossy = lex_lossy(source);
+        assert!(lossy.iter().any(|token| token.kind == TokenKind::Comment));
+        assert!(lossy.iter().any(|token| token.kind == TokenKind::Invalid));
+        assert!(
+            lossy
+                .iter()
+                .any(|token| { token.kind == TokenKind::Ident && token.text == "callout" })
         );
     }
 }

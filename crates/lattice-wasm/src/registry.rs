@@ -1,4 +1,4 @@
-use lattice_core::{Diagnostic, OverlayStyle};
+use lattice_core::{Diagnostic, OverlayStyle, Time};
 
 use crate::builtins::{
     apply_commentary, lower_callout, lower_caption, lower_fade, lower_freeze, lower_gain,
@@ -9,6 +9,11 @@ use crate::overlay_registry::OverlayPresetRegistry;
 use crate::view::{ExplainLine, InvocationView, LoweringError, SceneDraft};
 
 type Builtin = fn(&InvocationView, &mut SceneDraft) -> Result<(), LoweringError>;
+
+const WASM_SCENE_COMMANDS: &[&str] = &[
+    "freeze", "title", "caption", "callout", "fade", "gain", "speech",
+];
+const WASM_SEQUENCE_COMMANDS: &[&str] = &["gap"];
 
 /// Command → lowering function. Parser does not consult this map.
 pub struct LoweringRegistry {
@@ -44,6 +49,17 @@ impl LoweringRegistry {
 
     pub fn uses_wasm(&self) -> bool {
         self.wasm.is_some()
+    }
+
+    /// Whether a generic VEL invocation name is supplied by this registry.
+    ///
+    /// Editor projections use this to distinguish stdlib words without
+    /// teaching the VEL parser their meaning.
+    #[must_use]
+    pub fn handles_invocation(&self, command: &str) -> bool {
+        self.builtins.iter().any(|(name, _)| *name == command)
+            || WASM_SEQUENCE_COMMANDS.contains(&command)
+            || self.handles_document(command)
     }
 
     #[must_use]
@@ -112,7 +128,7 @@ impl LoweringRegistry {
     }
 
     pub fn lower(&self, inv: &InvocationView, draft: &mut SceneDraft) -> Result<(), LoweringError> {
-        if matches!(inv.command.as_str(), "freeze" | "title" | "caption")
+        if WASM_SCENE_COMMANDS.contains(&inv.command.as_str())
             && let Some(wasm) = &self.wasm
         {
             return wasm.lower(inv, draft);
@@ -131,6 +147,36 @@ impl LoweringRegistry {
         Ok(())
     }
 
+    /// Lower sequence-scope `gap` to an additional offset before the next scene.
+    /// Other names remain Engine-owned scene references.
+    pub fn lower_sequence_gap(&self, inv: &InvocationView) -> Result<Option<Time>, LoweringError> {
+        if inv.command != "gap" {
+            return Ok(None);
+        }
+        if !inv.modifiers.is_empty() || !inv.body.is_empty() {
+            return Err(LoweringError::Message(
+                "`gap` accepts one inline duration and no body or modifiers".into(),
+            ));
+        }
+        let [duration] = inv.args.as_slice() else {
+            return Err(LoweringError::Message(
+                "`gap` needs exactly one duration".into(),
+            ));
+        };
+        let duration = duration
+            .as_time()
+            .ok_or_else(|| LoweringError::Message("`gap` needs a time duration".into()))?;
+        if let Some(wasm) = &self.wasm {
+            return wasm.sequence_gap(duration).map(Some);
+        }
+        if duration < Time::ZERO {
+            return Err(LoweringError::Message(
+                "gap duration must not be negative".into(),
+            ));
+        }
+        Ok(Some(duration))
+    }
+
     pub fn apply_convention(&self, name: Option<&str>, draft: &mut SceneDraft) {
         match name {
             Some("commentary") => apply_commentary(draft),
@@ -141,5 +187,30 @@ impl LoweringRegistry {
             )),
             None => {}
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn registry_exposes_vocabulary_without_involving_the_parser() {
+        let registry = LoweringRegistry::stdlib();
+        assert!(registry.handles_invocation("title"));
+        assert!(registry.handles_invocation("overlay-preset"));
+        assert!(!registry.handles_invocation("scene-name"));
+    }
+
+    #[test]
+    fn every_runtime_builtin_prefers_the_wasm_component() {
+        let registry = LoweringRegistry::stdlib();
+        let builtin_names = registry
+            .builtins
+            .iter()
+            .map(|(name, _)| *name)
+            .collect::<Vec<_>>();
+        assert_eq!(builtin_names, WASM_SCENE_COMMANDS);
+        assert!(WASM_SEQUENCE_COMMANDS.contains(&"gap"));
     }
 }

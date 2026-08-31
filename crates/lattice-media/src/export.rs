@@ -12,6 +12,7 @@ use crate::fixture::{DEFAULT_SOURCE_DURATION_SECS, FixtureError, generate_av_fix
 #[cfg(test)]
 use crate::plan::AudioWindow;
 use crate::probe::ProbeError;
+use crate::runtime::FfmpegRuntimeError;
 
 #[derive(Debug, Error)]
 pub enum ExportError {
@@ -21,10 +22,10 @@ pub enum ExportError {
     Fixture(#[from] FixtureError),
     #[error(transparent)]
     Probe(#[from] ProbeError),
-    #[error("failed to run ffmpeg: {0}")]
-    Spawn(#[from] std::io::Error),
-    #[error("ffmpeg export failed (status {status}): {stderr}")]
-    Ffmpeg { status: String, stderr: String },
+    #[error(transparent)]
+    Runtime(#[from] FfmpegRuntimeError),
+    #[error("media I/O failed: {0}")]
+    Io(#[from] std::io::Error),
     #[error("video clip has no media source")]
     MissingSource,
     #[error("referenced media is missing: {0}")]
@@ -135,7 +136,8 @@ pub(crate) fn run_ffmpeg_extract_frame(
     if let Some(parent) = ppm.parent() {
         std::fs::create_dir_all(parent)?;
     }
-    let mut command = Command::new(ffmpeg_bin());
+    let executable = ffmpeg_bin();
+    let mut command = Command::new(&executable);
     command
         .args(["-y", "-ss", &ffmpeg_seconds(at), "-i"])
         .arg(video)
@@ -144,12 +146,16 @@ pub(crate) fn run_ffmpeg_extract_frame(
         command.args(["-vf", &format!("scale={width}:{height}")]);
     }
     command.arg(ppm);
-    let output = command.output()?;
+    let output = command.output().map_err(|source| {
+        FfmpegRuntimeError::ffmpeg_unavailable(&executable, "extracting a video frame", source)
+    })?;
     if !output.status.success() {
-        return Err(ExportError::Ffmpeg {
-            status: output.status.to_string(),
-            stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
-        });
+        return Err(FfmpegRuntimeError::ffmpeg_failed(
+            "extracting a video frame",
+            output.status.to_string(),
+            String::from_utf8_lossy(&output.stderr).into_owned(),
+        )
+        .into());
     }
     Ok(ppm.to_path_buf())
 }

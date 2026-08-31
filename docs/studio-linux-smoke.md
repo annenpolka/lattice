@@ -84,7 +84,7 @@ LATTICE_STUDIO_AUDIO_MONITOR=0
 LATTICE_STUDIO_RENDERER=cpu
 ```
 
-Audio monitoring is Windows-only; the Linux stub already returns `UnsupportedPlatform`. Preview extract is optional and is the usual launch blocker when FFmpeg/media is missing.
+Audio monitoring is Windows/macOS-only; the Linux stub already returns `UnsupportedPlatform`. Preview extract is optional and is the usual launch blocker when FFmpeg/media is missing.
 
 ## Observable semantic state (CHI-66)
 

@@ -8,6 +8,7 @@ use crate::backend::PcmBuffer;
 use crate::decode::collect_audio_sources;
 use crate::export::{ExportError, PreviewOptions};
 use crate::mix::{MixSpec, mix_plan, time_to_frames};
+use crate::runtime::FfmpegRuntimeError;
 
 /// Why timeline audio could not be prepared or addressed.
 #[derive(Debug, Error)]
@@ -52,10 +53,12 @@ impl From<AudioMixError> for ExportError {
             AudioMixError::SourceUnavailable { source, .. } | AudioMixError::Mix { source } => {
                 *source
             }
-            AudioMixError::EmptySource { media_name, .. } => Self::Ffmpeg {
-                status: "empty-audio".into(),
-                stderr: format!("audio source `{media_name}` decoded to no PCM frames"),
-            },
+            AudioMixError::EmptySource { media_name, .. } => FfmpegRuntimeError::ffmpeg_failed(
+                "decoding PCM audio",
+                "empty-audio".into(),
+                format!("audio source `{media_name}` decoded to no PCM frames"),
+            )
+            .into(),
             AudioMixError::PlayheadOutOfRange { .. } => Self::TimeOutOfRange,
         }
     }

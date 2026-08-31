@@ -10,6 +10,7 @@ use lattice_core::{AssetRef, MediaLocator, ResolveLock, Time};
 use crate::audio::AudioMixError;
 use crate::backend::{PcmBuffer, RawFrame, VideoDecoder};
 use crate::export::{ExportError, ffmpeg_bin, ffmpeg_seconds, resolve_media_path};
+use crate::runtime::FfmpegRuntimeError;
 
 type FrameKey = (String, String, u32, u32);
 type StreamKey = (PathBuf, u32, u32);
@@ -123,28 +124,33 @@ impl FfmpegVideoDecoder {
             0
         };
 
-        let stream = self.stream.as_mut().ok_or_else(|| ExportError::Ffmpeg {
-            status: "decoder-missing".into(),
-            stderr: "sequential decoder was not created".into(),
+        let stream = self.stream.as_mut().ok_or_else(|| {
+            FfmpegRuntimeError::ffmpeg_failed(
+                "decoding sequential rawvideo",
+                "decoder-missing".into(),
+                "sequential decoder was not created",
+            )
         })?;
         for _ in 0..skip_frames {
-            let _ = stream
-                .read_frame(width, height)
-                .map_err(|err| ExportError::Ffmpeg {
-                    status: "short-read".into(),
-                    stderr: format!("sequential rawvideo skip failed: {err}"),
-                })?;
+            let _ = stream.read_frame(width, height).map_err(|err| {
+                FfmpegRuntimeError::ffmpeg_failed(
+                    "decoding sequential rawvideo",
+                    "short-read".into(),
+                    format!("sequential rawvideo skip failed: {err}"),
+                )
+            })?;
             stream.next_time = stream
                 .next_time
                 .checked_add(frame_duration)
                 .unwrap_or(stream.next_time);
         }
-        let frame = stream
-            .read_frame(width, height)
-            .map_err(|err| ExportError::Ffmpeg {
-                status: "short-read".into(),
-                stderr: format!("sequential rawvideo read failed: {err}"),
-            })?;
+        let frame = stream.read_frame(width, height).map_err(|err| {
+            FfmpegRuntimeError::ffmpeg_failed(
+                "decoding sequential rawvideo",
+                "short-read".into(),
+                format!("sequential rawvideo read failed: {err}"),
+            )
+        })?;
         stream.next_time = content_time
             .checked_add(frame_duration)
             .unwrap_or(content_time);
@@ -159,7 +165,8 @@ impl FfmpegVideoDecoder {
         let (path, width, height) = &key;
         let fps = format!("{}/{}", self.fps_num, self.fps_den);
         let filter = format!("fps={fps}:round=near,scale={width}:{height}:flags=bilinear");
-        let mut child = Command::new(ffmpeg_bin())
+        let executable = ffmpeg_bin();
+        let mut child = Command::new(&executable)
             .args([
                 "-hide_banner",
                 "-loglevel",
@@ -176,10 +183,20 @@ impl FfmpegVideoDecoder {
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
             .stderr(Stdio::null())
-            .spawn()?;
-        let stdout = child.stdout.take().ok_or_else(|| ExportError::Ffmpeg {
-            status: "decoder-pipe".into(),
-            stderr: "FFmpeg did not expose its rawvideo stdout".into(),
+            .spawn()
+            .map_err(|source| {
+                FfmpegRuntimeError::ffmpeg_unavailable(
+                    &executable,
+                    "starting the sequential video decoder",
+                    source,
+                )
+            })?;
+        let stdout = child.stdout.take().ok_or_else(|| {
+            FfmpegRuntimeError::ffmpeg_failed(
+                "starting the sequential video decoder",
+                "decoder-pipe".into(),
+                "FFmpeg did not expose its rawvideo stdout",
+            )
         })?;
         #[cfg(test)]
         {
@@ -243,7 +260,8 @@ pub fn decode_rgba_frame(
     width: u32,
     height: u32,
 ) -> Result<RawFrame, ExportError> {
-    let output = Command::new(ffmpeg_bin())
+    let executable = ffmpeg_bin();
+    let output = Command::new(&executable)
         .args([
             "-hide_banner",
             "-loglevel",
@@ -264,19 +282,26 @@ pub fn decode_rgba_frame(
             &format!("{width}x{height}"),
             "-",
         ])
-        .output()?;
+        .output()
+        .map_err(|source| {
+            FfmpegRuntimeError::ffmpeg_unavailable(&executable, "decoding a video frame", source)
+        })?;
     if !output.status.success() {
-        return Err(ExportError::Ffmpeg {
-            status: output.status.to_string(),
-            stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
-        });
+        return Err(FfmpegRuntimeError::ffmpeg_failed(
+            "decoding a video frame",
+            output.status.to_string(),
+            String::from_utf8_lossy(&output.stderr).into_owned(),
+        )
+        .into());
     }
     let expected = frame_byte_len(width, height);
     if output.stdout.len() < expected {
-        return Err(ExportError::Ffmpeg {
-            status: "short-read".into(),
-            stderr: format!("expected {expected} bytes, got {}", output.stdout.len()),
-        });
+        return Err(FfmpegRuntimeError::ffmpeg_failed(
+            "decoding a video frame",
+            "short-read".into(),
+            format!("expected {expected} bytes, got {}", output.stdout.len()),
+        )
+        .into());
     }
     Ok(RawFrame {
         width,
@@ -290,7 +315,8 @@ pub fn decode_pcm_f32(
     sample_rate: u32,
     channels: u16,
 ) -> Result<PcmBuffer, ExportError> {
-    let output = Command::new(ffmpeg_bin())
+    let executable = ffmpeg_bin();
+    let output = Command::new(&executable)
         .args(["-hide_banner", "-loglevel", "error", "-i"])
         .arg(path)
         .args([
@@ -303,12 +329,17 @@ pub fn decode_pcm_f32(
             "f32le",
             "-",
         ])
-        .output()?;
+        .output()
+        .map_err(|source| {
+            FfmpegRuntimeError::ffmpeg_unavailable(&executable, "decoding PCM audio", source)
+        })?;
     if !output.status.success() {
-        return Err(ExportError::Ffmpeg {
-            status: output.status.to_string(),
-            stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
-        });
+        return Err(FfmpegRuntimeError::ffmpeg_failed(
+            "decoding PCM audio",
+            output.status.to_string(),
+            String::from_utf8_lossy(&output.stderr).into_owned(),
+        )
+        .into());
     }
     let mut samples = Vec::with_capacity(output.stdout.len() / 4);
     for chunk in output.stdout.chunks_exact(4) {

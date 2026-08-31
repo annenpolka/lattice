@@ -10,9 +10,11 @@ use lattice_core::Time;
 
 use crate::backend::{Encoder, OutputSpec, PcmBuffer, RawFrame};
 use crate::export::{ExportError, ffmpeg_bin, ffmpeg_seconds};
+use crate::runtime::FfmpegRuntimeError;
 
 pub struct FfmpegEncoder {
     child: Child,
+    executable: PathBuf,
     stdin: Option<ChildStdin>,
     spec: OutputSpec,
     audio_path: Option<PathBuf>,
@@ -38,7 +40,8 @@ impl FfmpegEncoder {
         } else {
             None
         };
-        let mut command = Command::new(ffmpeg_bin());
+        let executable = ffmpeg_bin();
+        let mut command = Command::new(&executable);
         command
             .args(["-y", "-hide_banner", "-loglevel", "error"])
             .args([
@@ -74,10 +77,13 @@ impl FfmpegEncoder {
             .stdin(Stdio::piped())
             .stdout(Stdio::null())
             .stderr(Stdio::piped());
-        let mut child = command.spawn()?;
+        let mut child = command.spawn().map_err(|source| {
+            FfmpegRuntimeError::ffmpeg_unavailable(&executable, "starting the MP4 encoder", source)
+        })?;
         let stdin = child.stdin.take();
         Ok(Self {
             child,
+            executable,
             stdin,
             spec,
             audio_path,
@@ -88,26 +94,34 @@ impl FfmpegEncoder {
 impl Encoder for FfmpegEncoder {
     fn push_frame(&mut self, frame: &RawFrame) -> Result<(), ExportError> {
         if frame.width != self.spec.width || frame.height != self.spec.height {
-            return Err(ExportError::Ffmpeg {
-                status: "size".into(),
-                stderr: format!(
+            return Err(FfmpegRuntimeError::ffmpeg_failed(
+                "encoding an MP4 frame",
+                "size".into(),
+                format!(
                     "frame {}x{} != spec {}x{}",
                     frame.width, frame.height, self.spec.width, self.spec.height
                 ),
-            });
+            )
+            .into());
         }
-        let stdin = self.stdin.as_mut().ok_or_else(|| ExportError::Ffmpeg {
-            status: "stdin".into(),
-            stderr: "encoder stdin closed".into(),
+        let stdin = self.stdin.as_mut().ok_or_else(|| {
+            FfmpegRuntimeError::ffmpeg_failed(
+                "encoding an MP4 frame",
+                "stdin".into(),
+                "encoder stdin closed",
+            )
         })?;
         stdin.write_all(&frame.rgba)?;
         Ok(())
     }
 
     fn set_audio(&mut self, pcm: &PcmBuffer) -> Result<(), ExportError> {
-        let path = self.audio_path.clone().ok_or_else(|| ExportError::Ffmpeg {
-            status: "audio".into(),
-            stderr: "encoder was started without an audio slot".into(),
+        let path = self.audio_path.clone().ok_or_else(|| {
+            FfmpegRuntimeError::ffmpeg_failed(
+                "attaching PCM audio to the MP4 encoder",
+                "audio".into(),
+                "encoder was started without an audio slot",
+            )
         })?;
         std::fs::write(path, pcm.to_s16le())?;
         Ok(())
@@ -115,15 +129,23 @@ impl Encoder for FfmpegEncoder {
 
     fn finish(mut self) -> Result<(), ExportError> {
         drop(self.stdin.take());
-        let output = self.child.wait_with_output()?;
+        let output = self.child.wait_with_output().map_err(|source| {
+            FfmpegRuntimeError::ffmpeg_unavailable(
+                &self.executable,
+                "waiting for the MP4 encoder",
+                source,
+            )
+        })?;
         if let Some(path) = self.audio_path {
             let _ = std::fs::remove_file(path);
         }
         if !output.status.success() {
-            return Err(ExportError::Ffmpeg {
-                status: output.status.to_string(),
-                stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
-            });
+            return Err(FfmpegRuntimeError::ffmpeg_failed(
+                "encoding the MP4 output",
+                output.status.to_string(),
+                String::from_utf8_lossy(&output.stderr).into_owned(),
+            )
+            .into());
         }
         Ok(())
     }
@@ -137,16 +159,12 @@ pub fn write_png(frame: &RawFrame, path: &Path) -> Result<(), ExportError> {
     let mut encoder = png::Encoder::new(file, frame.width, frame.height);
     encoder.set_color(png::ColorType::Rgba);
     encoder.set_depth(png::BitDepth::Eight);
-    let mut writer = encoder.write_header().map_err(|err| ExportError::Ffmpeg {
-        status: "png".into(),
-        stderr: err.to_string(),
-    })?;
+    let mut writer = encoder
+        .write_header()
+        .map_err(|err| ExportError::Map(format!("PNG header: {err}")))?;
     writer
         .write_image_data(&frame.rgba)
-        .map_err(|err| ExportError::Ffmpeg {
-            status: "png".into(),
-            stderr: err.to_string(),
-        })?;
+        .map_err(|err| ExportError::Map(format!("PNG image data: {err}")))?;
     Ok(())
 }
 

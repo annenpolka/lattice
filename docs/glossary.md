@@ -8,7 +8,7 @@ Use these names. Do not invent aliases for the same concept.
 | **VEL** | Surface DSL. Declarative edit intent. Not a general-purpose language. |
 | **Project** | A named edit, stored as text (`*.vel`) plus optional lock files. |
 | **Workspace** | An ordinary directory / git repo Lattice understands. |
-| **Sequence** | Ordered list of scenes (v0: flow). |
+| **Sequence** | Ordered list of scenes (flow), with optional explicit time offsets between them. |
 | **Scene** | A bounded editorial unit with sources and placements. |
 | **Source** | A named binding of a media slice plus a TimeMap. |
 | **Placement** | A concrete A/V object on a scene's local timeline. |

@@ -3,7 +3,7 @@
 ```text
 VEL source
    ↓  lattice-vel (generic invocation AST)
-Wasm lowering registry          (today: in-process builtins)
+Wasmtime-hosted WIT stdlib registry
    ↓  lattice-wasm
 Core IR                         lattice-core
    ↓
@@ -50,7 +50,7 @@ lattice-vel  lattice-wasm  lattice-media
 2. `lattice-core` does not depend on GPUI / Wasmtime / FFmpeg.
 3. `lattice-vel` does not know Wasm or FFmpeg.
 4. `lattice-wasm` does not parse VEL.
-5. Wasm components (and today's builtins) speak Core fragments, not VEL.
+5. Wasm components speak Core fragments, not VEL.
 6. Render backends do not know surface VEL.
 7. Studio and CLI own no compile semantics; they call the engine.
 8. OS-specific code stays out of Core.
@@ -91,19 +91,21 @@ Generated locators (`speech`) are intent at Compile. Resolve materializes them i
 
 ## Wasm / WIT
 
-`freeze` and `title` lower through a Wasmtime-hosted `lattice:stdlib` component (`stdlib/lattice-stdlib.wasm`). The component emits TimeMap / placement fragments, never FFmpeg or GPUI. Ambient net/fs/random are not granted. Other stdlib words (`callout`, `fade`, `gain`, `speech`) remain in-process builtins behind the same registry.
+`freeze`, `title`, `caption`, `callout`, `fade`, `gain`, `speech`, and sequence `gap` lower through a Wasmtime-hosted `lattice:stdlib` component (`stdlib/lattice-stdlib.wasm`). The component emits TimeMap, placement, sequence-offset, envelope, gain, and generated-media intent fragments, never FFmpeg or GPUI. Ambient net/fs/random are not granted. Host code converts the generic invocation view and assembles the returned fragments into Core IR; provider I/O remains in Resolve.
 
 See [interaction.md](interaction.md). Boards: [mockups/studio/](mockups/studio/).
 
 ## Walking skeleton builtins
 
-These stdlib words are registered in `lattice-wasm`. `freeze` and `title` are hosted on Wasmtime; the rest are in-process builtins behind the same registry:
+These stdlib words are registered in `lattice-wasm` and hosted on Wasmtime:
 
 - `freeze` — TimeMap hold segment (temporal, WIT)
 - `title` — generated visual placement (visual, WIT)
-- `callout` — second overlay (visual)
-- `fade` — opacity envelope on a source's video placement (visual)
-- `gain` — audio gain in dB (audio)
-- `speech` — generated-media intent; Resolve materializes (audio)
+- `caption` — timed cue on the title overlay (visual, WIT)
+- `callout` — second overlay (visual, WIT)
+- `fade` — opacity envelope on a source's video placement (visual, WIT)
+- `gain` — audio gain in dB (audio, WIT)
+- `speech` — generated-media intent; Resolve materializes (audio, WIT)
+- `gap` — explicit empty time before the next scene, lowered to a Core sequence offset (placement, WIT)
 - `flow` — sequence body order is scene order (placement)
 - `convention commentary` — default A/V placement, never invents cuts

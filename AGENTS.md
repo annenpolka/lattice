@@ -40,14 +40,14 @@ The dependency column below lists Lattice-to-Lattice dependencies; ordinary exte
 Keep changes inside this implemented product shape unless the task explicitly expands it:
 
 1. Parse the generic VEL DSL; use `examples/gameplay-commentary/main.vel` as the reproducible end-to-end fixture.
-2. Lower `freeze` and `title` through the Wasmtime-hosted WIT component in `stdlib/lattice-stdlib.wasm`; lower the remaining stdlib words through the same registry.
+2. Lower `freeze`, `title`, `caption`, `callout`, `fade`, `gain`, `speech`, and sequence `gap` through the Wasmtime-hosted WIT component in `stdlib/lattice-stdlib.wasm` behind one registry.
 3. Emit Core IR, explain events, provenance, and one shared locus across source, Canvas, Timeline, Review, and agents.
 4. Resolve generated `speech` and fonts into `lattice.lock.json`. Compile records intent only and never performs provider I/O.
 5. Flatten to a `Timeline`, then call Core evaluation to obtain `RenderScene` and `AudioPlan` at time `t`.
 6. Preview and export share `SampleSession`: the CPU reference compositor and the explicit Windows DX12 compositor consume the same scene; export and Studio monitoring share the same PCM mix.
 7. Studio keeps preview frames in memory, coalesces playback work, and exposes source-backed timeline edits, Canvas move/four-corner resize, Review Apply/Reject, Resolve, renderer selection, and Windows/macOS audio monitoring.
 
-`callout`, `fade`, `gain`, `speech`, and the commentary convention remain in-process host lowerings behind the WIT-compatible registry. Sequence flow is currently Engine-owned ordering/explain logic, not a registry builtin. Replace the remaining registry lowering bodies with components without changing Core types or surface syntax. OTIO, a project database, an automatic renderer fallback, and an in-process agent runtime remain outside this slice.
+The commentary convention remains an in-process host lowering behind the registry. Engine owns scene ordering; the `gap` stdlib word lowers to explicit Core sequence offsets and never to a synthetic scene or `GapNode`. Host code converts generic invocation views and assembles WIT-returned fragments into Core types; Wasm components never enter the render hot path. OTIO, a project database, an automatic renderer fallback, and an in-process agent runtime remain outside this slice.
 
 ## Implementation contracts
 
