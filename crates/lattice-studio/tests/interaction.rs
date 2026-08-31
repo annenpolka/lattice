@@ -592,6 +592,50 @@ scene c { game[2s..3s] as v }
 }
 
 #[test]
+fn sequence_gap_is_empty_in_layout_and_survives_studio_reorder_commit() {
+    let dir = unique_dir("sequence-gap");
+    let mut session = write_scenes(
+        &dir,
+        r#"project "demo"
+convention commentary
+media game "capture.mp4"
+sequence main {
+  a
+  // authored pause
+  gap 500ms
+  b
+}
+scene a { game[0s..1s] as v }
+scene b { game[1s..2s] as v }
+"#,
+    );
+    let layout = session.layout().unwrap();
+    let video = layout
+        .timeline
+        .tracks
+        .iter()
+        .find(|track| track.name == "Video")
+        .unwrap();
+    assert_eq!(video.clips[0].start, Time::ZERO);
+    assert_eq!(video.clips[0].duration, Time::seconds(1));
+    assert_eq!(video.clips[1].start, Time::milliseconds(1_500));
+    assert_eq!(layout.timeline.duration, Time::milliseconds(2_500));
+
+    session.point_at(lattice_engine::LocusId::new("scene:b"));
+    session
+        .apply_committed_edit(SemanticEdit::ReorderScene {
+            before: Some("a".into()),
+        })
+        .unwrap();
+    assert!(session.source().contains("// authored pause\n  gap 500ms"));
+    assert_eq!(session.undo_len(), 1);
+    assert_eq!(
+        session.compilation().project.sequences[0].scene_offsets,
+        vec![Time::ZERO, Time::milliseconds(500)]
+    );
+}
+
+#[test]
 fn text_track_pointer_does_not_hit_video_clips() {
     let dir = unique_dir("track-hit");
     let mut session = write_scenes(

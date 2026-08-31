@@ -3,6 +3,7 @@
 mod atomic;
 mod compile;
 mod edit;
+mod highlight;
 mod import;
 mod legal;
 mod locus;
@@ -12,6 +13,7 @@ mod time_eval;
 
 pub use atomic::{write_source_atomic, write_source_atomic_no_commit};
 pub use compile::{Compilation, Engine, EngineError, ExplainEvent};
+pub use highlight::{VelHighlight, VelHighlightClass};
 pub use import::ImportResult;
 pub use lattice_core::{
     AudioPlan, Canvas, Diagnostic, EditProposal, Locus, LocusId, LocusKind, LocusProjection,

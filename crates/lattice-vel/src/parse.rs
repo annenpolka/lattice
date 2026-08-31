@@ -6,7 +6,7 @@ use crate::ast::{
 use crate::error::ParseError;
 use crate::lexer::{Token, TokenKind, lex};
 
-const DECLARATIONS: &[&str] = &[
+pub(crate) const DECLARATIONS: &[&str] = &[
     "project",
     "convention",
     "theme",
@@ -18,7 +18,7 @@ const DECLARATIONS: &[&str] = &[
     "narration",
 ];
 
-const MODIFIERS: &[&str] = &["at", "for", "over", "using", "as", "by", "from", "to"];
+pub(crate) const MODIFIERS: &[&str] = &["at", "for", "over", "using", "as", "by", "from", "to"];
 
 pub fn parse(source: &str) -> Result<Document, ParseError> {
     parse_file(source, "<input>")
@@ -834,5 +834,19 @@ scene x { title "Ada Lovelace\nEditor" using name-plate }
             "{:?}",
             using.value
         );
+    }
+
+    #[test]
+    fn sequence_gap_is_a_generic_invocation() {
+        let doc = parse("sequence main { a\n gap 500ms\n b }").unwrap();
+        let Item::Sequence { body, .. } = &doc.items[0] else {
+            panic!("expected sequence");
+        };
+        let Item::Invocation(gap) = &body.items[1] else {
+            panic!("expected generic gap invocation");
+        };
+        assert_eq!(gap.name, "gap");
+        assert!(matches!(gap.args.as_slice(), [Expr::Time(_)]));
+        assert!(!DECLARATIONS.contains(&"gap"));
     }
 }

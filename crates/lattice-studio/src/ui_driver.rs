@@ -436,6 +436,34 @@ scene intro {
         );
         assert!(dirty);
         assert_eq!(errors, 0, "valid VEL input must recompile immediately");
+
+        let valid_source = source;
+        ui.press(&secondary_keystroke("a"));
+        ui.input_text("@ broken\ncallout \"highlight survives\"");
+        let (invalid_draft, committed_source, source_error, highlights) =
+            ui.read(&view, |view, _| {
+                (
+                    view.source_draft.clone(),
+                    view.session.source().to_string(),
+                    view.source_error.clone(),
+                    view.session.engine().highlight_vel(&view.source_draft),
+                )
+            });
+        assert!(invalid_draft.starts_with('@'));
+        assert_eq!(
+            committed_source, valid_source,
+            "invalid draft must not replace the last valid compiled source"
+        );
+        assert!(
+            source_error.is_some(),
+            "invalid draft must remain observable"
+        );
+        assert!(highlights.iter().any(|token| {
+            token.text == "@" && token.class == lattice_engine::VelHighlightClass::Invalid
+        }));
+        assert!(highlights.iter().any(|token| {
+            token.text == "callout" && token.class == lattice_engine::VelHighlightClass::Builtin
+        }));
     }
 
     #[gpui::test]

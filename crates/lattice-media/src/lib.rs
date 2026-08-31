@@ -16,6 +16,7 @@ mod mix;
 mod plan;
 mod preview;
 mod probe;
+mod runtime;
 mod sample;
 mod text;
 
@@ -48,6 +49,7 @@ pub use probe::{
     has_audio_stream, mean_abs_diff, near_white_pixels, pcm_rms, probe_duration, probe_media,
     title_bar_present,
 };
+pub use runtime::FfmpegRuntimeError;
 pub use sample::{
     PreviewSampler, SampleSession, SessionRebindError, SessionRebindRequirement, render_still,
     render_timeline, sample_frame, try_gpu_sample,

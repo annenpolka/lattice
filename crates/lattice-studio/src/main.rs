@@ -23,12 +23,12 @@ use gpui::{
     Focusable, InputHandler, InteractiveElement, IntoElement, KeyDownEvent, MouseButton,
     MouseDownEvent, MouseMoveEvent, MouseUpEvent, ObjectFit, ParentElement, PathPromptOptions,
     Pixels, Render, RenderImage, ScrollDelta, ScrollHandle, ScrollWheelEvent, SharedString,
-    StatefulInteractiveElement, Styled, StyledImage, TextRun, Timer, TitlebarOptions,
+    StatefulInteractiveElement, Styled, StyledImage, StyledText, TextRun, Timer, TitlebarOptions,
     UTF16Selection, Window, WindowBounds, WindowOptions, canvas, div, img, px, rgb, size,
 };
 use lattice_engine::{
     Engine, OutputSpec, PreviewFrameRequest, PreviewOptions, PreviewSampler, RawFrame,
-    RendererRequest, RendererSelection, Span,
+    RendererRequest, RendererSelection, Span, VelHighlight, VelHighlightClass,
 };
 use lattice_studio::audio::{
     AudioDeviceFormat, AudioMonitor, AudioMonitorConfig, AudioPrepareJob, AudioProgram,
@@ -611,6 +611,68 @@ fn byte_ranges_intersect(a: Range<usize>, b: Range<usize>) -> bool {
         return b.start <= a.start && a.start <= b.end;
     }
     a.start < b.end && b.start < a.end
+}
+
+#[derive(Clone, Copy)]
+struct VelSyntaxTheme {
+    declaration: u32,
+    keyword: u32,
+    builtin: u32,
+    identifier: u32,
+    string: u32,
+    number: u32,
+    comment: u32,
+    punctuation: u32,
+    invalid: u32,
+}
+
+impl VelSyntaxTheme {
+    const fn color(self, class: VelHighlightClass) -> u32 {
+        match class {
+            VelHighlightClass::Declaration => self.declaration,
+            VelHighlightClass::Keyword => self.keyword,
+            VelHighlightClass::Builtin => self.builtin,
+            VelHighlightClass::Identifier => self.identifier,
+            VelHighlightClass::String => self.string,
+            VelHighlightClass::Number => self.number,
+            VelHighlightClass::Comment => self.comment,
+            VelHighlightClass::Punctuation => self.punctuation,
+            VelHighlightClass::Invalid => self.invalid,
+        }
+    }
+}
+
+const VEL_SYNTAX_THEME: VelSyntaxTheme = VelSyntaxTheme {
+    declaration: 0x72d6c9,
+    keyword: 0xc4a7e7,
+    builtin: 0x82aaff,
+    identifier: 0xd8dee9,
+    string: 0xa3be8c,
+    number: 0xebcb8b,
+    comment: 0x718096,
+    punctuation: 0x9aa5b1,
+    invalid: 0xff8a80,
+};
+
+fn styled_source_line(line: &SourceLine, tokens: &[VelHighlight]) -> StyledText {
+    let display = if line.text.is_empty() {
+        " ".to_string()
+    } else {
+        line.text.clone()
+    };
+    let highlights = tokens.iter().filter_map(|token| {
+        let start = usize::try_from(token.span.start).ok()?;
+        let end = usize::try_from(token.span.end).ok()?;
+        let start = start.max(line.start).min(line.end);
+        let end = end.max(start).min(line.end);
+        (start < end).then(|| {
+            (
+                start - line.start..end - line.start,
+                rgb(VEL_SYNTAX_THEME.color(token.class)).into(),
+            )
+        })
+    });
+    StyledText::new(display).with_highlights(highlights)
 }
 
 impl InputHandler for StudioTitleInputHandler {
@@ -3388,6 +3450,7 @@ impl StudioView {
             },
             |error| format!("VEL: {error}"),
         );
+        let syntax = self.session.engine().highlight_vel(&self.source_draft);
 
         let mut editor = div()
             .id("vel-editor")
@@ -3414,6 +3477,7 @@ impl StudioView {
             let line_number = line.number;
             let line_start = line.start;
             let line_text = line.text.clone();
+            let styled_line = styled_source_line(&line, &syntax);
             let line_scroll = scroll.clone();
             let line_focus = focus.clone();
             editor = editor.child(
@@ -3478,11 +3542,7 @@ impl StudioView {
                             cx.notify();
                         }),
                     )
-                    .child(if line.text.is_empty() {
-                        " ".to_string()
-                    } else {
-                        line.text
-                    }),
+                    .child(styled_line),
             );
         }
 

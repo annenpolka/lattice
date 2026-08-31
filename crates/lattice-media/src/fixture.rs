@@ -4,6 +4,7 @@ use std::process::Command;
 use thiserror::Error;
 
 use crate::export::ffmpeg_bin;
+use crate::runtime::FfmpegRuntimeError;
 use crate::{PREVIEW_FPS_DEN, PREVIEW_FPS_NUM, PREVIEW_HEIGHT, PREVIEW_WIDTH};
 
 /// Default generated source length: covers `game[10s..20s]`.
@@ -11,10 +12,10 @@ pub const DEFAULT_SOURCE_DURATION_SECS: i64 = 21;
 
 #[derive(Debug, Error)]
 pub enum FixtureError {
-    #[error("failed to run ffmpeg to generate test source: {0}")]
-    Spawn(#[from] std::io::Error),
-    #[error("ffmpeg test-source generation failed (status {status}): {stderr}")]
-    Ffmpeg { status: String, stderr: String },
+    #[error(transparent)]
+    Runtime(#[from] FfmpegRuntimeError),
+    #[error("fixture I/O failed: {0}")]
+    Io(#[from] std::io::Error),
 }
 
 /// Write a deterministic `testsrc` MP4 long enough for the walking-skeleton trim.
@@ -105,7 +106,8 @@ fn write_lavfi_mp4_rate(
     let size = format!("{width}x{height}");
     let rate = format!("{fps_num}/{fps_den}");
     let video = format!("testsrc=duration={duration}:size={size}:rate={rate}");
-    let mut command = Command::new(ffmpeg_bin());
+    let executable = ffmpeg_bin();
+    let mut command = Command::new(&executable);
     command.args(["-y", "-f", "lavfi", "-i", &video]);
     if with_audio {
         let tone = format!("sine=frequency=440:sample_rate=44100:duration={duration}");
@@ -114,12 +116,20 @@ fn write_lavfi_mp4_rate(
         command.arg("-an");
     }
     command.args(["-pix_fmt", "yuv420p"]).arg(path);
-    let output = command.output()?;
+    let output = command.output().map_err(|source| {
+        FfmpegRuntimeError::ffmpeg_unavailable(
+            &executable,
+            "generating a test media fixture",
+            source,
+        )
+    })?;
     if !output.status.success() {
-        return Err(FixtureError::Ffmpeg {
-            status: output.status.to_string(),
-            stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
-        });
+        return Err(FfmpegRuntimeError::ffmpeg_failed(
+            "generating a test media fixture",
+            output.status.to_string(),
+            String::from_utf8_lossy(&output.stderr).into_owned(),
+        )
+        .into());
     }
     Ok(path.to_path_buf())
 }

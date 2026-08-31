@@ -27,8 +27,8 @@ FFmpeg handles media I/O and codecs. It is not the scene or audio semantic model
 | Area | Alpha implementation |
 |---|---|
 | VEL | Generic invocation parser; no stdlib meaning in the parser |
-| Stdlib lowering | `freeze` and `title` through a Wasmtime-hosted WIT component; remaining words behind the same registry |
-| Core | Time/TimeMap, normalized space, properties, `RenderScene`, `AudioPlan`, provenance, diagnostics, locus |
+| Stdlib lowering | `freeze`, `title`, `caption`, `callout`, `fade`, `gain`, `speech`, and sequence `gap` through a Wasmtime-hosted WIT component behind one registry |
+| Core | Time/TimeMap, explicit sequence offsets, normalized space, properties, `RenderScene`, `AudioPlan`, provenance, diagnostics, locus |
 | Editing | Source-backed semantic edits, volatile Studio Undo/Redo, stale-proposal protection |
 | Review and agents | Locus projection, inspect, propose, Apply/Reject, JSON CLI surface |
 | Resolve | Lockable file/font/generated assets; deterministic LocalTone speech provider |
@@ -141,9 +141,14 @@ The preview is a bounded sample-at-time pipeline rather than a continuous stream
 
 Linux is not a Studio dogfood or product target. Ubuntu agents (including Cursor Cloud) can use the UI-only smoke path in [docs/studio-linux-smoke.md](docs/studio-linux-smoke.md) to build, launch, screenshot, and click/drag a `--ui-fixture` window without preview or audio-device I/O. That path does not change the Windows 11 x64 or macOS dogfood commands above.
 
+The current Linux native-library, FFmpeg codec, font, and redistribution
+inventory is documented in
+[docs/linux-installation.md](docs/linux-installation.md). It records the source
+and agent requirements without declaring product Linux support.
+
 ## CLI for agents
 
-The `lattice` executable exposes `check`, `compile`, `explain`, `render`/`preview`, `locus`, `inspect`, `propose`, `apply`, `reject`, `resolve`, `import`, and `new`. The global `--json` flag is available on every subcommand.
+The `lattice` executable exposes `check`, `fmt`, `compile`, `explain`, `render`/`preview`, `locus`, `inspect`, `propose`, `apply`, `reject`, `resolve`, `import`, and `new`. The global `--json` flag is available on every subcommand.
 
 ```powershell
 cargo run -p lattice-cli -- --json inspect examples/gameplay-commentary/main.vel --locus demo:title:1
@@ -152,6 +157,25 @@ $proposal = Join-Path $env:TEMP "lattice-title-proposal.json"
 cargo run -q -p lattice-cli -- --json propose examples/gameplay-commentary/main.vel --locus demo:title:1 --title-text "Agent cut" | Set-Content -LiteralPath $proposal -Encoding utf8
 cargo run -p lattice-cli -- --json reject examples/gameplay-commentary/main.vel --proposal $proposal
 # Use `apply` instead of `reject` to atomically write the proposed VEL source.
+
+# Canonicalize generic VEL syntax, or only check it in CI.
+cargo run -p lattice-cli -- fmt examples/gameplay-commentary/main.vel
+cargo run -p lattice-cli -- --json fmt examples/gameplay-commentary/main.vel --check
+```
+
+`fmt` validates the file before writing, preserves comments and string lexemes, and
+formats generic invocations without knowing stdlib word meanings. `fmt --check`
+never writes and exits 1 when the file would change.
+
+`propose --edit` covers the complete Engine `SemanticEdit` set: `title`, `callout`,
+`trim`, `split`, `delete`, `set-gain`, `set-fade`, `reorder-scene`, `set-position`,
+and `resize-overlay`. Non-title/callout edits require `--locus`. Canvas position
+flags use `0..=100` percent and overlay scale uses `25..=200` percent; the CLI
+converts them to Core normalized space before calling `Engine::propose`.
+
+```powershell
+cargo run -q -p lattice-cli -- --json propose main.vel --edit trim --locus source:fight --trim-in 11s --trim-out 18s
+cargo run -q -p lattice-cli -- --json propose main.vel --edit resize-overlay --locus demo:title:1 --position-x 12.5 --position-y 75 --scale 125
 ```
 
 JSON covers successful results, diagnostics, proposal workflows, and renderer initialization/render failures. A successful renderer report includes the selected adapter when applicable. A failed explicit GPU request returns `ok=false` with requested/active renderer, phase/kind/stage, and reason, then exits 2 without falling back. Callers must still check the process exit code and stderr: generic top-level filesystem and similar runtime failures may still use plain stderr.

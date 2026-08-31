@@ -616,30 +616,12 @@ fn apply_reorder(
             "reorder does not change scene order".into(),
         ));
     }
-    let first = refs.first().expect("refs non-empty").1;
-    let last = refs.last().expect("refs non-empty").1;
-    let start = first.start as usize;
-    let indent = source[..start.min(source.len())]
-        .chars()
-        .rev()
-        .take_while(|ch| *ch == ' ')
-        .count();
-    let indent_str = " ".repeat(indent);
-    let mut replacement = String::new();
-    for (i, name) in names.iter().enumerate() {
-        if i > 0 {
-            replacement.push('\n');
-            replacement.push_str(&indent_str);
-        }
-        replacement.push_str(name);
-    }
-    Ok(apply_splices(
-        source,
-        vec![(
-            Span::new(first.start, last.end, first.line, first.column),
-            replacement,
-        )],
-    ))
+    let splices = refs
+        .iter()
+        .zip(names)
+        .map(|((_, span), name)| (*span, name.to_string()))
+        .collect();
+    Ok(apply_splices(source, splices))
 }
 
 fn scene_name_of(locus: &Locus) -> Option<String> {

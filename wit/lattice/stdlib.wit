@@ -43,6 +43,29 @@ interface lowering {
     /// Lowers onto the existing title overlay. No FFmpeg / GPUI / karaoke.
     caption: func(text: string, at: rational-time, hold: rational-time, opacity: option<u8>, span: span) -> result<placement-fragment, string>;
 
+    /// Build a callout placement fragment. Style parsing stays on the host.
+    callout: func(text: string, at: rational-time, hold: rational-time, span: span) -> result<placement-fragment, string>;
+
+    /// Validate and return a fade-in duration fragment.
+    fade: func(hold: rational-time) -> result<rational-time, string>;
+
+    /// Validate an explicit empty interval in sequence flow.
+    gap: func(hold: rational-time) -> result<rational-time, string>;
+
+    /// Validate and narrow a gain value to Core's dB representation.
+    gain: func(db: s64) -> result<s32, string>;
+
+    record speech-fragment {
+        start: rational-time,
+        duration: rational-time,
+        text: string,
+        media-name: string,
+        span: span,
+    }
+
+    /// Build generated speech intent. Provider I/O remains outside Compile.
+    speech: func(text: string, at: rational-time, hold: rational-time, span: span) -> result<speech-fragment, string>;
+
     /// Title overlay style fields only. No position / scale / anchor.
     record overlay-style {
         color: option<string>,

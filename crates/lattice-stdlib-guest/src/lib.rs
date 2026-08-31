@@ -6,8 +6,8 @@ wit_bindgen::generate!({
 });
 
 use crate::exports::lattice::stdlib::lowering::{
-    Guest, OverlayStyle as WitOverlayStyle, PlacementFragment, RationalTime, Span, TimeMap,
-    TimeMapSegment,
+    Guest, OverlayStyle as WitOverlayStyle, PlacementFragment, RationalTime, Span, SpeechFragment,
+    TimeMap, TimeMapSegment,
 };
 use lattice_core::{
     OverlayAlign, OverlayBar, OverlaySize, OverlayStyle, Rgba, Time, TimeMap as CoreTimeMap,
@@ -45,6 +45,59 @@ impl Guest for Stdlib {
         span: Span,
     ) -> Result<PlacementFragment, String> {
         placement_fragment("caption", text, at, hold, opacity, span)
+    }
+
+    fn callout(
+        text: String,
+        at: RationalTime,
+        hold: RationalTime,
+        span: Span,
+    ) -> Result<PlacementFragment, String> {
+        placement_fragment("callout", text, at, hold, None, span)
+    }
+
+    fn fade(hold: RationalTime) -> Result<RationalTime, String> {
+        let hold = from_wit_time(hold)?;
+        if hold < Time::ZERO {
+            return Err("fade duration must not be negative".into());
+        }
+        Ok(to_wit_time(hold))
+    }
+
+    fn gap(hold: RationalTime) -> Result<RationalTime, String> {
+        let hold = from_wit_time(hold)?;
+        if hold < Time::ZERO {
+            return Err("gap duration must not be negative".into());
+        }
+        Ok(to_wit_time(hold))
+    }
+
+    fn gain(db: i64) -> Result<i32, String> {
+        i32::try_from(db).map_err(|_| "gain dB out of range".into())
+    }
+
+    fn speech(
+        text: String,
+        at: RationalTime,
+        hold: RationalTime,
+        span: Span,
+    ) -> Result<SpeechFragment, String> {
+        if text.is_empty() {
+            return Err("`speech` needs a string".into());
+        }
+        let at = from_wit_time(at)?;
+        let hold = from_wit_time(hold)?;
+        if hold < Time::ZERO {
+            return Err("speech duration must not be negative".into());
+        }
+        let media_name = format!("speech-{}", speech_slug(&text));
+        Ok(SpeechFragment {
+            start: to_wit_time(at),
+            duration: to_wit_time(hold),
+            text,
+            media_name,
+            span,
+        })
     }
 
     fn overlay_presets() -> Vec<(String, WitOverlayStyle)> {
@@ -152,4 +205,20 @@ fn to_wit_map(map: &CoreTimeMap) -> TimeMap {
             })
             .collect(),
     }
+}
+
+fn speech_slug(text: &str) -> String {
+    let mut slug = String::new();
+    for ch in text.chars() {
+        if ch.is_ascii_alphanumeric() {
+            slug.push(ch.to_ascii_lowercase());
+        } else if !slug.ends_with('-') && !slug.is_empty() {
+            slug.push('-');
+        }
+        if slug.len() >= 32 {
+            break;
+        }
+    }
+    let slug = slug.trim_matches('-').to_string();
+    if slug.is_empty() { "line".into() } else { slug }
 }

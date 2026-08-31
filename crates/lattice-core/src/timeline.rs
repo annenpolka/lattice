@@ -55,6 +55,13 @@ pub enum TimelineError {
     NoVideo,
     #[error("sequence refers to missing scene `{0}`")]
     MissingScene(String),
+    #[error("sequence has {scene_count} scenes but {offset_count} scene offsets")]
+    InvalidSequenceOffsets {
+        scene_count: usize,
+        offset_count: usize,
+    },
+    #[error("sequence scene offset {index} is negative: {offset}")]
+    NegativeSequenceOffset { index: usize, offset: Time },
     #[error(transparent)]
     Time(#[from] TimeError),
 }
@@ -67,7 +74,8 @@ pub fn flatten_project(project: &Project) -> Result<Timeline, TimelineError> {
     }
     let mut clips = Vec::new();
     let mut offset = Time::ZERO;
-    for scene in scenes {
+    for (scene, scene_offset) in scenes {
+        offset = offset.checked_add(scene_offset)?;
         for placement in &scene.placements {
             let start = offset.checked_add(placement.span.start)?;
             let source = placement.source_id.as_ref().and_then(|id| {
@@ -113,20 +121,40 @@ pub fn flatten_project(project: &Project) -> Result<Timeline, TimelineError> {
     })
 }
 
-fn ordered_scenes(project: &Project) -> Result<Vec<&crate::ir::Scene>, TimelineError> {
+fn ordered_scenes(project: &Project) -> Result<Vec<(&crate::ir::Scene, Time)>, TimelineError> {
     if let Some(sequence) = project.sequences.first() {
+        if !sequence.scene_offsets.is_empty()
+            && sequence.scene_offsets.len() != sequence.scene_ids.len()
+        {
+            return Err(TimelineError::InvalidSequenceOffsets {
+                scene_count: sequence.scene_ids.len(),
+                offset_count: sequence.scene_offsets.len(),
+            });
+        }
         let mut scenes = Vec::new();
-        for id in &sequence.scene_ids {
+        for (index, id) in sequence.scene_ids.iter().enumerate() {
             let scene = project
                 .scenes
                 .iter()
                 .find(|scene| scene.id == *id)
                 .ok_or_else(|| TimelineError::MissingScene(id.clone()))?;
-            scenes.push(scene);
+            let offset = sequence
+                .scene_offsets
+                .get(index)
+                .copied()
+                .unwrap_or(Time::ZERO);
+            if offset < Time::ZERO {
+                return Err(TimelineError::NegativeSequenceOffset { index, offset });
+            }
+            scenes.push((scene, offset));
         }
         return Ok(scenes);
     }
-    Ok(project.scenes.iter().collect())
+    Ok(project
+        .scenes
+        .iter()
+        .map(|scene| (scene, Time::ZERO))
+        .collect())
 }
 
 impl Timeline {
@@ -160,5 +188,60 @@ impl Timeline {
             .flat_map(|source| source.time_map.segments.iter())
             .filter(|segment| segment.rate == Time::ZERO)
             .collect()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ir::{Scene, Sequence};
+
+    fn scene(id: &str, seconds: i64) -> Scene {
+        Scene {
+            id: format!("scene:{id}"),
+            name: id.into(),
+            over: None,
+            duration: Time::seconds(seconds),
+            sources: Vec::new(),
+            placements: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn sequence_scene_offsets_contribute_empty_timeline_time() {
+        let mut project = Project::new("gap");
+        project.scenes = vec![scene("a", 2), scene("b", 3)];
+        project.sequences.push(Sequence {
+            id: "sequence:main".into(),
+            name: "main".into(),
+            scene_ids: vec!["scene:a".into(), "scene:b".into()],
+            scene_offsets: vec![Time::ZERO, Time::milliseconds(500)],
+        });
+
+        let timeline = flatten_project(&project).unwrap();
+        assert_eq!(timeline.duration, Time::milliseconds(5_500));
+        assert!(timeline.clips.is_empty());
+    }
+
+    #[test]
+    fn malformed_sequence_offsets_fail_typed() {
+        let mut project = Project::new("gap");
+        project.scenes = vec![scene("a", 2)];
+        project.sequences.push(Sequence {
+            id: "sequence:main".into(),
+            name: "main".into(),
+            scene_ids: vec!["scene:a".into()],
+            scene_offsets: vec![Time::ZERO, Time::ZERO],
+        });
+        assert!(matches!(
+            flatten_project(&project),
+            Err(TimelineError::InvalidSequenceOffsets { .. })
+        ));
+
+        project.sequences[0].scene_offsets = vec![Time::seconds(-1)];
+        assert!(matches!(
+            flatten_project(&project),
+            Err(TimelineError::NegativeSequenceOffset { index: 0, .. })
+        ));
     }
 }

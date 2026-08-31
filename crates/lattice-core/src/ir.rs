@@ -43,6 +43,10 @@ pub struct Sequence {
     pub name: String,
     /// Scene ids in flow order.
     pub scene_ids: Vec<String>,
+    /// Additional time inserted immediately before each scene.
+    /// Empty is the canonical representation when every offset is zero.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub scene_offsets: Vec<Time>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

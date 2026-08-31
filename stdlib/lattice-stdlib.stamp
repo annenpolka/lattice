@@ -2,6 +2,6 @@
 # Rebuild: cargo build --manifest-path crates/lattice-stdlib-guest/Cargo.toml --target wasm32-wasip2 --release
 # then copy target wasm32-wasip2/release/lattice_stdlib_guest.wasm to stdlib/lattice-stdlib.wasm
 # and update these FNV-1a hashes.
-wasm=1503b83ebec4df65
-guest=f973222bc8cc00ae
-wit=4b1280fd09beb75c
+wasm=97f55ea729a64b5e
+guest=f2f9b2eeacc4b0ed
+wit=e00e286d6f50e614

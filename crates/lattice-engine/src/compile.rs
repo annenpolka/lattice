@@ -10,7 +10,7 @@ use lattice_media::{
     PreviewFrameRequest, PreviewOptions, RendererRequest, export_preview, mix_timeline_audio,
     probe_media,
 };
-use lattice_vel::{Document, Expr, Item, ParseError};
+use lattice_vel::{Block, Document, Expr, Item, ParseError};
 use lattice_wasm::{ExplainLine, LoweringRegistry, OverlayPresetRegistry, SceneDraft};
 use serde::Serialize;
 use thiserror::Error;
@@ -76,7 +76,7 @@ impl Compilation {
 }
 
 pub struct Engine {
-    registry: LoweringRegistry,
+    pub(crate) registry: LoweringRegistry,
 }
 
 impl Default for Engine {
@@ -95,6 +95,11 @@ impl Engine {
 
     pub fn compile(&self, source: &str) -> Result<Compilation, EngineError> {
         self.compile_origin(source, None)
+    }
+
+    /// Canonicalizes valid VEL without interpreting generic invocation names.
+    pub fn format_vel(&self, source: &str) -> Result<String, EngineError> {
+        Ok(lattice_vel::format(source)?)
     }
 
     pub fn compile_origin(
@@ -453,21 +458,12 @@ impl Engine {
 
         for item in document.items.iter().chain(nested_items(document)) {
             if let Item::Sequence { name, body, .. } = item {
-                let scene_ids = body
-                    .items
-                    .iter()
-                    .filter_map(|inner| match inner {
-                        Item::Invocation(inv) if inv.args.is_empty() => {
-                            Some(format!("scene:{name}", name = inv.name))
-                        }
-                        Item::Binding { name, .. } => Some(format!("scene:{name}")),
-                        _ => None,
-                    })
-                    .collect();
+                let flow = compile_sequence_flow(name, body, &self.registry)?;
                 project.sequences.push(Sequence {
                     id: format!("sequence:{name}"),
                     name: name.clone(),
-                    scene_ids,
+                    scene_ids: flow.scene_ids,
+                    scene_offsets: flow.scene_offsets,
                 });
                 explain.push(ExplainEvent {
                     origin: Origin::Builtin {
@@ -475,6 +471,7 @@ impl Engine {
                     },
                     message: format!("sequence `{name}` is a flow of scenes"),
                 });
+                explain.extend(flow.explain);
             }
         }
 
@@ -510,6 +507,86 @@ impl Engine {
             origin: None,
         })
     }
+}
+
+struct CompiledSequenceFlow {
+    scene_ids: Vec<String>,
+    scene_offsets: Vec<Time>,
+    explain: Vec<ExplainEvent>,
+}
+
+fn compile_sequence_flow(
+    sequence_name: &str,
+    body: &Block,
+    registry: &LoweringRegistry,
+) -> Result<CompiledSequenceFlow, EngineError> {
+    let mut scene_ids = Vec::new();
+    let mut offsets = Vec::new();
+    let mut pending_gap = None;
+    let mut explain = Vec::new();
+
+    for item in &body.items {
+        let scene_name = match item {
+            Item::Invocation(inv) => {
+                let view = invocation_view(inv)?;
+                if let Some(duration) = registry
+                    .lower_sequence_gap(&view)
+                    .map_err(|err| TimeEvalError::Message(err.to_string()))?
+                {
+                    if scene_ids.is_empty() {
+                        return Err(TimeEvalError::Message(
+                            "`gap` must follow a scene reference".into(),
+                        )
+                        .into());
+                    }
+                    if pending_gap.replace(duration).is_some() {
+                        return Err(TimeEvalError::Message(
+                            "consecutive `gap` invocations are not allowed".into(),
+                        )
+                        .into());
+                    }
+                    continue;
+                }
+                if inv.args.is_empty() {
+                    Some(inv.name.as_str())
+                } else {
+                    None
+                }
+            }
+            Item::Binding { name, .. } => Some(name.as_str()),
+            _ => None,
+        };
+        let Some(scene_name) = scene_name else {
+            continue;
+        };
+        let explicit_gap = pending_gap.take();
+        let offset = explicit_gap.unwrap_or(Time::ZERO);
+        if explicit_gap.is_some() {
+            explain.push(ExplainEvent {
+                origin: Origin::Invocation {
+                    command: "gap".into(),
+                },
+                message: format!(
+                    "sequence `{sequence_name}` inserts {offset} before scene `{scene_name}`"
+                ),
+            });
+        }
+        scene_ids.push(format!("scene:{scene_name}"));
+        offsets.push(offset);
+    }
+    if pending_gap.is_some() {
+        return Err(
+            TimeEvalError::Message("`gap` must be followed by a scene reference".into()).into(),
+        );
+    }
+    if offsets.iter().all(|offset| offset.is_zero()) {
+        offsets.clear();
+    }
+    Ok(CompiledSequenceFlow {
+        scene_ids,
+        scene_offsets: offsets,
+        explain,
+    })
 }
 
 fn nested_items(document: &Document) -> impl Iterator<Item = &Item> {

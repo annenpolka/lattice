@@ -5,7 +5,7 @@ edition = "2024"
 rust-version = "1.97"
 license = "MIT"
 publish = false
-description = "WIT stdlib guest: freeze, title, caption, and overlay-presets. Built for wasm32-wasip2."
+description = "WIT stdlib guest lowering and overlay presets. Built for wasm32-wasip2."
 
 [lib]
 crate-type = ["cdylib"]
