@@ -703,7 +703,7 @@ impl StudioSession {
     /// Intersection is Engine `split_at`'s exclusive interior `(start, end)`, so a
     /// playhead parked on a clip edge does not reveal the control. The check uses
     /// the committed locus and Engine timeline spans — not `StudioLayout` clip
-    /// `selected` flags, and not CutLane.
+    /// `selected` flags, and not `CutLane`.
     #[must_use]
     pub fn toolbar_split_available(&self) -> bool {
         self.selected_span_for_toolbar_split().is_some()
