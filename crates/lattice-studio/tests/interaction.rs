@@ -2,7 +2,8 @@
 
 use lattice_engine::{Engine, RawFrame, SemanticEdit, Time};
 use lattice_studio::{
-    DRAG_THRESHOLD_PX, PreviewMailbox, SNAP_THRESHOLD_PX, StudioSession, TimelineGesture,
+    DRAG_THRESHOLD_PX, PreviewMailbox, SNAP_THRESHOLD_PX, StudioSession, TRACK_HEIGHT_PX,
+    TimelineGesture,
 };
 
 fn unique_dir(tag: &str) -> std::path::PathBuf {
@@ -673,10 +674,20 @@ scene a {
     let x = session.x_at_time(title_clip.start + Time::milliseconds(200));
     session.begin_timeline_pointer_on(x, true, "Video").unwrap();
     assert!(
-        matches!(session.gesture(), TimelineGesture::PointSource { .. }),
-        "video rail click keeps source-clip identity: {:?}",
+        matches!(
+            session.gesture(),
+            TimelineGesture::Reorder { .. } | TimelineGesture::PointSource { .. }
+        ),
+        "video rail starts a source-identity gesture: {:?}",
         session.gesture()
     );
+    session.commit_timeline_pointer(x).unwrap();
+    assert_eq!(
+        session.current_locus().unwrap().unwrap().kind,
+        lattice_engine::LocusKind::Source,
+        "video rail click keeps source-clip identity"
+    );
+    session.begin_timeline_pointer_on(x, true, "Video").unwrap();
     session.cancel_timeline_pointer();
     session.begin_timeline_pointer_on(x, true, "Text").unwrap();
     assert!(
@@ -692,8 +703,144 @@ scene a {
             TimelineGesture::Point { .. }
                 | TimelineGesture::PointSource { .. }
                 | TimelineGesture::Gain { .. }
+                | TimelineGesture::Reorder { .. }
         ),
         "audio rail stays on the audio projection: {:?}",
         session.gesture()
+    );
+}
+
+#[test]
+#[allow(clippy::too_many_lines)]
+fn video_and_audio_body_drag_commits_scene_reorder() {
+    let dir = unique_dir("media-body-drag");
+    let mut session = write_scenes(
+        &dir,
+        r#"project "demo"
+convention commentary
+media game "capture.mp4"
+sequence main {
+  left
+  right
+}
+scene left {
+  game[0s..2s] as clip-a
+  title "Alpha" { at 0s for 2s }
+}
+scene right {
+  game[0s..2s] as clip-b
+  title "Beta" { at 0s for 2s }
+}
+"#,
+    );
+    let original = session.source().to_string();
+    let layout = session.layout().unwrap();
+    let video = layout
+        .timeline
+        .tracks
+        .iter()
+        .find(|track| track.name == "Video")
+        .unwrap();
+    assert_eq!(video.clips.len(), 2);
+    let left_start = video.clips[0].start;
+    let right_start = video.clips[1].start;
+    let start = session.x_at_time(right_start + Time::milliseconds(200));
+    session
+        .begin_timeline_pointer_on(start, true, "Video")
+        .expect("begin video body");
+    assert!(
+        matches!(session.gesture(), TimelineGesture::Reorder { .. }),
+        "video body drag reorders: {:?}",
+        session.gesture()
+    );
+    let target = session.x_at_time(left_start + Time::milliseconds(200));
+    session
+        .update_timeline_pointer(target, true)
+        .expect("update video");
+    assert_eq!(session.source(), original, "update must not rewrite VEL");
+    let outcome = session
+        .commit_timeline_pointer(target)
+        .expect("commit video");
+    assert_eq!(
+        outcome,
+        lattice_studio::GestureOutcome::Applied,
+        "video body drag must apply a move:\n{}",
+        session.source()
+    );
+    let after_video = session.source().to_string();
+    assert_ne!(after_video, original);
+    let seq_body = after_video
+        .split("sequence main")
+        .nth(1)
+        .unwrap_or(&after_video)
+        .split("scene ")
+        .next()
+        .unwrap_or(&after_video);
+    let left_at = seq_body.find("left").expect("left");
+    let right_at = seq_body.find("right").expect("right");
+    assert!(
+        right_at < left_at,
+        "right scene should move earlier:\n{seq_body}"
+    );
+    session.undo().unwrap();
+    assert_eq!(session.source(), original);
+
+    let layout = session.layout().unwrap();
+    let audio = layout
+        .timeline
+        .tracks
+        .iter()
+        .find(|track| track.name == "Audio")
+        .unwrap();
+    let audio_right = audio.clips.last().cloned().expect("audio clip");
+    let audio_x = session.x_at_time(audio_right.start + Time::milliseconds(200));
+    session
+        .begin_timeline_pointer_on(audio_x, true, "Video")
+        .unwrap();
+    session.commit_timeline_pointer(audio_x).unwrap();
+    assert_eq!(
+        session.current_locus().unwrap().unwrap().kind,
+        lattice_engine::LocusKind::Source
+    );
+    let body_y = TRACK_HEIGHT_PX * 0.85;
+    session
+        .begin_timeline_pointer_on_xy(audio_x, body_y, true, "Audio")
+        .expect("begin audio body");
+    assert!(
+        matches!(session.gesture(), TimelineGesture::Reorder { .. }),
+        "selected audio body drag reorders, not gain: {:?}",
+        session.gesture()
+    );
+    let audio_target = session.x_at_time(left_start + Time::milliseconds(200));
+    session
+        .update_timeline_pointer_xy(audio_target, body_y, true)
+        .unwrap();
+    let outcome = session
+        .commit_timeline_pointer_xy(audio_target, body_y)
+        .expect("commit audio");
+    assert_eq!(
+        outcome,
+        lattice_studio::GestureOutcome::Applied,
+        "audio body drag must apply a move, not only gain:\n{}",
+        session.source()
+    );
+    let after_audio = session.source().to_string();
+    assert_ne!(after_audio, original);
+    assert!(
+        !after_audio.contains("gain"),
+        "audio body drag must not write gain:\n{after_audio}"
+    );
+    let seq_body = after_audio
+        .split("sequence main")
+        .nth(1)
+        .unwrap_or(&after_audio)
+        .split("scene ")
+        .next()
+        .unwrap_or(&after_audio);
+    let left_at = seq_body.find("left").expect("left");
+    let right_at = seq_body.find("right").expect("right");
+    assert!(
+        right_at < left_at,
+        "audio drag should reorder the containing scene:\n{seq_body}"
     );
 }

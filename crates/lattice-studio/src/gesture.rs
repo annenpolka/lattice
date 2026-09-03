@@ -226,7 +226,11 @@ pub fn gain_line_top(db: i32) -> f64 {
 #[must_use]
 pub fn on_gain_line(y: f64, db: i32) -> bool {
     let top = gain_line_top(db);
-    y >= top - GAIN_LINE_SLOP_PX && y <= top + GAIN_LINE_HEIGHT_PX + GAIN_LINE_SLOP_PX
+    // Hit only the upper half of the drawn line so a mid-track body grab
+    // (TRACK_HEIGHT/2) stays ClipBody, not SetGain. The gain test aims at
+    // `gain_line_top + 2`, which remains inside this band.
+    let hit_h = (GAIN_LINE_HEIGHT_PX * 0.5).max(1.0);
+    y >= top - GAIN_LINE_SLOP_PX && y <= top + hit_h + GAIN_LINE_SLOP_PX
 }
 
 #[must_use]
@@ -425,7 +429,12 @@ pub fn cursor_for_hit(hit: &TimelineHit, dragging: bool) -> CursorKind {
         }
         TimelineHit::DeleteHandle { .. } => CursorKind::Select,
         TimelineHit::ClipBody {
-            kind: ClipKind::Video | ClipKind::Title | ClipKind::Callout | ClipKind::Scene,
+            kind:
+                ClipKind::Video
+                | ClipKind::Audio
+                | ClipKind::Title
+                | ClipKind::Callout
+                | ClipKind::Scene,
             ..
         } => CursorKind::Grab,
         TimelineHit::ClipBody { .. } | TimelineHit::Rail => CursorKind::Scrub,

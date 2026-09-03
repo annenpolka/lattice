@@ -55,12 +55,16 @@ pub fn begin_xy(
         TimelineHit::CutLane { clip_id } => begin_split(session, &clip_id, x)?,
         TimelineHit::DeleteHandle { clip_id } => TimelineGesture::Delete { scene_id: clip_id },
         TimelineHit::ClipBody { clip_id, kind } => match kind {
-            ClipKind::Video => TimelineGesture::PointSource { clip_id },
+            // Video body drag reorders the containing scene, same control as
+            // the Scene band. A click that never crosses the threshold still
+            // points the source clip.
+            ClipKind::Video => begin_track_reorder(session, &clips, &clip_id, x),
             // Unselected audio is the coordinate point (overlap). Selected
-            // audio body is identity only — Gain commits from the drawn line.
+            // audio body is the same horizontal reorder as Video. Gain stays
+            // on the drawn line (`TimelineHit::Gain`).
             ClipKind::Audio => {
                 if clips.iter().any(|clip| clip.id == clip_id && clip.selected) {
-                    TimelineGesture::PointSource { clip_id }
+                    begin_track_reorder(session, &clips, &clip_id, x)
                 } else {
                     TimelineGesture::Point { start_x: x }
                 }
@@ -144,11 +148,12 @@ fn update_inner(
         }
         TimelineGesture::Reorder {
             clip_id,
+            scene_id,
             original_index,
             start_x,
             ..
         } => {
-            let clips = if clip_id.starts_with("scene:") {
+            let clips = if clip_id.starts_with("scene:") || scene_id.starts_with("scene:") {
                 scene_order_clips(session)?
             } else {
                 video_scene_clips(session)?
@@ -372,12 +377,18 @@ pub fn commit_xy(
         } => {
             let _ = scene_id;
             if !moved || proposed_index == original_index {
-                if scene_id.starts_with("scene:") {
+                if clip_id.starts_with("scene:") {
                     point_scene(session, &scene_id);
                 } else {
                     session.point_source_for_clip(&clip_id)?;
                 }
                 return Ok(GestureOutcome::Clicked);
+            }
+            // Video/Audio body drag commits ReorderScene. Point the containing
+            // scene so the Engine legal set matches the verb — same routing as
+            // overlay move pointing the title before Title.
+            if !clip_id.starts_with("scene:") {
+                point_scene(session, &scene_id);
             }
             let here = session.current_locus()?;
             if here
@@ -699,31 +710,43 @@ fn point_scene(session: &mut StudioSession, scene_id: &str) {
     session.current = Some(LocusId::new(scene_id));
 }
 
-#[allow(dead_code)]
-fn begin_reorder(
+fn begin_track_reorder(
     session: &StudioSession,
     clips: &[HitClip],
     clip_id: &str,
     x: f64,
-) -> Result<TimelineGesture, EngineError> {
-    let video: Vec<_> = clips
+) -> TimelineGesture {
+    let Some(clip) = clips.iter().find(|clip| clip.id == clip_id) else {
+        return TimelineGesture::PointSource {
+            clip_id: clip_id.to_string(),
+        };
+    };
+    if clip.scene_id.is_empty() {
+        return TimelineGesture::PointSource {
+            clip_id: clip_id.to_string(),
+        };
+    }
+    let Ok(order) = scene_order_clips(session) else {
+        return TimelineGesture::PointSource {
+            clip_id: clip_id.to_string(),
+        };
+    };
+    let Some(original_index) = order
         .iter()
-        .filter(|clip| clip.kind == ClipKind::Video)
-        .collect();
-    let original_index = video
-        .iter()
-        .position(|clip| clip.id == clip_id)
-        .ok_or_else(|| EngineError::Edit("reorder clip missing".into()))?;
-    let scene_id = video[original_index].scene_id.clone();
-    let _ = session;
-    Ok(TimelineGesture::Reorder {
+        .position(|item| item.id == clip.scene_id || item.scene_id == clip.scene_id)
+    else {
+        return TimelineGesture::PointSource {
+            clip_id: clip_id.to_string(),
+        };
+    };
+    TimelineGesture::Reorder {
         clip_id: clip_id.to_string(),
-        scene_id,
+        scene_id: clip.scene_id.clone(),
         original_index,
         proposed_index: original_index,
         start_x: x,
         moved: false,
-    })
+    }
 }
 
 fn begin_move_overlay(
