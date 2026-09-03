@@ -524,6 +524,12 @@ fn window_source_composes_documented_panes() {
         );
     }
     assert!(
+        main.contains("toolbar.cluster.edit")
+            && main.contains("toolbar.split.label")
+            && main.contains("toolbar.split.icon"),
+        "gated Split must stay a labeled icon+text control in the Edit cluster"
+    );
+    assert!(
         main.contains("inspector.gain") && main.contains("inspector.fade"),
         "Inspector must draw typed gain/fade fields"
     );

@@ -2680,9 +2680,10 @@ impl StudioView {
                         cx.notify();
                     })),
             ));
-        // Edit sits next to File so ✂ Split stays on the first toolbar row at
-        // 1400×840. Trailing placement after Telemetry wrapped the control off
-        // the session strip that synth users actually scanned.
+        // Edit sits next to File so labeled ✂ Split stays on the first toolbar
+        // row at 1400×840. Trailing placement after Telemetry wrapped the
+        // control off the session strip that synth users actually scanned.
+        // flex_none keeps the cluster from collapsing to an unlabeled icon.
         if self.session.toolbar_split_available() {
             bar = bar.child(session_cluster(
                 "Edit",
@@ -2872,19 +2873,42 @@ impl StudioView {
             .debug_selector(|| "toolbar.split".into())
             .relative()
             .flex()
+            .flex_none()
             .items_center()
             .gap_1()
             .px_3()
             .py_1()
+            .whitespace_nowrap()
             .bg(rgb(TEAL))
             .text_color(rgb(TEXT))
             .cursor_pointer()
             .on_click(cx.listener(|this, _, _, cx| {
+                if this.session.toolbar_split_available() {
+                    this.commit_toolbar_split();
+                    cx.notify();
+                }
+            }))
+            .capture_any_mouse_down(cx.listener(|this, event: &MouseDownEvent, _, cx| {
+                if event.button != MouseButton::Left {
+                    return;
+                }
                 this.commit_toolbar_split();
+                cx.stop_propagation();
                 cx.notify();
             }))
-            .child("✂")
-            .child("Split")
+            .child(
+                div()
+                    .debug_selector(|| "toolbar.split.icon".into())
+                    .flex_none()
+                    .child("✂"),
+            )
+            .child(
+                div()
+                    .debug_selector(|| "toolbar.split.label".into())
+                    .flex_none()
+                    .whitespace_nowrap()
+                    .child("Split"),
+            )
             .child(
                 canvas(
                     move |bounds, _, _| {
@@ -4543,10 +4567,17 @@ fn session_cluster(
     div()
         .debug_selector(|| selector.into())
         .flex()
+        .flex_none()
         .flex_col()
         .gap_1()
         .px_1()
-        .child(div().text_color(rgb(MUTED)).child(label))
+        .child(
+            div()
+                .flex_none()
+                .whitespace_nowrap()
+                .text_color(rgb(MUTED))
+                .child(label),
+        )
         .child(row)
 }
 

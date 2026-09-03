@@ -176,6 +176,30 @@ mod tests {
     use super::{UiDriver, secondary_keystroke};
     use crate::{StudioView, render_image_from_raw};
 
+    fn assert_labeled_split_control(ui: &mut UiDriver<'_>) {
+        let file = ui.bounds("toolbar.cluster.file");
+        let edit = ui.bounds("toolbar.cluster.edit");
+        let split = ui.bounds("toolbar.split");
+        let icon = ui.bounds("toolbar.split.icon");
+        let label = ui.bounds("toolbar.split.label");
+        let file_y = f32::from(file.origin.y);
+        let edit_y = f32::from(edit.origin.y);
+        assert!(
+            (edit_y - file_y).abs() < 16.0,
+            "Edit cluster must share File's toolbar row at 1400×840 (not wrap after Telemetry): file={file:?} edit={edit:?} split={split:?}"
+        );
+        let label_w = f32::from(label.size.width);
+        let split_w = f32::from(split.size.width);
+        assert!(
+            label_w >= 24.0,
+            "Split must keep a visible text label (never an unlabeled lone icon): label={label:?} icon={icon:?} split={split:?}"
+        );
+        assert!(
+            split_w >= label_w + 8.0,
+            "labeled Split control must keep icon+label width: split={split:?} label={label:?} icon={icon:?}"
+        );
+    }
+
     fn fixture_session(tag: &str) -> lattice_studio::StudioSession {
         let nonce = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -1177,10 +1201,15 @@ scene demo {
         let session = timeline_basic_session();
         let (view, cx) = add_studio(cx, session);
         let mut ui = UiDriver::new(cx);
+        ui.resize(1400.0, 840.0);
 
         assert!(
             ui.context().debug_bounds("toolbar.split").is_none(),
             "timeline-basic idle: title Hello at 1s, playhead 0s — Split hidden"
+        );
+        assert!(
+            ui.context().debug_bounds("toolbar.split.label").is_none(),
+            "idle must not draw an unlabeled Split leftover"
         );
 
         view.update(ui.context(), |view, cx| {
@@ -1189,8 +1218,7 @@ scene demo {
         });
         ui.context().run_until_parked();
 
-        let _ = ui.bounds("toolbar.split");
-        let _ = ui.bounds("toolbar.cluster.edit");
+        assert_labeled_split_control(&mut ui);
         let original = ui.read(&view, |view, _| view.session.source().to_string());
         ui.click("toolbar.split");
         let after = ui.read(&view, |view, _| view.session.source().to_string());
@@ -1220,15 +1248,16 @@ scene demo {
             .clone();
         let (view, cx) = add_studio(cx, session);
         let mut ui = UiDriver::new(cx);
+        ui.resize(1400.0, 840.0);
         ui.click(format!("timeline.clip.{video_id}"));
         view.update(ui.context(), |view, cx| {
             view.session.seek(Time::seconds(2));
             cx.notify();
         });
         ui.context().run_until_parked();
-        let _ = ui.bounds("toolbar.split");
+        assert_labeled_split_control(&mut ui);
         let original = ui.read(&view, |view, _| view.session.source().to_string());
-        ui.click("toolbar.split");
+        ui.click("toolbar.split.label");
         let after = ui.read(&view, |view, _| view.session.source().to_string());
         assert_ne!(
             after, original,
@@ -1262,6 +1291,11 @@ scene demo {
             ui.context().debug_bounds("toolbar.split").is_none(),
             "idle playhead 0s must hide Split"
         );
+        assert!(
+            ui.context().debug_bounds("toolbar.split.label").is_none()
+                && ui.context().debug_bounds("toolbar.cluster.edit").is_none(),
+            "idle must hide the Edit cluster, not leave an unlabeled icon"
+        );
 
         ui.click(format!("timeline.clip.{video_id}"));
         ui.context().run_until_parked();
@@ -1284,18 +1318,10 @@ scene demo {
             "select + playhead intersection must open the toolbar gate"
         );
 
-        let file = ui.bounds("toolbar.cluster.file");
-        let edit = ui.bounds("toolbar.cluster.edit");
-        let split = ui.bounds("toolbar.split");
-        let file_y = f32::from(file.origin.y);
-        let edit_y = f32::from(edit.origin.y);
-        assert!(
-            (edit_y - file_y).abs() < 16.0,
-            "Edit cluster must share File's toolbar row at 1400×840 (not wrap after Telemetry): file={file:?} edit={edit:?} split={split:?}"
-        );
+        assert_labeled_split_control(&mut ui);
 
         let original = ui.read(&view, |view, _| view.session.source().to_string());
-        ui.click("toolbar.split");
+        ui.click("toolbar.split.label");
         let after = ui.read(&view, |view, _| view.session.source().to_string());
         assert_ne!(
             after, original,
