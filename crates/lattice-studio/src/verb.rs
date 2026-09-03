@@ -142,6 +142,7 @@ pub fn routed_verbs(projection: Projection, kind: LocusKind) -> Vec<&'static str
         (Projection::Timeline | Projection::Inspector, LocusKind::Title) => vec!["title"],
         (Projection::Timeline | Projection::Inspector, LocusKind::Callout) => vec!["callout"],
         (Projection::Timeline, LocusKind::Scene) => vec!["reorder-scene", "split", "delete"],
+        (Projection::Inspector, LocusKind::Scene) => vec!["delete"],
         (Projection::Canvas, LocusKind::Title | LocusKind::Callout) => {
             vec!["set-position", "resize-overlay"]
         }
@@ -710,6 +711,10 @@ mod tests {
         assert_eq!(
             routed_verbs(Projection::Inspector, LocusKind::Source),
             ["set-gain", "set-fade"]
+        );
+        assert_eq!(
+            routed_verbs(Projection::Inspector, LocusKind::Scene),
+            ["delete"]
         );
         assert!(!routed_verbs(Projection::Inspector, LocusKind::Source).contains(&"trim"));
         assert_eq!(

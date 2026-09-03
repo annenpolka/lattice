@@ -689,8 +689,44 @@ impl StudioSession {
         self.apply_edit(SemanticEdit::Split { at })
     }
 
+    /// Scene a focused Timeline clip selection can delete.
+    ///
+    /// Video/audio clicks land on Source. `SemanticEdit::Delete` is a Scene
+    /// verb, so this names the related scene instead of requiring the 18px
+    /// scene-end handle.
+    fn deletable_scene_id(&self) -> Result<Option<LocusId>, EngineError> {
+        let loci = self.loci()?;
+        let Some(here) = self.current_locus()? else {
+            return Ok(None);
+        };
+        if here.kind == LocusKind::Scene {
+            return Ok(Some(here.id.clone()));
+        }
+        Ok(verb::related_scene(&here, &loci).map(|scene| scene.id.clone()))
+    }
+
+    /// Whether keyboard / Inspector Delete can name a Scene for here.
+    #[must_use]
+    pub fn can_delete_selected_clip(&self) -> bool {
+        self.deletable_scene_id().ok().flatten().is_some()
+    }
+
     pub fn delete_selected_clip(&mut self) -> Result<(), EngineError> {
-        self.touched_projection = Projection::Toolbar;
+        self.delete_clip_from(Projection::Timeline)
+    }
+
+    pub fn delete_inspector_clip(&mut self) -> Result<(), EngineError> {
+        self.delete_clip_from(Projection::Inspector)
+    }
+
+    fn delete_clip_from(&mut self, projection: Projection) -> Result<(), EngineError> {
+        self.touched_projection = projection;
+        if let Some(scene_id) = self.deletable_scene_id()? {
+            if self.current.as_ref() != Some(&scene_id) {
+                self.point_at(scene_id);
+            }
+            return self.apply_edit(SemanticEdit::Delete);
+        }
         self.apply_edit(SemanticEdit::Delete)
     }
 

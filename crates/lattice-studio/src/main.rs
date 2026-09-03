@@ -2433,8 +2433,8 @@ impl Render for StudioView {
             .text_sm()
             .track_focus(&self.focus)
             .cursor(cursor)
-            .on_key_down(cx.listener(|this, event: &KeyDownEvent, _, cx| {
-                this.handle_key(event, cx);
+            .on_key_down(cx.listener(|this, event: &KeyDownEvent, window, cx| {
+                this.handle_key(event, window, cx);
             }))
             .on_mouse_move(cx.listener(|this, event: &MouseMoveEvent, _, cx| {
                 let (width, height) = this.session.preview_pixel_size();
@@ -3172,7 +3172,37 @@ impl StudioView {
         cx.notify();
     }
 
-    fn handle_key(&mut self, event: &KeyDownEvent, cx: &mut Context<Self>) {
+    fn is_editing_text(&self, window: &Window) -> bool {
+        self.title_focus.is_focused(window)
+            || self.gain_focus.is_focused(window)
+            || self.fade_focus.is_focused(window)
+            || self.source_focus.is_focused(window)
+    }
+
+    fn delete_focused_clip(&mut self, window: Option<&Window>, from_inspector: bool) {
+        let result = if from_inspector {
+            self.session.delete_inspector_clip()
+        } else {
+            self.session.delete_selected_clip()
+        };
+        match result {
+            Ok(()) => {
+                self.adopt_locus_label();
+                self.after_edit();
+                self.log_semantic_state("delete-clip", window);
+            }
+            Err(err) => {
+                trace::log(format!("delete clip: {err}"));
+                if let Some(spoken) = self.session.last_spoken() {
+                    self.last_render = Some(spoken.to_string());
+                } else {
+                    self.last_render = Some(format!("delete clip failed: {err}"));
+                }
+            }
+        }
+    }
+
+    fn handle_key(&mut self, event: &KeyDownEvent, window: &Window, cx: &mut Context<Self>) {
         if event.keystroke.modifiers.secondary() && event.keystroke.key == "z" {
             let result = if event.keystroke.modifiers.shift {
                 self.session.redo()
@@ -3209,6 +3239,13 @@ impl StudioView {
             }
             "-" => {
                 self.session.zoom_around(self.session.playhead(), 0.8);
+                cx.notify();
+            }
+            "delete" | "backspace"
+                if !event.keystroke.modifiers.modified() && !self.is_editing_text(window) =>
+            {
+                self.delete_focused_clip(Some(window), false);
+                cx.stop_propagation();
                 cx.notify();
             }
             _ => {}
@@ -3649,6 +3686,17 @@ impl StudioView {
                     .child("Go to definition"),
             );
         }
+        if inspector.can_delete {
+            body = body.child(action_button(
+                "Delete clip",
+                0xc45c5c,
+                cx,
+                move |this, cx| {
+                    this.delete_focused_clip(None, true);
+                    cx.notify();
+                },
+            ));
+        }
         if inspector.title_fields || inspector.callout_fields {
             let input_view = cx.entity();
             let input_focus = self.title_focus.clone();
@@ -4041,10 +4089,11 @@ impl StudioView {
             )
             .capture_any_mouse_down(cx.listener({
                 let track_name = track_name.clone();
-                move |this, event: &MouseDownEvent, _, cx| {
+                move |this, event: &MouseDownEvent, window, cx| {
                     if event.button != MouseButton::Left {
                         return;
                     }
+                    this.focus.focus(window);
                     this.begin_timeline_pointer_at(
                         event.position.x,
                         event.position.y,
@@ -4521,6 +4570,7 @@ fn action_selector(label: &str) -> &'static str {
         "Apply gain" => "inspector.apply-gain",
         "Apply fade_in" => "inspector.apply-fade",
         "Review" => "inspector.review",
+        "Delete clip" => "inspector.delete",
         _ => "toolbar.unknown",
     }
 }

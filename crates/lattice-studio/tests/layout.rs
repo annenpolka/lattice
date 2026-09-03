@@ -220,6 +220,10 @@ fn layout_matches_engine_compile_plan_and_timeline() {
         .expect("default title locus");
     assert_eq!(current.kind, lattice_engine::LocusKind::Title);
     assert!(layout.inspector.heading.contains(&current.label));
+    assert!(
+        layout.inspector.can_delete,
+        "title here still names a related scene for Inspector Delete"
+    );
     assert_eq!(layout.inspector.go_to_definition, current.source_span);
     let inspected = engine.inspect(&compilation, &current.id).unwrap();
     assert_eq!(
@@ -526,6 +530,10 @@ fn window_source_composes_documented_panes() {
     assert!(
         main.contains("inspector.gain") && main.contains("inspector.fade"),
         "Inspector must draw typed gain/fade fields"
+    );
+    assert!(
+        main.contains("inspector.delete") && main.contains("Delete clip"),
+        "Inspector must draw a clickable Delete clip control"
     );
     assert!(
         main.contains("inspector.invoked") && main.contains("Invoked this session"),

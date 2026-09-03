@@ -1156,4 +1156,88 @@ scene demo {
         let spoken = ui.read(&view, |view, _| view.session.utterance().spoken_text());
         assert!(!spoken.is_empty());
     }
+
+    #[gpui::test]
+    fn timeline_selection_delete_backspace_and_inspector_undo(cx: &mut TestAppContext) {
+        let session = overlap_session();
+        let video_id = session
+            .layout()
+            .unwrap()
+            .timeline
+            .tracks
+            .iter()
+            .find(|track| track.name == "Video")
+            .unwrap()
+            .clips[0]
+            .id
+            .clone();
+        let original = session.source().to_string();
+        assert!(original.contains("scene demo"));
+        let (view, cx) = add_studio(cx, session);
+        let mut ui = UiDriver::new(cx);
+        ui.resize(1400.0, 840.0);
+
+        ui.click("inspector.title");
+        ui.press("backspace");
+        assert_eq!(
+            ui.read(&view, |view, _| view.session.source().to_string()),
+            original,
+            "Backspace in a text field must not delete the scene"
+        );
+
+        ui.click(format!("timeline.clip.{video_id}"));
+        assert_eq!(
+            ui.read(&view, |view, _| {
+                view.session.current_locus().unwrap().unwrap().kind
+            }),
+            lattice_engine::LocusKind::Source
+        );
+        assert!(ui.read(&view, |view, _| {
+            view.session.layout().unwrap().inspector.can_delete
+        }));
+        let _ = ui.bounds("inspector.delete");
+        ui.press("delete");
+        let after_delete = ui.read(&view, |view, _| view.session.source().to_string());
+        assert_ne!(
+            after_delete, original,
+            "Delete must remove the selected clip"
+        );
+        assert!(
+            !after_delete.contains("scene demo"),
+            "Delete on a focused video clip must remove its scene: {after_delete}"
+        );
+        assert_eq!(ui.read(&view, |view, _| view.session.undo_len()), 1);
+        ui.press(&secondary_keystroke("z"));
+        assert_eq!(
+            ui.read(&view, |view, _| view.session.source().to_string()),
+            original,
+            "Undo must restore the deleted clip"
+        );
+
+        ui.click(format!("timeline.clip.{video_id}"));
+        ui.press("backspace");
+        let after_backspace = ui.read(&view, |view, _| view.session.source().to_string());
+        assert!(
+            !after_backspace.contains("scene demo"),
+            "Backspace on a focused video clip must remove its scene: {after_backspace}"
+        );
+        ui.click("toolbar.undo");
+        assert_eq!(
+            ui.read(&view, |view, _| view.session.source().to_string()),
+            original
+        );
+
+        ui.click(format!("timeline.clip.{video_id}"));
+        ui.click("inspector.delete");
+        let after_inspector = ui.read(&view, |view, _| view.session.source().to_string());
+        assert!(
+            !after_inspector.contains("scene demo"),
+            "Inspector Delete clip must remove the related scene: {after_inspector}"
+        );
+        ui.press(&secondary_keystroke("z"));
+        assert_eq!(
+            ui.read(&view, |view, _| view.session.source().to_string()),
+            original
+        );
+    }
 }

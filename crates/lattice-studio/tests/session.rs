@@ -319,6 +319,60 @@ fn delete_last_clip_is_diagnostic_not_panic() {
 }
 
 #[test]
+fn delete_from_source_locus_removes_scene_and_undo_restores() {
+    let dir = unique_dir("delete-from-source");
+    lattice_media::generate_av_fixture(dir.join("capture.mp4"), 8).unwrap();
+    let vel = dir.join("main.vel");
+    std::fs::write(
+        &vel,
+        r#"project "demo"
+convention commentary
+media game "capture.mp4"
+sequence main {
+  first
+  second
+}
+scene first {
+  game[0s..2s] as left
+  title "A" { at 0s for 1s }
+}
+scene second {
+  game[2s..4s] as right
+  title "B" { at 0s for 1s }
+}
+"#,
+    )
+    .unwrap();
+    let mut session = StudioSession::open(&vel).expect("open");
+    let original = session.source().to_string();
+    let source = session
+        .loci()
+        .unwrap()
+        .into_iter()
+        .find(|locus| {
+            locus.kind == lattice_engine::LocusKind::Source
+                && locus
+                    .scene_id
+                    .as_deref()
+                    .is_some_and(|id| id.contains("first"))
+        })
+        .expect("first-scene source");
+    session.point_at(source.id);
+    assert!(session.can_delete_selected_clip());
+    assert!(session.layout().unwrap().inspector.can_delete);
+    session.delete_selected_clip().expect("delete from source");
+    assert!(
+        !session.source().contains("scene first"),
+        "source-locus Delete must remove the related scene: {}",
+        session.source()
+    );
+    assert!(session.source().contains("scene second"));
+    assert_eq!(session.undo_len(), 1);
+    session.undo().expect("undo");
+    assert_eq!(session.source(), original);
+}
+
+#[test]
 fn timeline_and_canvas_share_playhead_for_items() {
     let dir = std::env::temp_dir().join("lattice-studio-timeline-preview-sync");
     let _ = std::fs::remove_dir_all(&dir);

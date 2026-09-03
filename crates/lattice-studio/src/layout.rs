@@ -61,6 +61,8 @@ pub struct InspectorView {
     /// Property fields bound to this exact source `LocusId`, not `LocusKind`.
     pub gain_db: Option<i32>,
     pub fade_in: Option<Time>,
+    /// True when keyboard / Inspector Delete can name a Scene for here.
+    pub can_delete: bool,
     pub invoked: Vec<InvokedRecord>,
     pub utterance: UtteranceView,
 }
@@ -349,6 +351,7 @@ fn inspector_from_session(
             callout_fields: false,
             gain_db: None,
             fade_in: None,
+            can_delete: false,
             invoked,
             utterance,
         };
@@ -375,6 +378,7 @@ fn inspector_from_session(
         callout_fields: locus.kind == LocusKind::Callout,
         gain_db,
         fade_in,
+        can_delete: session.can_delete_selected_clip(),
         invoked,
         utterance,
     }
