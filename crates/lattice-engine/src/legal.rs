@@ -72,6 +72,7 @@ pub fn legal_edits_for(locus: &Locus) -> Vec<LegalEdit> {
                 "placement",
                 "resize the title while keeping the opposite corner",
             ),
+            legal("delete", &target, "definition", "delete this title clip"),
         ],
         LocusKind::Callout => vec![
             legal(
@@ -92,6 +93,7 @@ pub fn legal_edits_for(locus: &Locus) -> Vec<LegalEdit> {
                 "placement",
                 "resize the callout while keeping the opposite corner",
             ),
+            legal("delete", &target, "definition", "delete this callout clip"),
         ],
         LocusKind::Source => vec![
             legal(
@@ -111,6 +113,12 @@ pub fn legal_edits_for(locus: &Locus) -> Vec<LegalEdit> {
                 &target,
                 "source-binding",
                 "set fade on this source",
+            ),
+            legal(
+                "delete",
+                &target,
+                "source-binding",
+                "delete this source clip",
             ),
         ],
         LocusKind::Scene => vec![
@@ -176,10 +184,10 @@ mod tests {
     }
 
     #[test]
-    fn source_legal_set_is_trim_gain_fade() {
+    fn source_legal_set_is_trim_gain_fade_delete() {
         let edits = legal_edits_for(&locus(LocusKind::Source, "source:fight"));
         let verbs: Vec<_> = edits.iter().map(|edit| edit.verb.as_str()).collect();
-        assert_eq!(verbs, ["trim", "set-gain", "set-fade"]);
+        assert_eq!(verbs, ["trim", "set-gain", "set-fade", "delete"]);
         assert!(
             edits
                 .iter()
@@ -210,14 +218,17 @@ mod tests {
     fn title_legal_set_includes_canvas_geometry() {
         let edits = legal_edits_for(&locus(LocusKind::Title, "title:hello"));
         let verbs: Vec<_> = edits.iter().map(|edit| edit.verb.as_str()).collect();
-        assert_eq!(verbs, ["title", "set-position", "resize-overlay"]);
+        assert_eq!(verbs, ["title", "set-position", "resize-overlay", "delete"]);
     }
 
     #[test]
     fn callout_legal_set_includes_body_text() {
         let edits = legal_edits_for(&locus(LocusKind::Callout, "callout:hold"));
         let verbs: Vec<_> = edits.iter().map(|edit| edit.verb.as_str()).collect();
-        assert_eq!(verbs, ["callout", "set-position", "resize-overlay"]);
+        assert_eq!(
+            verbs,
+            ["callout", "set-position", "resize-overlay", "delete"]
+        );
         assert_eq!(edits[0].effect, "rewrite callout text or time");
     }
 }

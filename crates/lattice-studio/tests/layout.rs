@@ -492,6 +492,7 @@ fn window_source_composes_documented_panes() {
         "Undo",
         "Redo",
         "Resolve",
+        "Delete",
     ] {
         assert!(main.contains(action), "window source must expose {action}");
     }
@@ -516,6 +517,7 @@ fn window_source_composes_documented_panes() {
         "toolbar.cluster.file",
         "toolbar.cluster.clock",
         "toolbar.cluster.engine",
+        "toolbar.cluster.clip",
         "toolbar.cluster.telemetry",
     ] {
         assert!(

@@ -372,7 +372,15 @@ fn timeline_source_utterance_commits_gain_and_fade_here() {
         );
     }
     assert!(
-        !utterance.spoken_text().contains("committed on Toolbar"),
+        utterance
+            .spoken
+            .iter()
+            .any(|clause| clause.verb == "delete" && clause.status == "routed"),
+        "{}",
+        utterance.spoken_text()
+    );
+    assert!(
+        utterance.spoken_text().contains("committed on Toolbar"),
         "{}",
         utterance.spoken_text()
     );
@@ -791,10 +799,20 @@ fn selected_overlay_does_not_expose_hidden_video_trim() {
 }
 
 #[test]
-fn toolbar_routes_nothing() {
-    assert!(lattice_studio::routed_verbs(Projection::Toolbar, LocusKind::Source).is_empty());
-    assert!(lattice_studio::routed_verbs(Projection::Toolbar, LocusKind::Scene).is_empty());
-    assert!(lattice_studio::routed_verbs(Projection::Toolbar, LocusKind::Title).is_empty());
+fn toolbar_routes_delete_for_selected_clip() {
+    assert_eq!(
+        lattice_studio::routed_verbs(Projection::Toolbar, LocusKind::Source),
+        ["delete"]
+    );
+    assert_eq!(
+        lattice_studio::routed_verbs(Projection::Toolbar, LocusKind::Scene),
+        ["delete"]
+    );
+    assert_eq!(
+        lattice_studio::routed_verbs(Projection::Toolbar, LocusKind::Title),
+        ["delete"]
+    );
+    assert!(lattice_studio::routed_verbs(Projection::Toolbar, LocusKind::Speech).is_empty());
 }
 
 #[test]

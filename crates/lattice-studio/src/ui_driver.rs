@@ -849,7 +849,10 @@ scene demo {
             !spoken.is_empty() && spoken.contains("title →"),
             "utterance discloses Title legality without a toolbar commit: {spoken}"
         );
-        assert!(!spoken.contains("committed on Toolbar"), "{spoken}");
+        assert!(
+            spoken.contains("delete →") && spoken.contains("committed on Toolbar"),
+            "selected-clip Delete is disclosed as a toolbar commit: {spoken}"
+        );
         assert_eq!(
             ui.read(&view, |view, _| {
                 view.session.current_locus().unwrap().unwrap().id
@@ -922,11 +925,12 @@ scene demo {
         let _ = ui.bounds("toolbar.play");
         let _ = ui.bounds("toolbar.undo");
         let _ = ui.bounds("toolbar.resolve");
+        let _ = ui.bounds("toolbar.delete-clip");
+        let _ = ui.bounds("toolbar.cluster.clip");
         for gone in [
             "toolbar.set-in",
             "toolbar.set-out",
             "toolbar.split",
-            "toolbar.delete-clip",
             "toolbar.gain-minus-3",
             "toolbar.fade",
         ] {
@@ -938,6 +942,7 @@ scene demo {
         let _ = ui.bounds("toolbar.cluster.file");
         let _ = ui.bounds("toolbar.cluster.clock");
         let _ = ui.bounds("toolbar.cluster.engine");
+        let _ = ui.bounds("toolbar.cluster.clip");
         let _ = ui.bounds("toolbar.cluster.telemetry");
         for gone in [
             "inspector.split",
@@ -1155,5 +1160,59 @@ scene demo {
         assert_ne!(after_split, after_fade, "cut lane must commit split");
         let spoken = ui.read(&view, |view, _| view.session.utterance().spoken_text());
         assert!(!spoken.is_empty());
+    }
+
+    #[gpui::test]
+    fn toolbar_delete_selected_clip_and_undo_restores(cx: &mut TestAppContext) {
+        let session = overlap_session();
+        let clip_id = session
+            .layout()
+            .unwrap()
+            .timeline
+            .tracks
+            .iter()
+            .find(|track| track.name == "Video")
+            .unwrap()
+            .clips[0]
+            .id
+            .clone();
+        let original = session.source().to_string();
+        let (view, cx) = add_studio(cx, session);
+        let mut ui = UiDriver::new(cx);
+
+        ui.click(format!("timeline.clip.{clip_id}"));
+        assert_eq!(
+            ui.read(&view, |view, _| {
+                view.session
+                    .current_locus()
+                    .unwrap()
+                    .map(|locus| locus.kind)
+            }),
+            Some(lattice_engine::LocusKind::Source)
+        );
+        let _ = ui.bounds("toolbar.delete-clip");
+        assert!(
+            ui.read(&view, |view, _| view.session.toolbar_shows_delete()),
+            "toolbar Delete must be available for the selected clip"
+        );
+
+        ui.click("toolbar.delete-clip");
+        let deleted = ui.read(&view, |view, _| view.session.source().to_string());
+        assert_ne!(deleted, original, "toolbar Delete must rewrite source");
+        assert!(
+            !deleted.contains("as fight"),
+            "selected source clip must be removed: {deleted}"
+        );
+        assert!(
+            deleted.contains("title \"Hello\""),
+            "unrelated title clip must remain: {deleted}"
+        );
+
+        ui.click("toolbar.undo");
+        assert_eq!(
+            ui.read(&view, |view, _| view.session.source().to_string()),
+            original,
+            "toolbar Undo must restore the deleted clip"
+        );
     }
 }

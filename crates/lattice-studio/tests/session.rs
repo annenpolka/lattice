@@ -319,6 +319,67 @@ fn delete_last_clip_is_diagnostic_not_panic() {
 }
 
 #[test]
+fn delete_selected_clip_and_undo_restores() {
+    let dir = std::env::temp_dir().join(format!(
+        "lattice-studio-delete-undo-{}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    lattice_media::generate_av_fixture(dir.join("capture.mp4"), 4).unwrap();
+    let vel = dir.join("main.vel");
+    std::fs::write(
+        &vel,
+        r#"project "timeline-basic"
+convention commentary
+media game "capture.mp4"
+sequence main {
+  demo
+}
+scene demo {
+  game[0s..4s] as clip
+  title "Hello" {
+    at 1s for 3s
+  }
+  callout "Hold" {
+    at 2s for 1s
+  }
+}
+"#,
+    )
+    .unwrap();
+    let mut session = StudioSession::open(&vel).expect("open");
+    let title = session.point_at_title().unwrap().expect("title");
+    assert!(session.toolbar_shows_delete());
+    let before = session.source().to_string();
+    assert!(before.contains("title \"Hello\""));
+    session.delete_selected_clip().expect("delete title clip");
+    assert!(
+        !session.source().contains("title \"Hello\""),
+        "{}",
+        session.source()
+    );
+    assert!(
+        session.source().contains("game[0s..4s] as clip"),
+        "source clip must remain: {}",
+        session.source()
+    );
+    session.undo().expect("undo");
+    assert_eq!(session.source(), before);
+    assert!(
+        session
+            .loci()
+            .unwrap()
+            .iter()
+            .any(|locus| locus.id == title.id),
+        "undo must restore the title locus"
+    );
+}
+
+#[test]
 fn timeline_and_canvas_share_playhead_for_items() {
     let dir = std::env::temp_dir().join("lattice-studio-timeline-preview-sync");
     let _ = std::fs::remove_dir_all(&dir);

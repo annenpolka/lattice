@@ -583,3 +583,64 @@ scene demo {
         "{at_callout:?}"
     );
 }
+
+#[test]
+fn delete_title_and_source_clips() {
+    let vel = r#"project "clips"
+
+convention commentary
+
+media game "capture.mp4"
+
+sequence main {
+  demo
+}
+
+scene demo {
+  game[0s..4s] as video
+  title "Hello" {
+    at 1s for 2s
+  }
+  callout "Hold" {
+    at 2s for 1s
+  }
+}
+"#;
+    let engine = Engine::default();
+    let compilation = engine.compile(vel).unwrap();
+    let title = engine
+        .loci(&compilation)
+        .unwrap()
+        .into_iter()
+        .find(|locus| locus.kind == lattice_core::LocusKind::Title)
+        .expect("title");
+    let deleted_title = engine
+        .propose(&compilation, &title, SemanticEdit::Delete)
+        .unwrap();
+    let compilation = engine
+        .compile(&engine.apply_proposal(vel, &deleted_title).unwrap())
+        .unwrap();
+    assert!(!compilation.source.contains("title \"Hello\""));
+    assert!(compilation.source.contains("callout \"Hold\""));
+    assert!(compilation.source.contains("game[0s..4s] as video"));
+
+    let source = engine
+        .loci(&compilation)
+        .unwrap()
+        .into_iter()
+        .find(|locus| locus.kind == lattice_core::LocusKind::Source)
+        .expect("source");
+    let deleted_source = engine
+        .propose(&compilation, &source, SemanticEdit::Delete)
+        .unwrap();
+    let compilation = engine
+        .compile(
+            &engine
+                .apply_proposal(&compilation.source, &deleted_source)
+                .unwrap(),
+        )
+        .unwrap();
+    assert!(!compilation.source.contains("as video"));
+    assert!(compilation.source.contains("callout \"Hold\""));
+    assert!(compilation.source.contains("scene demo"));
+}

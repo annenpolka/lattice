@@ -463,6 +463,7 @@ struct StudioView {
     rail_geom: Arc<Mutex<(f32, f32)>>,
     track_geoms: Arc<Mutex<Vec<(String, f32, f32, f32, f32)>>>,
     play_geom: Arc<Mutex<Option<(f32, f32, f32, f32)>>>,
+    delete_geom: Arc<Mutex<Option<(f32, f32, f32, f32)>>>,
     ruler_geom: Arc<Mutex<Option<(f32, f32, f32, f32)>>>,
     canvas_geom: Arc<Mutex<Option<(f32, f32, f32, f32)>>>,
     tree_geoms: Arc<Mutex<Vec<(String, String, String, f32, f32, f32, f32)>>>,
@@ -991,6 +992,7 @@ impl StudioView {
             rail_geom: Arc::new(Mutex::new((0.0_f32, TIMELINE_WIDTH))),
             track_geoms: Arc::new(Mutex::new(Vec::new())),
             play_geom: Arc::new(Mutex::new(None)),
+            delete_geom: Arc::new(Mutex::new(None)),
             ruler_geom: Arc::new(Mutex::new(None)),
             canvas_geom: Arc::new(Mutex::new(None)),
             tree_geoms: Arc::new(Mutex::new(Vec::new())),
@@ -1083,6 +1085,7 @@ impl StudioView {
 
     fn maybe_log_smoke_geom(&mut self) {
         let play = self.play_geom.lock().ok().and_then(|slot| *slot);
+        let delete = self.delete_geom.lock().ok().and_then(|slot| *slot);
         let ruler = self.ruler_geom.lock().ok().and_then(|slot| *slot);
         let tracks = match self.track_geoms.lock() {
             Ok(slots) => slots.clone(),
@@ -1144,8 +1147,13 @@ impl StudioView {
             .map(|(id, _, _, x, y, _, _)| format!("{id}:{x:.0}:{y:.0}"))
             .collect::<Vec<_>>()
             .join(",");
-        let key =
-            format!("{play_x:.0}:{play_y:.0}:{ruler_y:.0}:{rail_w:.0}:{canvas_key}:{tree_key}");
+        let delete_key = match delete {
+            Some((x, y, w, h)) => format!("{x:.0}:{y:.0}:{w:.0}:{h:.0}"),
+            None => "-".into(),
+        };
+        let key = format!(
+            "{play_x:.0}:{play_y:.0}:{ruler_y:.0}:{rail_w:.0}:{canvas_key}:{tree_key}:{delete_key}"
+        );
         if self.last_geom_key.as_deref() == Some(key.as_str()) {
             return;
         }
@@ -1163,6 +1171,14 @@ impl StudioView {
                 "y": canvas_y,
                 "w": canvas_w,
                 "h": canvas_h,
+            });
+        }
+        if let Some((delete_x, delete_y, delete_w, delete_h)) = delete {
+            geom["delete"] = serde_json::json!({
+                "x": delete_x,
+                "y": delete_y,
+                "w": delete_w,
+                "h": delete_h,
             });
         }
         trace::log(format!("smoke_geom {geom}"));
@@ -2806,6 +2822,11 @@ impl StudioView {
                     )),
             ))
             .child(session_cluster(
+                "Clip",
+                "toolbar.cluster.clip",
+                self.toolbar_delete_button(cx),
+            ))
+            .child(session_cluster(
                 "Telemetry",
                 "toolbar.cluster.telemetry",
                 div()
@@ -2835,6 +2856,55 @@ impl StudioView {
                             .child(self.audio_status()),
                     ),
             ))
+    }
+
+    fn toolbar_delete_button(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let geom = Arc::clone(&self.delete_geom);
+        let selected = self.session.toolbar_shows_delete();
+        let color = if selected { TEAL } else { LINE };
+        div()
+            .id("Delete")
+            .debug_selector(|| "toolbar.delete-clip".into())
+            .relative()
+            .px_3()
+            .py_1()
+            .bg(rgb(color))
+            .text_color(rgb(TEXT))
+            .cursor_pointer()
+            .on_click(cx.listener(|this, _, _, cx| {
+                this.commit_toolbar_delete();
+                cx.notify();
+            }))
+            .child("Delete")
+            .child(
+                canvas(
+                    move |bounds, _, _| {
+                        if let Ok(mut slot) = geom.lock() {
+                            *slot = Some((
+                                f32::from(bounds.origin.x),
+                                f32::from(bounds.origin.y),
+                                f32::from(bounds.size.width),
+                                f32::from(bounds.size.height),
+                            ));
+                        }
+                    },
+                    |_, _, _, _| {},
+                )
+                .absolute()
+                .size_full(),
+            )
+    }
+
+    fn commit_toolbar_delete(&mut self) {
+        match self.session.delete_selected_clip() {
+            Ok(()) => {
+                trace::log("toolbar.delete-clip");
+                self.after_edit();
+            }
+            Err(err) => {
+                self.speak_toolbar(err);
+            }
+        }
     }
 
     fn open_video_clicked(&mut self, cx: &mut Context<Self>) {
@@ -4517,6 +4587,7 @@ fn action_selector(label: &str) -> &'static str {
         "Copy locus JSON" => "toolbar.copy-locus",
         "Zoom In" => "toolbar.zoom-in",
         "Zoom Out" => "toolbar.zoom-out",
+        "Delete" => "toolbar.delete-clip",
         "Apply edit" => "inspector.apply",
         "Apply gain" => "inspector.apply-gain",
         "Apply fade_in" => "inspector.apply-fade",

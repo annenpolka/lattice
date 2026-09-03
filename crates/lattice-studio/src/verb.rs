@@ -131,8 +131,8 @@ impl Utterance {
 /// This is routing, not legality. A missing route is not an absent edit.
 /// Only real commit paths belong here: Timeline trim / gain / fade / overlay
 /// time / scene reorder / split / delete, Canvas geometry, Inspector title
-/// and callout body. Toolbar routes nothing — it draws no target. Do not
-/// list a verb the UI cannot commit on that surface.
+/// and callout body, and the toolbar Delete control for a selected clip.
+/// Do not list a verb the UI cannot commit on that surface.
 #[must_use]
 #[allow(clippy::match_same_arms)]
 pub fn routed_verbs(projection: Projection, kind: LocusKind) -> Vec<&'static str> {
@@ -145,6 +145,10 @@ pub fn routed_verbs(projection: Projection, kind: LocusKind) -> Vec<&'static str
         (Projection::Canvas, LocusKind::Title | LocusKind::Callout) => {
             vec!["set-position", "resize-overlay"]
         }
+        (
+            Projection::Toolbar,
+            LocusKind::Source | LocusKind::Title | LocusKind::Callout | LocusKind::Scene,
+        ) => vec!["delete"],
         (Projection::Toolbar, _) => vec![],
         _ => vec![],
     }
@@ -154,16 +158,17 @@ pub fn routed_verbs(projection: Projection, kind: LocusKind) -> Vec<&'static str
 ///
 /// Derived from [`routed_verbs`] so a spoken "committed on" clause cannot name
 /// a surface that does not commit the verb. Timeline is searched first. Toolbar
-/// is omitted: it draws no target and must never be named as a commit surface.
+/// is included for the selected-clip Delete control.
 #[must_use]
 pub fn commit_projection(verb: &str, kind: LocusKind) -> Option<Projection> {
-    const SURFACES: [Projection; 6] = [
+    const SURFACES: [Projection; 7] = [
         Projection::Timeline,
         Projection::Canvas,
         Projection::Inspector,
         Projection::Source,
         Projection::Review,
         Projection::Tree,
+        Projection::Toolbar,
     ];
     SURFACES
         .into_iter()
@@ -628,7 +633,10 @@ mod tests {
             commit_projection("trim", LocusKind::Source),
             Some(Projection::Timeline)
         );
-        assert!(routed_verbs(Projection::Toolbar, LocusKind::Source).is_empty());
+        assert_eq!(
+            routed_verbs(Projection::Toolbar, LocusKind::Source),
+            ["delete"]
+        );
         let source = locus(LocusKind::Source, "source:fight", "fight");
         let spoken = utterance(Some(&source), None, Projection::Timeline, &[]);
         for verb in ["trim", "set-gain", "set-fade"] {
@@ -642,7 +650,15 @@ mod tests {
             );
         }
         assert!(
-            !spoken.spoken_text().contains("committed on Toolbar"),
+            spoken
+                .spoken
+                .iter()
+                .any(|clause| clause.verb == "delete" && clause.status == "routed"),
+            "{}",
+            spoken.spoken_text()
+        );
+        assert!(
+            spoken.spoken_text().contains("committed on Toolbar"),
             "{}",
             spoken.spoken_text()
         );
@@ -696,9 +712,18 @@ mod tests {
             routed_verbs(Projection::Timeline, LocusKind::Scene),
             ["reorder-scene", "split", "delete"]
         );
-        assert!(routed_verbs(Projection::Toolbar, LocusKind::Scene).is_empty());
-        assert!(routed_verbs(Projection::Toolbar, LocusKind::Source).is_empty());
-        assert!(routed_verbs(Projection::Toolbar, LocusKind::Title).is_empty());
+        assert_eq!(
+            routed_verbs(Projection::Toolbar, LocusKind::Scene),
+            ["delete"]
+        );
+        assert_eq!(
+            routed_verbs(Projection::Toolbar, LocusKind::Source),
+            ["delete"]
+        );
+        assert_eq!(
+            routed_verbs(Projection::Toolbar, LocusKind::Title),
+            ["delete"]
+        );
         assert_eq!(
             routed_verbs(Projection::Inspector, LocusKind::Title),
             ["title"]
@@ -729,6 +754,14 @@ mod tests {
             Some(Projection::Timeline)
         );
         assert_eq!(commit_projection("split", LocusKind::Source), None);
+        assert_eq!(
+            commit_projection("delete", LocusKind::Source),
+            Some(Projection::Toolbar)
+        );
+        assert_eq!(
+            commit_projection("delete", LocusKind::Title),
+            Some(Projection::Toolbar)
+        );
     }
 
     #[test]

@@ -174,6 +174,15 @@ impl StudioSession {
         self.sync_playhead_to_current();
     }
 
+    /// Whether the selected locus is a timeline clip the toolbar Delete can name.
+    #[must_use]
+    pub fn toolbar_shows_delete(&self) -> bool {
+        matches!(
+            self.current_locus().ok().flatten().map(|locus| locus.kind),
+            Some(LocusKind::Source | LocusKind::Title | LocusKind::Callout | LocusKind::Scene)
+        )
+    }
+
     pub fn point_at_title(&mut self) -> Result<Option<Locus>, EngineError> {
         let title = self
             .loci()?

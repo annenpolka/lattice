@@ -339,6 +339,56 @@ fn scene_names(document: &Document) -> Vec<String> {
 }
 
 fn apply_delete(source: &str, document: &Document, locus: &Locus) -> Result<String, EngineError> {
+    match locus.kind {
+        LocusKind::Title => splice_out_invocation(source, document, locus, "title"),
+        LocusKind::Callout => splice_out_invocation(source, document, locus, "callout"),
+        LocusKind::Source => splice_out_binding(source, document, locus),
+        LocusKind::Scene => splice_out_scene(source, document, locus),
+        _ => Err(EngineError::Edit("delete target is not a clip".into())),
+    }
+}
+
+fn splice_out_invocation(
+    source: &str,
+    document: &Document,
+    locus: &Locus,
+    word: &str,
+) -> Result<String, EngineError> {
+    let inv = find_word_invocation(document, locus, word)
+        .ok_or_else(|| EngineError::Edit(format!("delete target is not a {word} clip")))?;
+    Ok(apply_splices(
+        source,
+        vec![(widen_line(source, inv.span), String::new())],
+    ))
+}
+
+fn splice_out_binding(
+    source: &str,
+    document: &Document,
+    locus: &Locus,
+) -> Result<String, EngineError> {
+    let want = locus
+        .source_span
+        .ok_or_else(|| EngineError::Edit("delete source clip has no span".into()))?;
+    let span = walk_items(&document.items).find_map(|item| match item {
+        Item::Binding { span, .. } if span.start == want.start && span.end == want.end => {
+            Some(*span)
+        }
+        _ => None,
+    });
+    let span =
+        span.ok_or_else(|| EngineError::Edit("delete target is not a source clip".into()))?;
+    Ok(apply_splices(
+        source,
+        vec![(widen_line(source, span), String::new())],
+    ))
+}
+
+fn splice_out_scene(
+    source: &str,
+    document: &Document,
+    locus: &Locus,
+) -> Result<String, EngineError> {
     let scene = find_scene(document, locus)
         .ok_or_else(|| EngineError::Edit("delete target is not a scene".into()))?;
     let Item::Scene { name, span, .. } = scene else {
@@ -706,12 +756,20 @@ fn find_named_invocation<'a>(body: &'a lattice_vel::Block, name: &str) -> Option
 }
 
 fn find_title<'a>(document: &'a Document, locus: &Locus) -> Option<&'a Invocation> {
+    find_word_invocation(document, locus, "title")
+}
+
+fn find_word_invocation<'a>(
+    document: &'a Document,
+    locus: &Locus,
+    word: &str,
+) -> Option<&'a Invocation> {
     let want = locus.source_span?;
     for item in walk_items(&document.items) {
         let Item::Invocation(inv) = item else {
             continue;
         };
-        if inv.name != "title" {
+        if inv.name != word {
             continue;
         }
         if inv.span.start == want.start && inv.span.end == want.end {
