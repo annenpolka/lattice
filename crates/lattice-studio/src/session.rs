@@ -697,33 +697,72 @@ impl StudioSession {
         self.apply_edit(SemanticEdit::Split { at })
     }
 
-    /// Toolbar Split is drawn only when a selected clip strictly contains the playhead.
+    /// Toolbar Split is drawn when here names a clip whose timeline span strictly
+    /// contains the playhead.
     ///
-    /// Engine `split_at` requires an exclusive interior `(start, end)`, so a playhead
-    /// parked on a clip edge does not reveal the control.
+    /// Intersection is Engine `split_at`'s exclusive interior `(start, end)`, so a
+    /// playhead parked on a clip edge does not reveal the control. The check uses
+    /// the committed locus and Engine timeline spans — not `StudioLayout` clip
+    /// `selected` flags, and not CutLane.
     #[must_use]
     pub fn toolbar_split_available(&self) -> bool {
-        self.selected_clip_for_toolbar_split().is_some()
+        self.selected_span_for_toolbar_split().is_some()
     }
 
-    fn selected_clip_for_toolbar_split(&self) -> Option<layout::TimelineClipView> {
+    fn selected_span_for_toolbar_split(&self) -> Option<TimeSpan> {
+        let here = self.current_locus().ok().flatten()?;
         let playhead = self.playhead;
-        let layout = self.layout().ok()?;
-        layout
-            .timeline
-            .tracks
+        self.timeline_spans_for_locus(&here)
+            .into_iter()
+            .find(|span| span.split_at(playhead).is_some())
+    }
+
+    fn timeline_spans_for_locus(&self, locus: &Locus) -> Vec<TimeSpan> {
+        if let Some(span) = locus.timeline_span {
+            return vec![span];
+        }
+        let Ok(timeline) = Engine::timeline(&self.compilation.project) else {
+            return Vec::new();
+        };
+        match locus.kind {
+            LocusKind::Source => self.source_clip_spans(&timeline, locus),
+            LocusKind::Scene => self
+                .clip_span_for_scene(&timeline, &locus.node_id)
+                .or_else(|| {
+                    locus
+                        .scene_id
+                        .as_deref()
+                        .and_then(|id| self.clip_span_for_scene(&timeline, id))
+                })
+                .into_iter()
+                .collect(),
+            LocusKind::Title | LocusKind::Callout | LocusKind::Placement | LocusKind::Speech => {
+                timeline
+                    .clips
+                    .iter()
+                    .filter(|clip| clip.id == locus.node_id || clip.id == locus.id.as_str())
+                    .map(|clip| clip.span)
+                    .collect()
+            }
+            LocusKind::Sequence | LocusKind::Media => Vec::new(),
+        }
+    }
+
+    fn source_clip_spans(
+        &self,
+        timeline: &lattice_engine::Timeline,
+        locus: &Locus,
+    ) -> Vec<TimeSpan> {
+        timeline
+            .clips
             .iter()
-            .flat_map(|track| track.clips.iter())
-            .find(|clip| {
-                if !clip.selected {
-                    return false;
-                }
-                let Ok(end) = clip.start.checked_add(clip.duration) else {
-                    return false;
-                };
-                playhead > clip.start && playhead < end
+            .filter(|clip| {
+                source_id_for_clip(self, &clip.id).is_some_and(|source_id| {
+                    source_id == locus.node_id || source_id == locus.id.as_str()
+                })
             })
-            .cloned()
+            .map(|clip| clip.span)
+            .collect()
     }
 
     /// Commit Engine `SemanticEdit::Split` at the playhead from the toolbar control.
@@ -733,7 +772,7 @@ impl StudioSession {
     /// Split is scene-scoped — without changing here first.
     pub fn commit_toolbar_split(&mut self) -> Result<(), EngineError> {
         self.touched_projection = Projection::Toolbar;
-        if self.selected_clip_for_toolbar_split().is_none() {
+        if self.selected_span_for_toolbar_split().is_none() {
             let err = EngineError::Edit(
                 "Split needs a selected clip that the playhead intersects.".into(),
             );

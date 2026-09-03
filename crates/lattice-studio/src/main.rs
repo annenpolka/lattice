@@ -2679,178 +2679,10 @@ impl StudioView {
                         let _ = this.session.save();
                         cx.notify();
                     })),
-            ))
-            .child(session_cluster(
-                "Clock",
-                "toolbar.cluster.clock",
-                div()
-                    .flex()
-                    .flex_wrap()
-                    .items_center()
-                    .gap_1()
-                    .child(play)
-                    .child(action_button("Pause", LINE, cx, move |this, cx| {
-                        this.catch_up_play_clock();
-                        this.audio_play_pending = false;
-                        this.session.pause();
-                        this.play_origin = None;
-                        this.sync_audio_monitor("pause");
-                        this.preview_inbox.clear_pending();
-                        this.refresh_preview("pause");
-                        this.queue_preview();
-                        trace::log("pause");
-                        cx.notify();
-                    }))
-                    .child(action_button("Seek", LINE, cx, move |this, cx| {
-                        this.audio_play_pending = false;
-                        this.session.seek(lattice_engine::Time::ZERO);
-                        this.play_origin = None;
-                        this.sync_audio_monitor("seek");
-                        this.preview_inbox.clear_pending();
-                        this.refresh_preview("seek");
-                        this.queue_preview();
-                        cx.notify();
-                    }))
-                    .child(action_button("Scrub", LINE, cx, move |this, cx| {
-                        this.audio_play_pending = false;
-                        this.session.scrub(this.session.playhead());
-                        this.play_origin = None;
-                        this.sync_audio_monitor("scrub");
-                        this.preview_inbox.clear_pending();
-                        this.refresh_preview("scrub");
-                        this.queue_preview();
-                        cx.notify();
-                    }))
-                    .child(action_button("Zoom In", LINE, cx, move |this, cx| {
-                        this.session.zoom_around(this.session.playhead(), 1.25);
-                        cx.notify();
-                    }))
-                    .child(action_button("Zoom Out", LINE, cx, move |this, cx| {
-                        this.session.zoom_around(this.session.playhead(), 0.8);
-                        cx.notify();
-                    })),
-            ))
-            .child(session_cluster(
-                "Engine",
-                "toolbar.cluster.engine",
-                div()
-                    .flex()
-                    .flex_wrap()
-                    .items_center()
-                    .gap_1()
-                    .child(action_button(
-                        "CPU",
-                        if self.renderer == RendererRequest::RequireCpu {
-                            TEAL
-                        } else {
-                            LINE
-                        },
-                        cx,
-                        move |this, cx| {
-                            this.set_renderer(RendererRequest::RequireCpu);
-                            cx.notify();
-                        },
-                    ))
-                    .child(action_button(
-                        "GPU DX12",
-                        if self.renderer == RendererRequest::RequireGpuDx12 {
-                            TEAL
-                        } else {
-                            LINE
-                        },
-                        cx,
-                        move |this, cx| {
-                            this.set_renderer(RendererRequest::RequireGpuDx12);
-                            cx.notify();
-                        },
-                    ))
-                    .child(action_button("Undo", LINE, cx, move |this, cx| {
-                        if let Err(err) = this.session.undo() {
-                            trace::log(format!("undo: {err}"));
-                        }
-                        this.after_edit();
-                        cx.notify();
-                    }))
-                    .child(action_button("Redo", LINE, cx, move |this, cx| {
-                        if let Err(err) = this.session.redo() {
-                            trace::log(format!("redo: {err}"));
-                        }
-                        this.after_edit();
-                        cx.notify();
-                    }))
-                    .child(action_button("Resolve", TEAL, cx, move |this, cx| {
-                        match this.session.resolve_media() {
-                            Ok(resolution) => {
-                                this.last_render = Some(format!(
-                                    "resolved {} assets ({} provider calls)",
-                                    resolution.assets.len(),
-                                    resolution.provider_calls
-                                ));
-                                this.invalidate_audio("resolve");
-                                this.refresh_preview("resolve");
-                                this.queue_preview();
-                            }
-                            Err(err) => {
-                                trace::log(format!("resolve: {err}"));
-                                this.last_render = Some(format!("resolve failed: {err}"));
-                            }
-                        }
-                        cx.notify();
-                    }))
-                    .child(action_button(
-                        "Copy locus JSON",
-                        LINE,
-                        cx,
-                        move |this, cx| {
-                            match this.session.current_projection_json() {
-                                Ok(Some(json)) => {
-                                    cx.write_to_clipboard(ClipboardItem::new_string(json));
-                                    this.last_render = Some("copied locus JSON".into());
-                                }
-                                Ok(None) => {
-                                    this.speak_toolbar(
-                                        "Copy locus JSON needs a committed locus. Here is unset.",
-                                    );
-                                }
-                                Err(err) => {
-                                    trace::log(format!("copy locus: {err}"));
-                                    this.last_render = Some(format!("copy locus failed: {err}"));
-                                }
-                            }
-                            cx.notify();
-                        },
-                    )),
-            ))
-            .child(session_cluster(
-                "Telemetry",
-                "toolbar.cluster.telemetry",
-                div()
-                    .flex()
-                    .items_center()
-                    .gap_1()
-                    .child(
-                        div()
-                            .debug_selector(|| "toolbar.renderer-status".into())
-                            .px_2()
-                            .text_color(if self.renderer_error.is_some() {
-                                rgb(0xff8f8f)
-                            } else {
-                                rgb(MUTED)
-                            })
-                            .child(format!("Renderer · {}", self.renderer_status())),
-                    )
-                    .child(
-                        div()
-                            .debug_selector(|| "toolbar.audio-status".into())
-                            .px_2()
-                            .text_color(if self.audio_error.is_some() {
-                                rgb(0xff8f8f)
-                            } else {
-                                rgb(MUTED)
-                            })
-                            .child(self.audio_status()),
-                    ),
             ));
+        // Edit sits next to File so ✂ Split stays on the first toolbar row at
+        // 1400×840. Trailing placement after Telemetry wrapped the control off
+        // the session strip that synth users actually scanned.
         if self.session.toolbar_split_available() {
             bar = bar.child(session_cluster(
                 "Edit",
@@ -2860,7 +2692,177 @@ impl StudioView {
         } else if let Ok(mut slot) = self.split_geom.lock() {
             *slot = None;
         }
-        bar
+        bar.child(session_cluster(
+            "Clock",
+            "toolbar.cluster.clock",
+            div()
+                .flex()
+                .flex_wrap()
+                .items_center()
+                .gap_1()
+                .child(play)
+                .child(action_button("Pause", LINE, cx, move |this, cx| {
+                    this.catch_up_play_clock();
+                    this.audio_play_pending = false;
+                    this.session.pause();
+                    this.play_origin = None;
+                    this.sync_audio_monitor("pause");
+                    this.preview_inbox.clear_pending();
+                    this.refresh_preview("pause");
+                    this.queue_preview();
+                    trace::log("pause");
+                    cx.notify();
+                }))
+                .child(action_button("Seek", LINE, cx, move |this, cx| {
+                    this.audio_play_pending = false;
+                    this.session.seek(lattice_engine::Time::ZERO);
+                    this.play_origin = None;
+                    this.sync_audio_monitor("seek");
+                    this.preview_inbox.clear_pending();
+                    this.refresh_preview("seek");
+                    this.queue_preview();
+                    cx.notify();
+                }))
+                .child(action_button("Scrub", LINE, cx, move |this, cx| {
+                    this.audio_play_pending = false;
+                    this.session.scrub(this.session.playhead());
+                    this.play_origin = None;
+                    this.sync_audio_monitor("scrub");
+                    this.preview_inbox.clear_pending();
+                    this.refresh_preview("scrub");
+                    this.queue_preview();
+                    cx.notify();
+                }))
+                .child(action_button("Zoom In", LINE, cx, move |this, cx| {
+                    this.session.zoom_around(this.session.playhead(), 1.25);
+                    cx.notify();
+                }))
+                .child(action_button("Zoom Out", LINE, cx, move |this, cx| {
+                    this.session.zoom_around(this.session.playhead(), 0.8);
+                    cx.notify();
+                })),
+        ))
+        .child(session_cluster(
+            "Engine",
+            "toolbar.cluster.engine",
+            div()
+                .flex()
+                .flex_wrap()
+                .items_center()
+                .gap_1()
+                .child(action_button(
+                    "CPU",
+                    if self.renderer == RendererRequest::RequireCpu {
+                        TEAL
+                    } else {
+                        LINE
+                    },
+                    cx,
+                    move |this, cx| {
+                        this.set_renderer(RendererRequest::RequireCpu);
+                        cx.notify();
+                    },
+                ))
+                .child(action_button(
+                    "GPU DX12",
+                    if self.renderer == RendererRequest::RequireGpuDx12 {
+                        TEAL
+                    } else {
+                        LINE
+                    },
+                    cx,
+                    move |this, cx| {
+                        this.set_renderer(RendererRequest::RequireGpuDx12);
+                        cx.notify();
+                    },
+                ))
+                .child(action_button("Undo", LINE, cx, move |this, cx| {
+                    if let Err(err) = this.session.undo() {
+                        trace::log(format!("undo: {err}"));
+                    }
+                    this.after_edit();
+                    cx.notify();
+                }))
+                .child(action_button("Redo", LINE, cx, move |this, cx| {
+                    if let Err(err) = this.session.redo() {
+                        trace::log(format!("redo: {err}"));
+                    }
+                    this.after_edit();
+                    cx.notify();
+                }))
+                .child(action_button("Resolve", TEAL, cx, move |this, cx| {
+                    match this.session.resolve_media() {
+                        Ok(resolution) => {
+                            this.last_render = Some(format!(
+                                "resolved {} assets ({} provider calls)",
+                                resolution.assets.len(),
+                                resolution.provider_calls
+                            ));
+                            this.invalidate_audio("resolve");
+                            this.refresh_preview("resolve");
+                            this.queue_preview();
+                        }
+                        Err(err) => {
+                            trace::log(format!("resolve: {err}"));
+                            this.last_render = Some(format!("resolve failed: {err}"));
+                        }
+                    }
+                    cx.notify();
+                }))
+                .child(action_button(
+                    "Copy locus JSON",
+                    LINE,
+                    cx,
+                    move |this, cx| {
+                        match this.session.current_projection_json() {
+                            Ok(Some(json)) => {
+                                cx.write_to_clipboard(ClipboardItem::new_string(json));
+                                this.last_render = Some("copied locus JSON".into());
+                            }
+                            Ok(None) => {
+                                this.speak_toolbar(
+                                    "Copy locus JSON needs a committed locus. Here is unset.",
+                                );
+                            }
+                            Err(err) => {
+                                trace::log(format!("copy locus: {err}"));
+                                this.last_render = Some(format!("copy locus failed: {err}"));
+                            }
+                        }
+                        cx.notify();
+                    },
+                )),
+        ))
+        .child(session_cluster(
+            "Telemetry",
+            "toolbar.cluster.telemetry",
+            div()
+                .flex()
+                .items_center()
+                .gap_1()
+                .child(
+                    div()
+                        .debug_selector(|| "toolbar.renderer-status".into())
+                        .px_2()
+                        .text_color(if self.renderer_error.is_some() {
+                            rgb(0xff8f8f)
+                        } else {
+                            rgb(MUTED)
+                        })
+                        .child(format!("Renderer · {}", self.renderer_status())),
+                )
+                .child(
+                    div()
+                        .debug_selector(|| "toolbar.audio-status".into())
+                        .px_2()
+                        .text_color(if self.audio_error.is_some() {
+                            rgb(0xff8f8f)
+                        } else {
+                            rgb(MUTED)
+                        })
+                        .child(self.audio_status()),
+                ),
+        ))
     }
 
     fn toolbar_split_button(&self, cx: &mut Context<Self>) -> impl IntoElement {

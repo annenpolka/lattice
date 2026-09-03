@@ -1239,4 +1239,71 @@ scene demo {
             "split rewrite: {after}"
         );
     }
+
+    #[gpui::test]
+    fn toolbar_split_after_video_select_and_ruler_scrub(cx: &mut TestAppContext) {
+        let session = timeline_basic_session();
+        let video_id = session
+            .layout()
+            .unwrap()
+            .timeline
+            .tracks
+            .iter()
+            .find(|track| track.name == "Video")
+            .unwrap()
+            .clips[0]
+            .id
+            .clone();
+        let (view, cx) = add_studio(cx, session);
+        let mut ui = UiDriver::new(cx);
+        ui.resize(1400.0, 840.0);
+
+        assert!(
+            ui.context().debug_bounds("toolbar.split").is_none(),
+            "idle playhead 0s must hide Split"
+        );
+
+        ui.click(format!("timeline.clip.{video_id}"));
+        ui.context().run_until_parked();
+        assert_eq!(
+            ui.read(&view, |view, _| {
+                view.session.current_locus().unwrap().unwrap().kind
+            }),
+            lattice_engine::LocusKind::Source
+        );
+
+        ui.drag_within("timeline.ruler", (0.05, 0.5), (0.5, 0.5));
+        ui.context().run_until_parked();
+        let playhead = ui.read(&view, |view, _| view.session.playhead());
+        assert!(
+            playhead > Time::seconds(1) && playhead < Time::seconds(4),
+            "ruler scrub must park the playhead inside the 0s..4s video clip, got {playhead}"
+        );
+        assert!(
+            ui.read(&view, |view, _| view.session.toolbar_split_available()),
+            "select + playhead intersection must open the toolbar gate"
+        );
+
+        let file = ui.bounds("toolbar.cluster.file");
+        let edit = ui.bounds("toolbar.cluster.edit");
+        let split = ui.bounds("toolbar.split");
+        let file_y = f32::from(file.origin.y);
+        let edit_y = f32::from(edit.origin.y);
+        assert!(
+            (edit_y - file_y).abs() < 16.0,
+            "Edit cluster must share File's toolbar row at 1400×840 (not wrap after Telemetry): file={file:?} edit={edit:?} split={split:?}"
+        );
+
+        let original = ui.read(&view, |view, _| view.session.source().to_string());
+        ui.click("toolbar.split");
+        let after = ui.read(&view, |view, _| view.session.source().to_string());
+        assert_ne!(
+            after, original,
+            "toolbar Split click after ruler scrub must commit Engine Split"
+        );
+        assert!(
+            after.contains("demo_2") || after.contains("[2s..") || after.contains("[1."),
+            "split rewrite: {after}"
+        );
+    }
 }

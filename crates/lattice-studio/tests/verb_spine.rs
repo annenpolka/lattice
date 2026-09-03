@@ -1,7 +1,7 @@
 //! INTEGRATED verb-license spine and the two pointing locks.
 
 use lattice_engine::{LocusKind, Time};
-use lattice_studio::{Projection, StudioSession};
+use lattice_studio::{Projection, StudioSession, UiFixture};
 
 fn unique_dir(tag: &str) -> std::path::PathBuf {
     let nanos = std::time::SystemTime::now()
@@ -839,6 +839,52 @@ fn toolbar_split_from_source_clip_commits_engine_scene_split() {
         session.current_locus().unwrap().unwrap().id,
         here,
         "toolbar Split must not retarget here before the Engine rewrite"
+    );
+}
+
+fn timeline_basic_session() -> StudioSession {
+    let root = unique_dir("timeline-basic");
+    let vel = UiFixture::TimelineBasic
+        .materialize_in(&root)
+        .expect("materialize");
+    let media = vel.parent().expect("fixture dir").join("capture.mp4");
+    lattice_media::generate_av_fixture(media, 6).expect("A/V fixture");
+    StudioSession::open(vel).expect("open fixture")
+}
+
+#[test]
+fn toolbar_split_hidden_at_video_start_then_shown_on_interior_playhead() {
+    let mut session = timeline_basic_session();
+    assert!(
+        !session.toolbar_split_available(),
+        "timeline-basic idle: title Hello, playhead 0s"
+    );
+    point_source_via_video(&mut session);
+    assert_eq!(
+        session.current_locus().unwrap().unwrap().kind,
+        LocusKind::Source
+    );
+    session.seek(Time::ZERO);
+    assert!(
+        !session.toolbar_split_available(),
+        "video 0s..4s exclusive interior excludes playhead 0s"
+    );
+    session.seek(Time::seconds(2));
+    assert!(
+        session.toolbar_split_available(),
+        "selected video clip must reveal Split at 2s without CutLane"
+    );
+    let at = Time::from_decimal_seconds(2, 54, 2).expect("2.54s");
+    session.seek(at);
+    assert!(
+        session.toolbar_split_available(),
+        "selected video clip must reveal Split at 2.54s"
+    );
+    session.commit_toolbar_split().expect("toolbar split");
+    assert!(
+        session.source().contains("demo_2") || session.source().contains("[2."),
+        "Engine Split must rewrite the scene: {}",
+        session.source()
     );
 }
 
