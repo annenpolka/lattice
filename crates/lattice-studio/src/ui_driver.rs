@@ -1156,4 +1156,102 @@ scene demo {
         let spoken = ui.read(&view, |view, _| view.session.utterance().spoken_text());
         assert!(!spoken.is_empty());
     }
+
+    fn two_scene_session() -> lattice_studio::StudioSession {
+        let nonce = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("clock")
+            .as_nanos();
+        let root = std::env::temp_dir().join(format!("lattice-ui-nudge-{nonce}"));
+        std::fs::create_dir_all(&root).expect("fixture dir");
+        lattice_media::generate_av_fixture(root.join("capture.mp4"), 6).expect("A/V fixture");
+        let vel = root.join("main.vel");
+        std::fs::write(
+            &vel,
+            r#"project "drag-valid"
+convention commentary
+media game "capture.mp4"
+sequence main {
+  left
+  right
+}
+scene left {
+  game[0s..2s] as clip-a
+  title "Alpha" { at 0s for 2s }
+}
+scene right {
+  game[0s..2s] as clip-b
+  title "Beta" { at 0s for 2s }
+}
+"#,
+        )
+        .expect("write fixture");
+        lattice_studio::StudioSession::open(vel).expect("open fixture")
+    }
+
+    #[gpui::test]
+    fn nudge_buttons_move_selected_video_clip(cx: &mut TestAppContext) {
+        let session = two_scene_session();
+        let video_id = session
+            .layout()
+            .unwrap()
+            .timeline
+            .tracks
+            .iter()
+            .find(|track| track.name == "Video")
+            .unwrap()
+            .clips[0]
+            .id
+            .clone();
+        let (view, cx) = add_studio(cx, session);
+        let mut ui = UiDriver::new(cx);
+        ui.click(format!("timeline.clip.{video_id}"));
+        assert_eq!(
+            ui.read(&view, |view, _| {
+                view.session.current_locus().unwrap().unwrap().kind
+            }),
+            lattice_engine::LocusKind::Source
+        );
+        let _ = ui.bounds(format!("timeline.grab.{video_id}"));
+        let _ = ui.bounds("timeline.nudge.later");
+        let _ = ui.bounds("inspector.nudge.later");
+        let original = ui.read(&view, |view, _| view.session.source().to_string());
+        let start = ui.read(&view, |view, _| {
+            view.session
+                .layout()
+                .unwrap()
+                .timeline
+                .tracks
+                .iter()
+                .find(|track| track.name == "Video")
+                .unwrap()
+                .clips
+                .iter()
+                .find(|clip| clip.id == video_id)
+                .unwrap()
+                .start
+        });
+        ui.click("timeline.nudge.later");
+        let after = ui.read(&view, |view, _| view.session.source().to_string());
+        assert_ne!(after, original, "nudge later must rewrite the sequence");
+        let moved = ui.read(&view, |view, _| {
+            view.session
+                .layout()
+                .unwrap()
+                .timeline
+                .tracks
+                .iter()
+                .find(|track| track.name == "Video")
+                .unwrap()
+                .clips
+                .iter()
+                .find(|clip| clip.id == video_id)
+                .unwrap()
+                .start
+        });
+        assert!(
+            moved > start,
+            "video clip start must change, {start} -> {moved}"
+        );
+    }
 }

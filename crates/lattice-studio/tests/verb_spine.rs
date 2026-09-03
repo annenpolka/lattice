@@ -647,6 +647,38 @@ fn source_here_commits_gain_on_audio_line_and_fade_on_video_wedge() {
 }
 
 #[test]
+fn two_scene_source_draws_grab_handle_and_nudge() {
+    let dir = unique_dir("grab-layout");
+    lattice_media::generate_av_fixture(dir.join("capture.mp4"), 8).unwrap();
+    let vel = dir.join("main.vel");
+    std::fs::write(
+        &vel,
+        r#"project "grab-layout"
+convention commentary
+media game "capture.mp4"
+sequence main {
+  left
+  right
+}
+scene left {
+  game[0s..2s] as clip-a
+}
+scene right {
+  game[0s..2s] as clip-b
+}
+"#,
+    )
+    .unwrap();
+    let mut session = StudioSession::open(&vel).expect("open");
+    point_source_via_video(&mut session);
+    let video = clip_on(&session, "Video");
+    let audio = clip_on(&session, "Audio");
+    assert!(video.grab_handle, "video grab grip is drawn");
+    assert!(audio.grab_handle, "audio grab grip is drawn");
+    assert!(session.layout().unwrap().inspector.nudge_sequence);
+}
+
+#[test]
 fn scene_here_commits_split_on_cut_lane_and_delete_on_handle() {
     let mut session = overlap_session();
     point_scene_via_band(&mut session);

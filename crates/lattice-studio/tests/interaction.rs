@@ -697,3 +697,162 @@ scene a {
         session.gesture()
     );
 }
+
+#[test]
+#[allow(clippy::too_many_lines)]
+fn source_nudge_reorders_video_and_audio_without_body_drag() {
+    let dir = unique_dir("nudge");
+    let mut session = write_scenes(
+        &dir,
+        r#"project "nudge"
+convention commentary
+media game "capture.mp4"
+sequence main {
+  left
+  right
+}
+scene left {
+  game[0s..2s] as clip-a
+  title "Alpha" { at 0s for 2s }
+}
+scene right {
+  game[0s..2s] as clip-b
+  title "Beta" { at 0s for 2s }
+}
+"#,
+    );
+    let original = session.source().to_string();
+    let video = video_clip(&session);
+    let x = session.x_at_time(video.start) + session.viewport().delta_x(video.duration) / 2.0;
+    session.begin_timeline_pointer_on(x, true, "Video").unwrap();
+    session.commit_timeline_pointer(x).unwrap();
+    assert_eq!(
+        session.current_locus().unwrap().unwrap().kind,
+        lattice_engine::LocusKind::Source
+    );
+    let layout = session.layout().unwrap();
+    let video = layout
+        .timeline
+        .tracks
+        .iter()
+        .find(|track| track.name == "Video")
+        .unwrap()
+        .clips
+        .iter()
+        .find(|clip| clip.selected)
+        .cloned()
+        .expect("selected video");
+    assert!(video.grab_handle, "selected video draws the grab grip");
+    assert!(layout.inspector.nudge_sequence);
+    let video_start = video.start;
+    session
+        .nudge_selected(lattice_studio::NudgeDirection::Later)
+        .expect("nudge later");
+    let after = session.source().to_string();
+    assert_ne!(after, original);
+    let seq = after.split("sequence main").nth(1).unwrap_or(&after);
+    let left_at = seq.find("left");
+    let right_at = seq.find("right");
+    assert!(
+        right_at.is_some() && left_at.is_some() && right_at < left_at,
+        "left should move later:\n{seq}"
+    );
+    let moved_start = session
+        .layout()
+        .unwrap()
+        .timeline
+        .tracks
+        .iter()
+        .find(|track| track.name == "Video")
+        .unwrap()
+        .clips
+        .iter()
+        .find(|clip| clip.id == video.id)
+        .unwrap()
+        .start;
+    assert!(moved_start > video_start, "video clip must change start");
+
+    session.undo().unwrap();
+    session.begin_timeline_pointer_on(x, true, "Video").unwrap();
+    session.commit_timeline_pointer(x).unwrap();
+    let audio = session
+        .layout()
+        .unwrap()
+        .timeline
+        .tracks
+        .iter()
+        .find(|track| track.name == "Audio")
+        .unwrap()
+        .clips
+        .iter()
+        .find(|clip| clip.selected)
+        .cloned()
+        .expect("selected audio");
+    assert!(audio.grab_handle, "selected audio draws the grab grip");
+    let audio_start = audio.start;
+    session
+        .nudge_selected(lattice_studio::NudgeDirection::Later)
+        .expect("audio nudge later");
+    let audio_after = session
+        .layout()
+        .unwrap()
+        .timeline
+        .tracks
+        .iter()
+        .find(|track| track.name == "Audio")
+        .unwrap()
+        .clips
+        .iter()
+        .find(|clip| clip.id == audio.id)
+        .unwrap()
+        .start;
+    assert!(
+        audio_after > audio_start,
+        "audio clip must change start after nudge"
+    );
+}
+
+#[test]
+fn grab_handle_begins_reorder_clip_body_stays_point_source() {
+    let dir = unique_dir("grab");
+    let mut session = write_scenes(
+        &dir,
+        r#"project "grab"
+convention commentary
+media game "capture.mp4"
+sequence main {
+  left
+  right
+}
+scene left {
+  game[0s..2s] as clip-a
+}
+scene right {
+  game[0s..2s] as clip-b
+}
+"#,
+    );
+    let video = video_clip(&session);
+    let body_x = session.x_at_time(video.start) + session.viewport().delta_x(video.duration) / 2.0;
+    session
+        .begin_timeline_pointer_on(body_x, true, "Video")
+        .unwrap();
+    session.commit_timeline_pointer(body_x).unwrap();
+    session
+        .begin_timeline_pointer_on(body_x, true, "Video")
+        .unwrap();
+    assert!(
+        matches!(session.gesture(), TimelineGesture::PointSource { .. }),
+        "clip body stays PointSource: {:?}",
+        session.gesture()
+    );
+    session.cancel_timeline_pointer();
+    session
+        .begin_timeline_pointer_on_xy(body_x, 3.0, true, "Video")
+        .unwrap();
+    assert!(
+        matches!(session.gesture(), TimelineGesture::Reorder { .. }),
+        "grab grip must start Reorder: {:?}",
+        session.gesture()
+    );
+}

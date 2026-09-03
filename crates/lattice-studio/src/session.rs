@@ -718,6 +718,15 @@ impl StudioSession {
         })
     }
 
+    /// Alternate move affordance: nudge the related scene one slot in the sequence.
+    /// Does not change Video/Audio clip-body drag (that stays identity/point).
+    pub fn nudge_selected(
+        &mut self,
+        direction: crate::interaction::NudgeDirection,
+    ) -> Result<(), EngineError> {
+        crate::interaction::nudge_selected(self, direction)
+    }
+
     /// Seek the playhead to a named locus. Does not point, apply, or push Undo.
     pub fn seek_eye(&mut self, id: &str) -> Result<bool, EngineError> {
         let loci = self.loci()?;

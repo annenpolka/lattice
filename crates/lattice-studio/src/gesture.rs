@@ -7,6 +7,8 @@ use crate::viewport::{TimelineViewport, time_as_secs, time_from_secs};
 pub const TRIM_HANDLE_PX: f64 = 8.0;
 pub const FADE_WEDGE_PX: f64 = 20.0;
 pub const DELETE_HANDLE_PX: f64 = 22.0;
+pub const GRAB_HANDLE_PX: f64 = 16.0;
+pub const GRAB_HANDLE_Y: f64 = 8.0;
 pub const CUT_LANE_Y_RATIO: f64 = 0.45;
 pub const MIN_DRAW_WIDTH_PX: f64 = 24.0;
 pub const TRACK_HEIGHT_PX: f64 = 22.0;
@@ -65,6 +67,10 @@ pub enum TimelineHit {
         clip_id: String,
     },
     DeleteHandle {
+        clip_id: String,
+    },
+    /// Explicit move grip on a selected Video/Audio clip. Not the clip body.
+    GrabHandle {
         clip_id: String,
     },
     ClipBody {
@@ -270,6 +276,7 @@ pub fn hit_test_xy(clips: &[HitClip], x: f64, y: f64, viewport: TimelineViewport
     let mut best_gain: Option<TimelineHit> = None;
     let mut best_cut: Option<TimelineHit> = None;
     let mut best_delete: Option<TimelineHit> = None;
+    let mut best_grab: Option<TimelineHit> = None;
     let mut body: Option<(bool, TimelineHit)> = None;
     for clip in clips {
         let left = viewport.x_at_time(clip.start);
@@ -362,6 +369,21 @@ pub fn hit_test_xy(clips: &[HitClip], x: f64, y: f64, viewport: TimelineViewport
                 clip_id: clip.id.clone(),
             });
         }
+        if clip.selected
+            && drawable
+            && matches!(clip.kind, ClipKind::Video | ClipKind::Audio)
+            && y <= GRAB_HANDLE_Y
+            && x >= lo
+            && x <= hi
+        {
+            let center = f64::midpoint(lo, hi);
+            let grab = GRAB_HANDLE_PX.min(width / 3.0).max(8.0) / 2.0;
+            if (x - center).abs() <= grab {
+                best_grab = Some(TimelineHit::GrabHandle {
+                    clip_id: clip.id.clone(),
+                });
+            }
+        }
         if x >= lo && x <= hi {
             let hit = TimelineHit::ClipBody {
                 clip_id: clip.id.clone(),
@@ -391,6 +413,9 @@ pub fn hit_test_xy(clips: &[HitClip], x: f64, y: f64, viewport: TimelineViewport
     if let Some(hit) = best_gain {
         return hit;
     }
+    if let Some(hit) = best_grab {
+        return hit;
+    }
     body.map_or(TimelineHit::Rail, |(_, hit)| hit)
 }
 
@@ -414,7 +439,7 @@ pub fn cursor_for_hit(hit: &TimelineHit, dragging: bool) -> CursorKind {
             TimelineHit::Fade { .. } | TimelineHit::Gain { .. } | TimelineHit::CutLane { .. } => {
                 CursorKind::Adjust
             }
-            TimelineHit::ClipBody { .. } => CursorKind::Grabbing,
+            TimelineHit::ClipBody { .. } | TimelineHit::GrabHandle { .. } => CursorKind::Grabbing,
             TimelineHit::DeleteHandle { .. } | TimelineHit::Rail => CursorKind::Scrub,
         };
     }
@@ -424,7 +449,8 @@ pub fn cursor_for_hit(hit: &TimelineHit, dragging: bool) -> CursorKind {
             CursorKind::Adjust
         }
         TimelineHit::DeleteHandle { .. } => CursorKind::Select,
-        TimelineHit::ClipBody {
+        TimelineHit::GrabHandle { .. }
+        | TimelineHit::ClipBody {
             kind: ClipKind::Video | ClipKind::Title | ClipKind::Callout | ClipKind::Scene,
             ..
         } => CursorKind::Grab,

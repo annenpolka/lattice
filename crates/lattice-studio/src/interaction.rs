@@ -54,6 +54,7 @@ pub fn begin_xy(
         TimelineHit::Gain { clip_id } => begin_gain(session, &clip_id, y),
         TimelineHit::CutLane { clip_id } => begin_split(session, &clip_id, x)?,
         TimelineHit::DeleteHandle { clip_id } => TimelineGesture::Delete { scene_id: clip_id },
+        TimelineHit::GrabHandle { clip_id } => begin_grab_reorder(session, &clip_id, x),
         TimelineHit::ClipBody { clip_id, kind } => match kind {
             ClipKind::Video => TimelineGesture::PointSource { clip_id },
             // Unselected audio is the coordinate point (overlap). Selected
@@ -521,6 +522,93 @@ pub fn cancel(session: &mut StudioSession) -> GestureOutcome {
     GestureOutcome::Cancelled
 }
 
+/// Direction for the explicit sequence nudge affordance (not clip-body drag).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum NudgeDirection {
+    Earlier,
+    Later,
+}
+
+/// Navigate to the related Scene and commit `ReorderScene` one slot earlier/later.
+/// Video/Audio clip-body drag stays `PointSource`; this is the alternate move path.
+pub fn nudge_selected(
+    session: &mut StudioSession,
+    direction: NudgeDirection,
+) -> Result<(), EngineError> {
+    session.last_gesture_error = None;
+    session.touch_projection(Projection::Inspector);
+    let loci = session.loci()?;
+    let here = session.current_locus()?;
+    let Some(here) = here else {
+        let spoken = refuse_edit(None, &SemanticEdit::ReorderScene { before: None }, &loci);
+        session.last_spoken = Some(spoken.clone());
+        return Err(EngineError::Edit(spoken));
+    };
+    let restore = here.id.clone();
+    let scene_id = match here.kind {
+        LocusKind::Scene => here.id.as_str().to_string(),
+        LocusKind::Source => here.scene_id.clone().ok_or_else(|| {
+            EngineError::Edit(refuse_edit(
+                Some(&here),
+                &SemanticEdit::ReorderScene { before: None },
+                &loci,
+            ))
+        })?,
+        _ => {
+            let spoken = refuse_edit(
+                Some(&here),
+                &SemanticEdit::ReorderScene { before: None },
+                &loci,
+            );
+            session.last_spoken = Some(spoken.clone());
+            return Err(EngineError::Edit(spoken));
+        }
+    };
+    let names = scene_names(session);
+    if names.len() < 2 {
+        let spoken = "reorder-scene needs a neighbor in the sequence.".to_string();
+        session.last_spoken = Some(spoken.clone());
+        session.last_gesture_error = Some(spoken.clone());
+        return Err(EngineError::Edit(spoken));
+    }
+    let scene_name = scene_id.strip_prefix("scene:").unwrap_or(scene_id.as_str());
+    let Some(index) = names.iter().position(|name| name == scene_name) else {
+        let spoken = format!("reorder-scene cannot find `{scene_name}` in the sequence.");
+        session.last_spoken = Some(spoken.clone());
+        return Err(EngineError::Edit(spoken));
+    };
+    let at_start = index == 0;
+    let at_end = index + 1 >= names.len();
+    match direction {
+        NudgeDirection::Earlier if at_start => {
+            let spoken = "already first in the sequence".to_string();
+            session.last_spoken = Some(spoken.clone());
+            session.last_gesture_error = Some(spoken.clone());
+            return Err(EngineError::Edit(spoken));
+        }
+        NudgeDirection::Later if at_end => {
+            let spoken = "already last in the sequence".to_string();
+            session.last_spoken = Some(spoken.clone());
+            session.last_gesture_error = Some(spoken.clone());
+            return Err(EngineError::Edit(spoken));
+        }
+        _ => {}
+    }
+    let mut order = names;
+    let moved_name = order.remove(index);
+    let proposed = match direction {
+        NudgeDirection::Later => index + 1,
+        NudgeDirection::Earlier => index.saturating_sub(1),
+    };
+    let insert_at = proposed.min(order.len());
+    order.insert(insert_at, moved_name);
+    let before = order.get(insert_at + 1).cloned();
+    point_scene(session, &scene_id);
+    apply_committed(session, SemanticEdit::ReorderScene { before })?;
+    session.point_at(restore);
+    Ok(())
+}
+
 pub fn apply_committed(session: &mut StudioSession, edit: SemanticEdit) -> Result<(), EngineError> {
     session.gesture = TimelineGesture::None;
     session.snap_time = None;
@@ -699,31 +787,20 @@ fn point_scene(session: &mut StudioSession, scene_id: &str) {
     session.current = Some(LocusId::new(scene_id));
 }
 
-#[allow(dead_code)]
-fn begin_reorder(
-    session: &StudioSession,
-    clips: &[HitClip],
-    clip_id: &str,
-    x: f64,
-) -> Result<TimelineGesture, EngineError> {
-    let video: Vec<_> = clips
-        .iter()
-        .filter(|clip| clip.kind == ClipKind::Video)
-        .collect();
-    let original_index = video
-        .iter()
-        .position(|clip| clip.id == clip_id)
-        .ok_or_else(|| EngineError::Edit("reorder clip missing".into()))?;
-    let scene_id = video[original_index].scene_id.clone();
-    let _ = session;
-    Ok(TimelineGesture::Reorder {
-        clip_id: clip_id.to_string(),
-        scene_id,
-        original_index,
-        proposed_index: original_index,
-        start_x: x,
-        moved: false,
-    })
+fn begin_grab_reorder(session: &mut StudioSession, clip_id: &str, x: f64) -> TimelineGesture {
+    let scene_id = scene_id_for_clip(session, clip_id).unwrap_or_default();
+    if scene_id.is_empty() {
+        return TimelineGesture::PointSource {
+            clip_id: clip_id.to_string(),
+        };
+    }
+    point_scene(session, &scene_id);
+    let Ok(scenes) = scene_order_clips(session) else {
+        return TimelineGesture::PointScene {
+            scene_id: scene_id.clone(),
+        };
+    };
+    begin_scene_band(session, &scenes, &scene_id, x)
 }
 
 fn begin_move_overlay(

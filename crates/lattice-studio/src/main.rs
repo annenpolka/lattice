@@ -35,8 +35,9 @@ use lattice_studio::audio::{
     AudioReposition, AudioSyncReport, AudioTransportChange,
 };
 use lattice_studio::{
-    CanvasPoint, CanvasRect, CanvasSize, CursorKind, PLAYBACK_TICK, PreviewInbox, ResizeCorner,
-    StudioSession, UiFixture, playback_target, trace, write_geom_file, write_state_file,
+    CanvasPoint, CanvasRect, CanvasSize, CursorKind, NudgeDirection, PLAYBACK_TICK, PreviewInbox,
+    ResizeCorner, StudioSession, UiFixture, playback_target, trace, write_geom_file,
+    write_state_file,
 };
 
 #[cfg(test)]
@@ -466,6 +467,8 @@ struct StudioView {
     ruler_geom: Arc<Mutex<Option<(f32, f32, f32, f32)>>>,
     canvas_geom: Arc<Mutex<Option<(f32, f32, f32, f32)>>>,
     tree_geoms: Arc<Mutex<Vec<(String, String, String, f32, f32, f32, f32)>>>,
+    nudge_earlier_geom: Arc<Mutex<Option<(f32, f32, f32, f32)>>>,
+    nudge_later_geom: Arc<Mutex<Option<(f32, f32, f32, f32)>>>,
     last_focused: Option<String>,
     last_inflight_key: Option<String>,
     last_geom_key: Option<String>,
@@ -994,6 +997,8 @@ impl StudioView {
             ruler_geom: Arc::new(Mutex::new(None)),
             canvas_geom: Arc::new(Mutex::new(None)),
             tree_geoms: Arc::new(Mutex::new(Vec::new())),
+            nudge_earlier_geom: Arc::new(Mutex::new(None)),
+            nudge_later_geom: Arc::new(Mutex::new(None)),
             last_focused: None,
             last_inflight_key: None,
             last_geom_key: None,
@@ -1144,8 +1149,20 @@ impl StudioView {
             .map(|(id, _, _, x, y, _, _)| format!("{id}:{x:.0}:{y:.0}"))
             .collect::<Vec<_>>()
             .join(",");
-        let key =
-            format!("{play_x:.0}:{play_y:.0}:{ruler_y:.0}:{rail_w:.0}:{canvas_key}:{tree_key}");
+        let earlier = self.nudge_earlier_geom.lock().ok().and_then(|slot| *slot);
+        let later = self.nudge_later_geom.lock().ok().and_then(|slot| *slot);
+        let nudge_key = format!(
+            "{}:{}",
+            earlier
+                .map(|(x, y, _, _)| format!("{x:.0}:{y:.0}"))
+                .unwrap_or_else(|| "-".into()),
+            later
+                .map(|(x, y, _, _)| format!("{x:.0}:{y:.0}"))
+                .unwrap_or_else(|| "-".into())
+        );
+        let key = format!(
+            "{play_x:.0}:{play_y:.0}:{ruler_y:.0}:{rail_w:.0}:{canvas_key}:{tree_key}:{nudge_key}"
+        );
         if self.last_geom_key.as_deref() == Some(key.as_str()) {
             return;
         }
@@ -1164,6 +1181,12 @@ impl StudioView {
                 "w": canvas_w,
                 "h": canvas_h,
             });
+        }
+        if let Some((x, y, w, h)) = earlier {
+            geom["nudge_earlier"] = serde_json::json!({ "x": x, "y": y, "w": w, "h": h });
+        }
+        if let Some((x, y, w, h)) = later {
+            geom["nudge_later"] = serde_json::json!({ "x": x, "y": y, "w": w, "h": h });
         }
         trace::log(format!("smoke_geom {geom}"));
         if let Err(err) = write_geom_file(&geom) {
@@ -2963,6 +2986,30 @@ impl StudioView {
         }
     }
 
+    fn nudge_selected_clip(&mut self, later: bool) {
+        let direction = if later {
+            NudgeDirection::Later
+        } else {
+            NudgeDirection::Earlier
+        };
+        match self.session.nudge_selected(direction) {
+            Ok(()) => {
+                self.last_render = Some(if later {
+                    "nudge later".into()
+                } else {
+                    "nudge earlier".into()
+                });
+                self.after_edit();
+                self.log_semantic_state("nudge-sequence", None);
+            }
+            Err(_) => {
+                if let Some(spoken) = self.session.last_spoken() {
+                    self.last_render = Some(spoken.to_string());
+                }
+            }
+        }
+    }
+
     fn property_field(
         &self,
         selector: &'static str,
@@ -3767,6 +3814,16 @@ impl StudioView {
                     cx.notify();
                 }));
         }
+        if inspector.nudge_sequence {
+            body = body
+                .child(
+                    div()
+                        .mt_2()
+                        .text_color(rgb(MUTED))
+                        .child("Move in sequence"),
+                )
+                .child(self.sequence_nudge_cluster(true, "inspector", cx));
+        }
         if !inspector.invoked.is_empty() {
             let mut invoked = div()
                 .id("inspector-invoked")
@@ -3923,63 +3980,115 @@ impl StudioView {
             .border_color(rgb(LINE))
             .bg(rgb(PANEL))
             .child(
-                div().px_2().py_1().child(
-                    div()
-                        .id("timeline-ruler")
-                        .debug_selector(|| "timeline.ruler".into())
-                        // Match the ruler's test/interaction bounds to the track rail:
-                        // the track row reserves 56 px for its label plus an 8 px gap.
-                        .relative()
-                        .ml(px(64.0))
-                        .w(px(TIMELINE_WIDTH))
-                        .text_color(rgb(MUTED))
-                        .cursor(CursorStyle::IBeam)
-                        .child({
-                            let geom = Arc::clone(&self.ruler_geom);
-                            canvas(
-                                move |bounds, _, _| {
-                                    if let Ok(mut slot) = geom.lock() {
-                                        *slot = Some((
-                                            f32::from(bounds.origin.x),
-                                            f32::from(bounds.origin.y),
-                                            f32::from(bounds.size.width),
-                                            f32::from(bounds.size.height),
-                                        ));
+                div()
+                    .flex()
+                    .flex_row()
+                    .items_center()
+                    .px_2()
+                    .py_1()
+                    .gap_2()
+                    .child(
+                        div()
+                            .id("timeline-ruler")
+                            .debug_selector(|| "timeline.ruler".into())
+                            // Match the ruler's test/interaction bounds to the track rail:
+                            // the track row reserves 56 px for its label plus an 8 px gap.
+                            .relative()
+                            .ml(px(64.0))
+                            .w(px(TIMELINE_WIDTH))
+                            .text_color(rgb(MUTED))
+                            .cursor(CursorStyle::IBeam)
+                            .child({
+                                let geom = Arc::clone(&self.ruler_geom);
+                                canvas(
+                                    move |bounds, _, _| {
+                                        if let Ok(mut slot) = geom.lock() {
+                                            *slot = Some((
+                                                f32::from(bounds.origin.x),
+                                                f32::from(bounds.origin.y),
+                                                f32::from(bounds.size.width),
+                                                f32::from(bounds.size.height),
+                                            ));
+                                        }
+                                    },
+                                    |_, _, _, _| {},
+                                )
+                                .absolute()
+                                .size_full()
+                            })
+                            .capture_any_mouse_down(cx.listener(
+                                |this, event: &MouseDownEvent, _, cx| {
+                                    if event.button != MouseButton::Left {
+                                        return;
                                     }
+                                    let x = this.pointer_x(event.position.x);
+                                    this.apply_rail_width();
+                                    this.session.begin_timeline_scrub(x, event.modifiers.alt);
+                                    this.play_origin = None;
+                                    this.audio_play_pending = false;
+                                    this.sync_audio_monitor("timeline-scrub");
+                                    this.preview_inbox.clear_pending();
+                                    trace::log(format!(
+                                        "gesture begin-scrub x={x:.1} playhead={}",
+                                        format_time(this.session.playhead())
+                                    ));
+                                    this.last_inflight_key = None;
+                                    this.log_semantic_state("timeline-pointer-begin", None);
+                                    this.refresh_preview("timeline-clip");
+                                    this.queue_preview();
+                                    cx.notify();
                                 },
-                                |_, _, _, _| {},
-                            )
-                            .absolute()
-                            .size_full()
-                        })
-                        .capture_any_mouse_down(cx.listener(
-                            |this, event: &MouseDownEvent, _, cx| {
-                                if event.button != MouseButton::Left {
-                                    return;
-                                }
-                                let x = this.pointer_x(event.position.x);
-                                this.apply_rail_width();
-                                this.session.begin_timeline_scrub(x, event.modifiers.alt);
-                                this.play_origin = None;
-                                this.audio_play_pending = false;
-                                this.sync_audio_monitor("timeline-scrub");
-                                this.preview_inbox.clear_pending();
-                                trace::log(format!(
-                                    "gesture begin-scrub x={x:.1} playhead={}",
-                                    format_time(this.session.playhead())
-                                ));
-                                this.last_inflight_key = None;
-                                this.log_semantic_state("timeline-pointer-begin", None);
-                                this.refresh_preview("timeline-clip");
-                                this.queue_preview();
-                                cx.notify();
-                            },
-                        ))
-                        .child(format!("Timeline · {}", format_time(layout.playhead))),
-                ),
+                            ))
+                            .child(format!("Timeline · {}", format_time(layout.playhead))),
+                    )
+                    .child(self.sequence_nudge_cluster(
+                        layout.inspector.nudge_sequence,
+                        "timeline",
+                        cx,
+                    )),
             )
             .child(self.timeline_candidates(layout, cx))
             .child(tracks)
+    }
+
+    fn sequence_nudge_cluster(
+        &self,
+        show: bool,
+        surface: &'static str,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement {
+        if !show {
+            if let Ok(mut slot) = self.nudge_earlier_geom.lock() {
+                *slot = None;
+            }
+            if let Ok(mut slot) = self.nudge_later_geom.lock() {
+                *slot = None;
+            }
+            return div();
+        }
+        let record_geom = surface == "timeline";
+        let earlier_geom = Arc::clone(&self.nudge_earlier_geom);
+        let later_geom = Arc::clone(&self.nudge_later_geom);
+        div()
+            .flex()
+            .flex_row()
+            .items_center()
+            .gap_1()
+            .child(div().text_color(rgb(MUTED)).child("Move"))
+            .child(nudge_button(
+                "←",
+                format!("{surface}.nudge.earlier"),
+                record_geom.then_some(earlier_geom),
+                false,
+                cx,
+            ))
+            .child(nudge_button(
+                "→",
+                format!("{surface}.nudge.later"),
+                record_geom.then_some(later_geom),
+                true,
+                cx,
+            ))
     }
 
     fn track_row(
@@ -4066,6 +4175,7 @@ impl StudioView {
             let gain_handle = clip.gain_handle;
             let cut_lane = clip.cut_lane;
             let delete_handle = clip.delete_handle;
+            let grab_handle = clip.grab_handle;
             let fade_in = clip.fade_in;
             let gain_db = clip.gain_db;
             let color = match clip.track.as_str() {
@@ -4217,6 +4327,28 @@ impl StudioView {
                         .bg(rgb(0x0d1b1a))
                         .cursor_pointer()
                         .child(div().text_color(rgb(TEAL)).child("×")),
+                );
+            }
+            if grab_handle {
+                let grip_w = 16.0_f32.min(width * 0.33).max(10.0);
+                let grip_left = (width - grip_w) / 2.0;
+                block = block.child(
+                    div()
+                        .id(SharedString::from(format!("tl-{id}-grab")))
+                        .debug_selector({
+                            let id = id.clone();
+                            move || format!("timeline.grab.{id}")
+                        })
+                        .absolute()
+                        .left(px(grip_left))
+                        .top(px(0.0))
+                        .w(px(grip_w))
+                        .h(px(8.0))
+                        .bg(rgb(TEAL))
+                        .border_1()
+                        .border_color(rgb(0xffffff))
+                        .cursor(CursorStyle::OpenHand)
+                        .child(div().text_color(rgb(BG)).child("↔")),
                 );
             }
             rail = rail.child(block);
@@ -4499,6 +4631,54 @@ fn action_button(
         .cursor_pointer()
         .on_click(cx.listener(move |this, _, _, cx| on_click(this, cx)))
         .child(label)
+}
+
+fn nudge_button(
+    label: &'static str,
+    selector: String,
+    geom: Option<Arc<Mutex<Option<(f32, f32, f32, f32)>>>>,
+    later: bool,
+    cx: &mut Context<StudioView>,
+) -> impl IntoElement {
+    let selector_for_debug = selector.clone();
+    let mut button = div()
+        .id(SharedString::from(selector.clone()))
+        .debug_selector(move || selector_for_debug.clone())
+        .relative()
+        .px_3()
+        .py_1()
+        .bg(rgb(TEAL))
+        .text_color(rgb(BG))
+        .cursor_pointer()
+        .capture_any_mouse_down(cx.listener(move |this, event: &MouseDownEvent, _, cx| {
+            if event.button != MouseButton::Left {
+                return;
+            }
+            this.nudge_selected_clip(later);
+            cx.stop_propagation();
+            cx.notify();
+        }))
+        .child(label);
+    if let Some(geom) = geom {
+        button = button.child(
+            canvas(
+                move |bounds, _, _| {
+                    if let Ok(mut slot) = geom.lock() {
+                        *slot = Some((
+                            f32::from(bounds.origin.x),
+                            f32::from(bounds.origin.y),
+                            f32::from(bounds.size.width),
+                            f32::from(bounds.size.height),
+                        ));
+                    }
+                },
+                |_, _, _, _| {},
+            )
+            .absolute()
+            .size_full(),
+        );
+    }
+    button
 }
 
 fn action_selector(label: &str) -> &'static str {

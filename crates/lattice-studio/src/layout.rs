@@ -61,6 +61,8 @@ pub struct InspectorView {
     /// Property fields bound to this exact source `LocusId`, not `LocusKind`.
     pub gain_db: Option<i32>,
     pub fade_in: Option<Time>,
+    /// Sequence nudge ← → when here is Source/Scene and the sequence has a neighbor.
+    pub nudge_sequence: bool,
     pub invoked: Vec<InvokedRecord>,
     pub utterance: UtteranceView,
 }
@@ -81,6 +83,8 @@ pub struct TimelineClipView {
     pub gain_handle: bool,
     pub cut_lane: bool,
     pub delete_handle: bool,
+    /// Explicit grab grip on selected Video/Audio. Not implied by clip-body drag.
+    pub grab_handle: bool,
     pub fade_in: Option<Time>,
     pub gain_db: Option<i32>,
 }
@@ -349,6 +353,7 @@ fn inspector_from_session(
             callout_fields: false,
             gain_db: None,
             fade_in: None,
+            nudge_sequence: false,
             invoked,
             utterance,
         };
@@ -375,8 +380,29 @@ fn inspector_from_session(
         callout_fields: locus.kind == LocusKind::Callout,
         gain_db,
         fade_in,
+        nudge_sequence: sequence_nudge_available(session, locus),
         invoked,
         utterance,
+    }
+}
+
+fn sequence_scene_count(session: &StudioSession) -> usize {
+    session
+        .compilation()
+        .project
+        .sequences
+        .first()
+        .map_or(0, |sequence| sequence.scene_ids.len())
+}
+
+fn sequence_nudge_available(session: &StudioSession, locus: &Locus) -> bool {
+    if sequence_scene_count(session) < 2 {
+        return false;
+    }
+    match locus.kind {
+        LocusKind::Scene => true,
+        LocusKind::Source => locus.scene_id.is_some(),
+        _ => false,
     }
 }
 
@@ -468,6 +494,7 @@ fn timeline_view(
     current: Option<&Locus>,
 ) -> TimelineView {
     let current_id = current.map(|locus| locus.id.clone());
+    let can_reorder = sequence_scene_count(session) >= 2;
     let clips: Vec<TimelineClipView> = timeline
         .clips
         .iter()
@@ -517,6 +544,11 @@ fn timeline_view(
                 selected && wide_enough && matches!(kind.as_str(), "video" | "title" | "callout");
             let fade_handle = selected && source_here && wide_enough && kind == "video";
             let gain_handle = selected && source_here && wide_enough && kind == "audio";
+            let grab_handle = selected
+                && source_here
+                && wide_enough
+                && can_reorder
+                && matches!(kind.as_str(), "video" | "audio");
             TimelineClipView {
                 selected,
                 id: clip.id.clone(),
@@ -531,6 +563,7 @@ fn timeline_view(
                 gain_handle,
                 cut_lane: false,
                 delete_handle: false,
+                grab_handle,
                 fade_in: clip.fade_in,
                 gain_db: clip.gain_db,
             }
@@ -563,6 +596,7 @@ fn timeline_view(
             gain_handle: false,
             cut_lane: selected && scene_here && wide_enough,
             delete_handle: selected && scene_here && wide_enough,
+            grab_handle: false,
             fade_in: None,
             gain_db: None,
         });
