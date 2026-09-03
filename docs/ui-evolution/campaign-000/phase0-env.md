@@ -1,15 +1,17 @@
 # UI Evolution Campaign 000 — Phase 0 Environment Proof
 
-**Recorded:** 2026-09-03T06:23Z (UTC)  
+**Linear:** CHI-95  
+**Recorded:** 2026-09-03T06:25Z (UTC)  
 **Agent run:** `bc-a61b1663-0168-46e5-b097-c7268bc02129`  
-**Outcome:** **SUCCESS (A)** — Studio GUI visible, screenshot captured, build OK.
+**Outcome:** **SUCCESS (A)** — Studio GUI visible, screenshots + semantic_state via CCA Linux smoke.
 
 ## Starting ref
 
 | Field | Value |
 |---|---|
 | Branch | `main` |
-| Full SHA | `de789601c458537263caf9802cc6e421156f92fb` |
+| Expected SHA | `de789601c458537263caf9802cc6e421156f92fb` |
+| Verified `origin/main` | `de789601c458537263caf9802cc6e421156f92fb` (match) |
 
 ## Cursor Cloud environment
 
@@ -39,53 +41,73 @@ DISPLAY=:1 \
   /workspace/target/debug/lattice-studio --ui-fixture timeline-basic
 ```
 
-**Smoke harness (used for this proof):**
+**Primary smoke harness (CHI-95 critical path):**
 
 ```bash
-DISPLAY=:1 ./scripts/studio-linux-smoke.sh --fixture timeline-basic --no-interact
+DISPLAY=:1 ./scripts/studio-linux-smoke.sh --fixture timeline-basic
+DISPLAY=:1 ./scripts/studio-linux-smoke.sh --fixture drag-valid
 ```
 
-References: `docs/studio-linux-smoke.md`, `scripts/studio-linux-smoke.sh`, `crates/lattice-studio/src/main.rs` (window bounds `1400×840`).
+References: `docs/studio-linux-smoke.md`, `fixtures/studio-ui/`, `scripts/studio-linux-smoke.sh`, `crates/lattice-studio/src/main.rs` (window bounds `1400×840`).
 
 ## Fixture / project to reach usable timeline
 
 | Item | Value |
 |---|---|
-| Fixture | `--ui-fixture timeline-basic` |
-| Materialized VEL | `/tmp/lattice-studio-ui-fixtures/timeline-basic/main.vel` |
-| Intent | One scene, title + callout, idle playhead at `0s`, duration `4s` |
+| Fixture source | `fixtures/studio-ui/` (deterministic, no generated media) |
+| timeline-basic | One scene, title + callout, idle playhead at `0s`, duration `4s` |
+| drag-valid | Two title scenes; canvas/timeline move has a legal target |
+| Materialized VEL | `/tmp/lattice-studio-ui-fixtures/<fixture>/main.vel` |
 | Media resolve | Not required for UI-only smoke (`LATTICE_STUDIO_PREVIEW=0`) |
 
-Windows dogfood path (unchanged): `lattice-studio path\to\main.vel` with resolved gameplay-commentary fixture.
+Windows/macOS dogfood is **not** the Phase 0 path.
 
 ## Phase 0 run results
 
-| Gate | Result | Notes |
+| Gate | timeline-basic | drag-valid |
 |---|---|---|
-| Build | **PASS** | `cargo build -p lattice-studio --features window` — 1.58s (prebuilt workspace) |
-| Launch | **PASS** | `open_window ok`, `first paint`, `LINUX SMOKE OK` |
-| GUI visible | **PASS** | Window XID `27262977`, client `1400×840+1+57`, title area shows `Lattice main.vel · Scene demo` |
-| Screenshot | **PASS** | Nonblank PNG: 249 unique colors, 77959 bytes |
-| Input (optional) | skipped | `--no-interact` for Phase 0; full interact path available in smoke script |
+| Build | **PASS** (0.30s) | **PASS** (0.26s) |
+| Launch | **PASS** (`open_window ok`, `first paint`) | **PASS** |
+| GUI visible | **PASS** (1400×840 client) | **PASS** |
+| Screenshot | **PASS** (77959 B, 249 unique colors) | **PASS** (83858 B, 237 unique colors) |
+| semantic_state | **PASS** (`reason=first-paint`) | **PASS** (`reason=first-paint`) |
+| Interact | **PASS** (Play / scrub / clip / tree) | **PASS** |
+| Exit | `LINUX SMOKE OK` | `LINUX SMOKE OK` |
 
-## Log / artifact paths (this run)
+## Log / artifact paths (CHI-95 run)
+
+**timeline-basic** (`run.vw3j13`)
 
 | Artifact | Path |
 |---|---|
-| Screenshot (uploaded) | `/opt/cursor/artifacts/phase0_studio_timeline_basic.png` |
-| Screenshot (run dir) | `/workspace/target/studio-linux-smoke/run.8BvSN1/studio.png` |
-| Studio log | `/workspace/target/studio-linux-smoke/run.8BvSN1/studio.log` |
-| stdout | `/workspace/target/studio-linux-smoke/run.8BvSN1/studio.stdout.log` (empty) |
-| stderr / trace | `/workspace/target/studio-linux-smoke/run.8BvSN1/studio.stderr.log` |
-| semantic_state | `/workspace/target/studio-linux-smoke/run.8BvSN1/studio.state.json` |
-| smoke_geom | `/workspace/target/studio-linux-smoke/run.8BvSN1/studio.geom.json` |
-| window identity | `/workspace/target/studio-linux-smoke/run.8BvSN1/studio.window.json` |
-| Smoke transcript | `/tmp/phase0-smoke-run.log` |
+| Screenshot (uploaded) | `/opt/cursor/artifacts/chi95_phase0_timeline_basic.png` |
+| Screenshot (run dir) | `/workspace/target/studio-linux-smoke/run.vw3j13/studio.png` |
+| After-interact | `/workspace/target/studio-linux-smoke/run.vw3j13/studio-after.png` |
+| Studio log | `/workspace/target/studio-linux-smoke/run.vw3j13/studio.log` |
+| semantic_state | `/workspace/target/studio-linux-smoke/run.vw3j13/studio.state.json` |
+| Transcript | `/tmp/phase0-chi95-timeline-basic.log` |
 
-## Initial semantic state (timeline-basic)
+**drag-valid** (`run.6troZ6`)
 
+| Artifact | Path |
+|---|---|
+| Screenshot (uploaded) | `/opt/cursor/artifacts/chi95_phase0_drag_valid.png` |
+| Screenshot (run dir) | `/workspace/target/studio-linux-smoke/run.6troZ6/studio.png` |
+| After-interact | `/workspace/target/studio-linux-smoke/run.6troZ6/studio-after.png` |
+| Studio log | `/workspace/target/studio-linux-smoke/run.6troZ6/studio.log` |
+| semantic_state | `/workspace/target/studio-linux-smoke/run.6troZ6/studio.state.json` |
+| Transcript | `/tmp/phase0-chi95-drag-valid.log` |
+
+## semantic_state snapshots (first-paint)
+
+**timeline-basic:**
 ```json
-{"locus":{"id":"demo:title:1","kind":"title","label":"Hello"},"playhead":"0s","duration":"4s","playing":false,"interaction":"idle","gesture":{"kind":"none"},"drag":null,"fixture":"timeline-basic","reason":"first-paint"}
+{"locus":{"id":"demo:title:1","kind":"title","label":"Hello"},"playhead":"0s","duration":"4s","playing":false,"interaction":"idle","fixture":"timeline-basic","reason":"first-paint"}
+```
+
+**drag-valid:**
+```json
+{"locus":{"id":"left:title:1","kind":"title","label":"Alpha"},"playhead":"0s","duration":"4s","playing":false,"interaction":"idle","fixture":"drag-valid","reason":"first-paint"}
 ```
 
 ## STOP conditions (not triggered)
