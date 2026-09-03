@@ -751,6 +751,21 @@ scene demo {
         lattice_studio::StudioSession::open(vel).expect("open")
     }
 
+    fn timeline_basic_session() -> lattice_studio::StudioSession {
+        let nonce = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("clock")
+            .as_nanos();
+        let root = std::env::temp_dir().join(format!("lattice-ui-timeline-basic-{nonce}"));
+        let dir = root.join("timeline-basic");
+        std::fs::create_dir_all(&dir).expect("fixture dir");
+        lattice_media::generate_av_fixture(dir.join("capture.mp4"), 6).expect("A/V fixture");
+        let vel = lattice_studio::UiFixture::TimelineBasic
+            .materialize_in(&root)
+            .expect("materialize");
+        lattice_studio::StudioSession::open(vel).expect("open fixture")
+    }
+
     #[gpui::test]
     fn video_clip_click_keeps_source_and_hides_title_fields(cx: &mut TestAppContext) {
         let session = overlap_session();
@@ -932,7 +947,7 @@ scene demo {
         ] {
             assert!(
                 ui.context().debug_bounds(gone).is_none(),
-                "{gone} must not be drawn"
+                "{gone} must not be drawn at idle (Split is playhead-conditioned)"
             );
         }
         let _ = ui.bounds("toolbar.cluster.file");
@@ -1155,5 +1170,73 @@ scene demo {
         assert_ne!(after_split, after_fade, "cut lane must commit split");
         let spoken = ui.read(&view, |view, _| view.session.utterance().spoken_text());
         assert!(!spoken.is_empty());
+    }
+
+    #[gpui::test]
+    fn toolbar_split_visible_when_playhead_intersects_selected_clip(cx: &mut TestAppContext) {
+        let session = timeline_basic_session();
+        let (view, cx) = add_studio(cx, session);
+        let mut ui = UiDriver::new(cx);
+
+        assert!(
+            ui.context().debug_bounds("toolbar.split").is_none(),
+            "timeline-basic idle: title Hello at 1s, playhead 0s — Split hidden"
+        );
+
+        view.update(ui.context(), |view, cx| {
+            view.session.seek(Time::seconds(2));
+            cx.notify();
+        });
+        ui.context().run_until_parked();
+
+        let _ = ui.bounds("toolbar.split");
+        let _ = ui.bounds("toolbar.cluster.edit");
+        let original = ui.read(&view, |view, _| view.session.source().to_string());
+        ui.click("toolbar.split");
+        let after = ui.read(&view, |view, _| view.session.source().to_string());
+        assert_ne!(
+            after, original,
+            "toolbar Split click must commit Engine Split"
+        );
+        assert!(
+            after.contains("demo_2") || after.contains("[2s.."),
+            "split rewrite: {after}"
+        );
+    }
+
+    #[gpui::test]
+    fn toolbar_split_from_selected_video_clip(cx: &mut TestAppContext) {
+        let session = timeline_basic_session();
+        let video_id = session
+            .layout()
+            .unwrap()
+            .timeline
+            .tracks
+            .iter()
+            .find(|track| track.name == "Video")
+            .unwrap()
+            .clips[0]
+            .id
+            .clone();
+        let (view, cx) = add_studio(cx, session);
+        let mut ui = UiDriver::new(cx);
+        ui.click(format!("timeline.clip.{video_id}"));
+        view.update(ui.context(), |view, cx| {
+            view.session.seek(Time::seconds(2));
+            cx.notify();
+        });
+        ui.context().run_until_parked();
+        let _ = ui.bounds("toolbar.split");
+        let original = ui.read(&view, |view, _| view.session.source().to_string());
+        ui.click("toolbar.split");
+        let after = ui.read(&view, |view, _| view.session.source().to_string());
+        assert_ne!(
+            after, original,
+            "Split on a selected video clip must commit Engine Split"
+        );
+        assert!(
+            after.contains("demo_2") || after.contains("[2s.."),
+            "split rewrite: {after}"
+        );
     }
 }

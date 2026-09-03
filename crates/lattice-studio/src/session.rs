@@ -652,8 +652,16 @@ impl StudioSession {
                 return Err(err);
             }
         };
-        let invoked = InvokedRecord::from_edit(&edit, &locus);
-        let proposal = self.engine.propose(&self.compilation, &locus, edit)?;
+        self.apply_edit_for_locus(&locus, edit)
+    }
+
+    fn apply_edit_for_locus(
+        &mut self,
+        locus: &Locus,
+        edit: SemanticEdit,
+    ) -> Result<(), EngineError> {
+        let invoked = InvokedRecord::from_edit(&edit, locus);
+        let proposal = self.engine.propose(&self.compilation, locus, edit)?;
         self.last_spoken = None;
         if proposal.new_source == self.compilation.source {
             return Ok(());
@@ -687,6 +695,69 @@ impl StudioSession {
         self.touched_projection = Projection::Toolbar;
         let at = self.playhead_source_time()?;
         self.apply_edit(SemanticEdit::Split { at })
+    }
+
+    /// Toolbar Split is drawn only when a selected clip strictly contains the playhead.
+    ///
+    /// Engine `split_at` requires an exclusive interior `(start, end)`, so a playhead
+    /// parked on a clip edge does not reveal the control.
+    #[must_use]
+    pub fn toolbar_split_available(&self) -> bool {
+        self.selected_clip_for_toolbar_split().is_some()
+    }
+
+    fn selected_clip_for_toolbar_split(&self) -> Option<layout::TimelineClipView> {
+        let playhead = self.playhead;
+        let layout = self.layout().ok()?;
+        layout
+            .timeline
+            .tracks
+            .iter()
+            .flat_map(|track| track.clips.iter())
+            .find(|clip| {
+                if !clip.selected {
+                    return false;
+                }
+                let Ok(end) = clip.start.checked_add(clip.duration) else {
+                    return false;
+                };
+                playhead > clip.start && playhead < end
+            })
+            .cloned()
+    }
+
+    /// Commit Engine `SemanticEdit::Split` at the playhead from the toolbar control.
+    ///
+    /// Same semantic as [`Self::split_at_playhead`] when here is a Scene. When here is
+    /// a clip that belongs to a scene, the edit targets that related scene — Engine
+    /// Split is scene-scoped — without changing here first.
+    pub fn commit_toolbar_split(&mut self) -> Result<(), EngineError> {
+        self.touched_projection = Projection::Toolbar;
+        if self.selected_clip_for_toolbar_split().is_none() {
+            let err = EngineError::Edit(
+                "Split needs a selected clip that the playhead intersects.".into(),
+            );
+            self.last_spoken = Some(err.to_string());
+            return Err(err);
+        }
+        let at = self.playhead_source_time()?;
+        let edit = SemanticEdit::Split { at };
+        let loci = self.loci().unwrap_or_default();
+        let Some(here) = self.current_locus()? else {
+            let err = EngineError::Edit(refuse_edit(None, &edit, &loci));
+            self.last_spoken = Some(err.to_string());
+            return Err(err);
+        };
+        let target = if here.kind == LocusKind::Scene {
+            &here
+        } else if let Some(scene) = verb::related_scene(&here, &loci) {
+            scene
+        } else {
+            let err = EngineError::Edit(refuse_edit(Some(&here), &edit, &loci));
+            self.last_spoken = Some(err.to_string());
+            return Err(err);
+        };
+        self.apply_edit_for_locus(target, edit)
     }
 
     pub fn delete_selected_clip(&mut self) -> Result<(), EngineError> {

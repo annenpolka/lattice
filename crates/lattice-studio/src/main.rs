@@ -463,6 +463,7 @@ struct StudioView {
     rail_geom: Arc<Mutex<(f32, f32)>>,
     track_geoms: Arc<Mutex<Vec<(String, f32, f32, f32, f32)>>>,
     play_geom: Arc<Mutex<Option<(f32, f32, f32, f32)>>>,
+    split_geom: Arc<Mutex<Option<(f32, f32, f32, f32)>>>,
     ruler_geom: Arc<Mutex<Option<(f32, f32, f32, f32)>>>,
     canvas_geom: Arc<Mutex<Option<(f32, f32, f32, f32)>>>,
     tree_geoms: Arc<Mutex<Vec<(String, String, String, f32, f32, f32, f32)>>>,
@@ -991,6 +992,7 @@ impl StudioView {
             rail_geom: Arc::new(Mutex::new((0.0_f32, TIMELINE_WIDTH))),
             track_geoms: Arc::new(Mutex::new(Vec::new())),
             play_geom: Arc::new(Mutex::new(None)),
+            split_geom: Arc::new(Mutex::new(None)),
             ruler_geom: Arc::new(Mutex::new(None)),
             canvas_geom: Arc::new(Mutex::new(None)),
             tree_geoms: Arc::new(Mutex::new(Vec::new())),
@@ -1083,6 +1085,7 @@ impl StudioView {
 
     fn maybe_log_smoke_geom(&mut self) {
         let play = self.play_geom.lock().ok().and_then(|slot| *slot);
+        let split = self.split_geom.lock().ok().and_then(|slot| *slot);
         let ruler = self.ruler_geom.lock().ok().and_then(|slot| *slot);
         let tracks = match self.track_geoms.lock() {
             Ok(slots) => slots.clone(),
@@ -1144,8 +1147,13 @@ impl StudioView {
             .map(|(id, _, _, x, y, _, _)| format!("{id}:{x:.0}:{y:.0}"))
             .collect::<Vec<_>>()
             .join(",");
-        let key =
-            format!("{play_x:.0}:{play_y:.0}:{ruler_y:.0}:{rail_w:.0}:{canvas_key}:{tree_key}");
+        let split_key = match split {
+            Some((x, y, w, h)) => format!("{x:.0}:{y:.0}:{w:.0}:{h:.0}"),
+            None => "-".into(),
+        };
+        let key = format!(
+            "{play_x:.0}:{play_y:.0}:{ruler_y:.0}:{rail_w:.0}:{canvas_key}:{tree_key}:{split_key}"
+        );
         if self.last_geom_key.as_deref() == Some(key.as_str()) {
             return;
         }
@@ -1157,6 +1165,14 @@ impl StudioView {
             "tracks": tracks_json,
             "tree": tree_json,
         });
+        if let Some((split_x, split_y, split_w, split_h)) = split {
+            geom["split"] = serde_json::json!({
+                "x": split_x,
+                "y": split_y,
+                "w": split_w,
+                "h": split_h,
+            });
+        }
         if let Some((canvas_x, canvas_y, canvas_w, canvas_h)) = canvas {
             geom["canvas"] = serde_json::json!({
                 "x": canvas_x,
@@ -2638,7 +2654,7 @@ impl StudioView {
                     .size_full(),
                 )
         };
-        div()
+        let mut bar = div()
             .flex()
             .flex_wrap()
             .items_start()
@@ -2834,7 +2850,63 @@ impl StudioView {
                             })
                             .child(self.audio_status()),
                     ),
-            ))
+            ));
+        if self.session.toolbar_split_available() {
+            bar = bar.child(session_cluster(
+                "Edit",
+                "toolbar.cluster.edit",
+                self.toolbar_split_button(cx),
+            ));
+        } else if let Ok(mut slot) = self.split_geom.lock() {
+            *slot = None;
+        }
+        bar
+    }
+
+    fn toolbar_split_button(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let geom = Arc::clone(&self.split_geom);
+        div()
+            .id("Split")
+            .debug_selector(|| "toolbar.split".into())
+            .relative()
+            .flex()
+            .items_center()
+            .gap_1()
+            .px_3()
+            .py_1()
+            .bg(rgb(TEAL))
+            .text_color(rgb(TEXT))
+            .cursor_pointer()
+            .on_click(cx.listener(|this, _, _, cx| {
+                this.commit_toolbar_split();
+                cx.notify();
+            }))
+            .child("✂")
+            .child("Split")
+            .child(
+                canvas(
+                    move |bounds, _, _| {
+                        if let Ok(mut slot) = geom.lock() {
+                            *slot = Some((
+                                f32::from(bounds.origin.x),
+                                f32::from(bounds.origin.y),
+                                f32::from(bounds.size.width),
+                                f32::from(bounds.size.height),
+                            ));
+                        }
+                    },
+                    |_, _, _, _| {},
+                )
+                .absolute()
+                .size_full(),
+            )
+    }
+
+    fn commit_toolbar_split(&mut self) {
+        match self.session.commit_toolbar_split() {
+            Ok(()) => self.after_edit(),
+            Err(err) => self.speak_toolbar(err),
+        }
     }
 
     fn open_video_clicked(&mut self, cx: &mut Context<Self>) {
@@ -4517,6 +4589,7 @@ fn action_selector(label: &str) -> &'static str {
         "Copy locus JSON" => "toolbar.copy-locus",
         "Zoom In" => "toolbar.zoom-in",
         "Zoom Out" => "toolbar.zoom-out",
+        "Split" => "toolbar.split",
         "Apply edit" => "inspector.apply",
         "Apply gain" => "inspector.apply-gain",
         "Apply fade_in" => "inspector.apply-fade",

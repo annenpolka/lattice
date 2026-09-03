@@ -798,6 +798,51 @@ fn toolbar_routes_nothing() {
 }
 
 #[test]
+fn toolbar_split_available_when_selected_clip_contains_playhead() {
+    let mut session = overlap_session();
+    session.point_at_title().unwrap();
+    session.seek(Time::ZERO);
+    assert!(
+        !session.toolbar_split_available(),
+        "playhead 0s is outside title 2s..5s"
+    );
+    session.seek(Time::seconds(3));
+    assert!(
+        session.toolbar_split_available(),
+        "title 2s..5s must reveal Split at 3s"
+    );
+    session.commit_toolbar_split().expect("toolbar split");
+    assert!(
+        session.source().contains("demo_2") || session.source().contains("[3s.."),
+        "Engine Split must rewrite the scene: {}",
+        session.source()
+    );
+}
+
+#[test]
+fn toolbar_split_from_source_clip_commits_engine_scene_split() {
+    let mut session = overlap_session();
+    point_source_via_video(&mut session);
+    session.seek(Time::seconds(2));
+    assert!(
+        session.toolbar_split_available(),
+        "selected video clip 0s..6s must reveal Split at 2s"
+    );
+    let here = session.current_locus().unwrap().unwrap().id;
+    session.commit_toolbar_split().expect("toolbar split");
+    assert!(
+        session.source().contains("demo_2") || session.source().contains("[2s.."),
+        "{}",
+        session.source()
+    );
+    assert_eq!(
+        session.current_locus().unwrap().unwrap().id,
+        here,
+        "toolbar Split must not retarget here before the Engine rewrite"
+    );
+}
+
+#[test]
 fn inspector_property_fields_bind_exact_source_locus_id() {
     let mut session = overlap_session();
     session.point_at_title().unwrap();
