@@ -551,6 +551,10 @@ fn window_source_composes_documented_panes() {
         "drawn split/delete routes must exist"
     );
     assert!(
+        main.contains("Split at playhead") && main.contains("timeline.menu.split-at-playhead"),
+        "timeline clip context menu must expose Split at playhead"
+    );
+    assert!(
         main.contains("StudioSession::open_video"),
         "Open Video… must call StudioSession::open_video"
     );

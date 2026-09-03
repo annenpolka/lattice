@@ -498,6 +498,13 @@ struct StudioView {
     audio_no_windows: bool,
     audio_error: Option<String>,
     audio_last_sync: Option<AudioSyncReport>,
+    clip_menu: Option<ClipContextMenu>,
+}
+
+struct ClipContextMenu {
+    clip_id: String,
+    x: f32,
+    y: f32,
 }
 
 #[derive(Clone)]
@@ -1025,6 +1032,7 @@ impl StudioView {
             audio_no_windows: false,
             audio_error: None,
             audio_last_sync: None,
+            clip_menu: None,
         }
     }
 
@@ -2425,6 +2433,7 @@ impl Render for StudioView {
             })
         };
         div()
+            .relative()
             .flex()
             .flex_col()
             .size_full()
@@ -2519,6 +2528,7 @@ impl Render for StudioView {
             .child(self.actions_bar(cx))
             .child(self.body(layout.as_ref(), cx))
             .child(self.timeline_bar(layout.as_ref(), cx))
+            .child(self.clip_context_menu(layout.as_ref(), cx))
     }
 }
 
@@ -2911,6 +2921,117 @@ impl StudioView {
         self.queue_preview();
     }
 
+    fn open_clip_context_menu(&mut self, clip_id: String, position: gpui::Point<Pixels>) {
+        if let Err(err) = self.session.point_clip_identity(&clip_id) {
+            trace::log(format!("clip-menu point: {err}"));
+        } else {
+            self.adopt_locus_label();
+        }
+        self.clip_menu = Some(ClipContextMenu {
+            clip_id: clip_id.clone(),
+            x: f32::from(position.x),
+            y: f32::from(position.y),
+        });
+        trace::log(format!(
+            "clip-menu open clip={clip_id} enabled={}",
+            self.session.playhead_intersects_clip(&clip_id)
+        ));
+        self.log_semantic_state("clip-menu-open", None);
+    }
+
+    fn commit_clip_menu_split(&mut self) {
+        let Some(menu) = self.clip_menu.take() else {
+            return;
+        };
+        match self.session.split_clip_at_playhead(&menu.clip_id) {
+            Ok(()) => {
+                trace::log(format!("clip-menu split clip={}", menu.clip_id));
+                self.last_render = Some("split at playhead".into());
+                self.after_edit();
+                self.log_semantic_state("clip-menu-split", None);
+            }
+            Err(err) => {
+                trace::log(format!("clip-menu split failed: {err}"));
+                if let Some(spoken) = self.session.last_spoken() {
+                    self.last_render = Some(spoken.to_string());
+                } else {
+                    self.last_render = Some(err.to_string());
+                }
+            }
+        }
+    }
+
+    fn clip_context_menu(
+        &self,
+        layout: Option<&lattice_studio::StudioLayout>,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement {
+        let Some(menu) = &self.clip_menu else {
+            return div().id("timeline-clip-menu-closed");
+        };
+        let clip_id = menu.clip_id.clone();
+        let enabled = layout
+            .and_then(|layout| {
+                layout
+                    .timeline
+                    .tracks
+                    .iter()
+                    .flat_map(|track| track.clips.iter())
+                    .find(|clip| clip.id == clip_id)
+            })
+            .is_some_and(|clip| clip.playhead_can_split(self.session.playhead()));
+        let item_color = if enabled { TEXT } else { MUTED };
+        let mut item = div()
+            .id("timeline-menu-split-at-playhead")
+            .debug_selector(|| "timeline.menu.split-at-playhead".into())
+            .px_3()
+            .py_1()
+            .text_color(rgb(item_color))
+            .child("Split at playhead");
+        if enabled {
+            item = item.cursor_pointer().on_mouse_down(
+                MouseButton::Left,
+                cx.listener(|this, _, _, cx| {
+                    this.commit_clip_menu_split();
+                    cx.stop_propagation();
+                    cx.notify();
+                }),
+            );
+        }
+        div()
+            .id("timeline-clip-menu-layer")
+            .debug_selector(|| "timeline.menu.layer".into())
+            .absolute()
+            .size_full()
+            .child(
+                div()
+                    .id("timeline-clip-menu-dismiss")
+                    .absolute()
+                    .size_full()
+                    .occlude()
+                    .on_any_mouse_down(cx.listener(|this, _, _, cx| {
+                        this.clip_menu = None;
+                        cx.stop_propagation();
+                        cx.notify();
+                    })),
+            )
+            .child(
+                div()
+                    .id("timeline-clip-menu")
+                    .debug_selector(|| "timeline.menu".into())
+                    .absolute()
+                    .left(px(menu.x))
+                    .top(px(menu.y))
+                    .bg(rgb(PANEL))
+                    .border_1()
+                    .border_color(rgb(LINE))
+                    .on_any_mouse_down(cx.listener(|_, _, _, cx| {
+                        cx.stop_propagation();
+                    }))
+                    .child(item),
+            )
+    }
+
     fn commit_inspector_gain(&mut self) {
         let Some(db) = parse_gain_db(&self.gain_draft) else {
             self.last_render = Some("gain dB needs an integer".into());
@@ -3198,6 +3319,10 @@ impl StudioView {
         }
         match event.keystroke.key.as_str() {
             "escape" => {
+                if self.clip_menu.take().is_some() {
+                    cx.notify();
+                    return;
+                }
                 if !self.cancel_canvas_pointer() {
                     self.cancel_timeline_pointer();
                 }
@@ -4096,6 +4221,17 @@ impl StudioView {
                 .bg(rgb(color))
                 .border_1()
                 .border_color(if selected { rgb(0xffffff) } else { rgb(color) })
+                .on_mouse_down(
+                    MouseButton::Right,
+                    cx.listener({
+                        let id = id.clone();
+                        move |this, event: &MouseDownEvent, _, cx| {
+                            this.open_clip_context_menu(id.clone(), event.position);
+                            cx.stop_propagation();
+                            cx.notify();
+                        }
+                    }),
+                )
                 .child(label);
             if handles {
                 block = block

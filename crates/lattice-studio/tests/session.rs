@@ -216,6 +216,68 @@ fn import_edit_undo_playhead_and_save() {
 }
 
 #[test]
+fn clip_context_split_at_playhead_requires_intersection() {
+    let dir = unique_dir("clip-context-split");
+    lattice_media::generate_av_fixture(dir.join("capture.mp4"), 6).unwrap();
+    let vel = dir.join("main.vel");
+    std::fs::write(
+        &vel,
+        r#"project "clip-context-split"
+convention commentary
+media game "capture.mp4"
+sequence main {
+  demo
+}
+scene demo {
+  game[0s..4s] as clip
+  title "Hello" {
+    at 1s for 3s
+  }
+}
+"#,
+    )
+    .unwrap();
+    let mut session = StudioSession::open(&vel).expect("open");
+    let video_id = session
+        .layout()
+        .unwrap()
+        .timeline
+        .tracks
+        .iter()
+        .find(|track| track.name == "Video")
+        .unwrap()
+        .clips[0]
+        .id
+        .clone();
+    let title_id = session
+        .layout()
+        .unwrap()
+        .timeline
+        .tracks
+        .iter()
+        .find(|track| track.name == "Text")
+        .unwrap()
+        .clips[0]
+        .id
+        .clone();
+
+    session.seek(Time::ZERO);
+    assert!(!session.playhead_intersects_clip(&video_id));
+    assert!(!session.playhead_intersects_clip(&title_id));
+    assert!(session.split_clip_at_playhead(&video_id).is_err());
+    assert_eq!(session.source().matches("scene ").count(), 1);
+
+    session.seek(Time::seconds(2));
+    assert!(session.playhead_intersects_clip(&video_id));
+    assert!(session.playhead_intersects_clip(&title_id));
+    session
+        .split_clip_at_playhead(&title_id)
+        .expect("title clip menu split uses the owning scene");
+    assert!(session.source().matches("scene ").count() >= 2);
+    assert!(session.source().contains("[2s..") || session.source().contains("clip_2"));
+}
+
+#[test]
 fn click_and_seek_preview_frames_hold_through_freeze() {
     use lattice_engine::Time;
     use lattice_media::{content_pixels, mean_abs_diff};

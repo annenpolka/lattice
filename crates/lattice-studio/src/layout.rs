@@ -3,7 +3,7 @@
 
 use lattice_engine::{
     Canvas, EditProposal, Engine, Locus, LocusId, LocusKind, NormalizedScale, Origin, Span, Time,
-    plan_from_timeline, text_overlay_size,
+    TimeSpan, plan_from_timeline, text_overlay_size,
 };
 
 use crate::session::StudioSession;
@@ -83,6 +83,16 @@ pub struct TimelineClipView {
     pub delete_handle: bool,
     pub fade_in: Option<Time>,
     pub gain_db: Option<i32>,
+}
+
+impl TimelineClipView {
+    /// Playhead sits strictly inside this clip, so Split at playhead can fire.
+    #[must_use]
+    pub fn playhead_can_split(&self, playhead: Time) -> bool {
+        TimeSpan::new(self.start, self.duration)
+            .split_at(playhead)
+            .is_some()
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

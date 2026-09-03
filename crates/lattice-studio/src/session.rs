@@ -689,6 +689,68 @@ impl StudioSession {
         self.apply_edit(SemanticEdit::Split { at })
     }
 
+    /// Select a timeline clip without seeking the playhead.
+    pub fn point_clip_identity(&mut self, clip_id: &str) -> Result<(), EngineError> {
+        self.touched_projection = Projection::Timeline;
+        let clip = self
+            .timeline_clip(clip_id)
+            .ok_or_else(|| EngineError::Edit(format!("unknown timeline clip `{clip_id}`")))?;
+        match clip.kind.as_str() {
+            "video" | "audio" => {
+                self.point_source_for_clip(clip_id)?;
+            }
+            "scene" => {
+                self.unresolved = None;
+                self.last_spoken = None;
+                self.current = Some(LocusId::new(clip.scene_id));
+            }
+            _ => {
+                self.unresolved = None;
+                self.last_spoken = None;
+                self.current = Some(LocusId::new(clip.id));
+            }
+        }
+        Ok(())
+    }
+
+    #[must_use]
+    pub fn playhead_intersects_clip(&self, clip_id: &str) -> bool {
+        self.timeline_clip(clip_id)
+            .is_some_and(|clip| clip.playhead_can_split(self.playhead))
+    }
+
+    /// Split the scene that owns `clip_id` at the playhead.
+    ///
+    /// Enabled only when the playhead sits strictly inside that clip. The
+    /// scene is the Engine split target; this does not retarget from an
+    /// unrelated locus.
+    pub fn split_clip_at_playhead(&mut self, clip_id: &str) -> Result<(), EngineError> {
+        self.touched_projection = Projection::Timeline;
+        let clip = self
+            .timeline_clip(clip_id)
+            .ok_or_else(|| EngineError::Edit(format!("unknown timeline clip `{clip_id}`")))?;
+        if !clip.playhead_can_split(self.playhead) {
+            let message = format!("split at playhead needs the playhead over `{clip_id}`");
+            self.last_spoken = Some(message.clone());
+            return Err(EngineError::Edit(message));
+        }
+        self.unresolved = None;
+        self.last_spoken = None;
+        self.current = Some(LocusId::new(clip.scene_id));
+        let at = self.playhead_source_time()?;
+        self.apply_edit(SemanticEdit::Split { at })
+    }
+
+    fn timeline_clip(&self, clip_id: &str) -> Option<layout::TimelineClipView> {
+        let layout = self.layout().ok()?;
+        layout
+            .timeline
+            .tracks
+            .into_iter()
+            .flat_map(|track| track.clips)
+            .find(|clip| clip.id == clip_id)
+    }
+
     pub fn delete_selected_clip(&mut self) -> Result<(), EngineError> {
         self.touched_projection = Projection::Toolbar;
         self.apply_edit(SemanticEdit::Delete)

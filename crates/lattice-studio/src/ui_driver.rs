@@ -76,6 +76,25 @@ impl<'a> UiDriver<'a> {
         self.cx.simulate_click(at, Modifiers::none());
     }
 
+    pub(crate) fn right_click(&mut self, selector: impl Into<String>) {
+        self.right_click_at(selector, 0.5, 0.5);
+    }
+
+    pub(crate) fn right_click_at(
+        &mut self,
+        selector: impl Into<String>,
+        relative_x: f32,
+        relative_y: f32,
+    ) {
+        let at = self.point_at(selector, relative_x, relative_y);
+        self.cx.simulate_mouse_move(at, None, Modifiers::none());
+        self.cx
+            .simulate_mouse_down(at, MouseButton::Right, Modifiers::none());
+        self.cx
+            .simulate_mouse_up(at, MouseButton::Right, Modifiers::none());
+        self.cx.run_until_parked();
+    }
+
     pub(crate) fn drag(
         &mut self,
         source: impl Into<String>,
@@ -1155,5 +1174,93 @@ scene demo {
         assert_ne!(after_split, after_fade, "cut lane must commit split");
         let spoken = ui.read(&view, |view, _| view.session.utterance().spoken_text());
         assert!(!spoken.is_empty());
+    }
+
+    #[gpui::test]
+    fn clip_context_menu_splits_at_playhead_when_intersecting(cx: &mut TestAppContext) {
+        let session = overlap_session();
+        let video_id = session
+            .layout()
+            .unwrap()
+            .timeline
+            .tracks
+            .iter()
+            .find(|track| track.name == "Video")
+            .unwrap()
+            .clips[0]
+            .id
+            .clone();
+        let (view, cx) = add_studio(cx, session);
+        let mut ui = UiDriver::new(cx);
+
+        view.update(ui.context(), |view, cx| {
+            view.session.seek(lattice_engine::Time::seconds(2));
+            cx.notify();
+        });
+        ui.context().run_until_parked();
+        assert!(
+            ui.read(&view, |view, _| view
+                .session
+                .playhead_intersects_clip(&video_id)),
+            "playhead must sit inside the video clip"
+        );
+
+        ui.right_click(format!("timeline.clip.{video_id}"));
+        let _ = ui.bounds("timeline.menu");
+        let _ = ui.bounds("timeline.menu.split-at-playhead");
+        let original = ui.read(&view, |view, _| view.session.source().to_string());
+        ui.click("timeline.menu.split-at-playhead");
+        ui.context().run_until_parked();
+        let after = ui.read(&view, |view, _| view.session.source().to_string());
+        assert_ne!(after, original, "context-menu Split at playhead must split");
+        assert!(
+            after.matches("scene ").count() >= 2,
+            "split must add a scene: {after}"
+        );
+        assert!(
+            ui.read(&view, |view, _| view.clip_menu.is_none()),
+            "menu must close after a successful split"
+        );
+    }
+
+    #[gpui::test]
+    fn clip_context_menu_split_stays_disabled_when_playhead_misses(cx: &mut TestAppContext) {
+        let session = overlap_session();
+        let title_id = session
+            .layout()
+            .unwrap()
+            .timeline
+            .tracks
+            .iter()
+            .find(|track| track.name == "Text")
+            .unwrap()
+            .clips[0]
+            .id
+            .clone();
+        let (view, cx) = add_studio(cx, session);
+        let mut ui = UiDriver::new(cx);
+
+        view.update(ui.context(), |view, cx| {
+            view.session.seek(lattice_engine::Time::ZERO);
+            cx.notify();
+        });
+        ui.context().run_until_parked();
+        assert!(
+            !ui.read(&view, |view, _| view
+                .session
+                .playhead_intersects_clip(&title_id)),
+            "title starts at 2s; playhead 0s must not enable split"
+        );
+
+        ui.right_click(format!("timeline.clip.{title_id}"));
+        let _ = ui.bounds("timeline.menu.split-at-playhead");
+        let original = ui.read(&view, |view, _| view.session.source().to_string());
+        ui.click("timeline.menu.split-at-playhead");
+        ui.context().run_until_parked();
+        let after = ui.read(&view, |view, _| view.session.source().to_string());
+        assert_eq!(
+            after, original,
+            "disabled Split at playhead must not rewrite source"
+        );
     }
 }
